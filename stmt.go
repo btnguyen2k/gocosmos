@@ -2,9 +2,12 @@ package go_cosmos
 
 import (
 	"database/sql/driver"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -19,6 +22,7 @@ var (
 
 	regExpCreateDb = regexp.MustCompile(`(?i)^CREATE\s+DATABASE(\s+IF\s+NOT\s+EXISTS)?\s+(\w+)(\s+WITH\s+RU\s*=\s*(\d+))?$`)
 	regExpDropDb   = regexp.MustCompile(`(?i)^DROP\s+DATABASE(\s+IF\s+EXISTS)?\s+(\w+)$`)
+	regExpListDbs  = regexp.MustCompile(`(?i)^LIST\s+DATABASE(S)?$`)
 )
 
 func parseQuery(c *Conn, query string) (driver.Stmt, error) {
@@ -29,11 +33,7 @@ func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 		ifNotExists := groups[0][1] != ""
 		ru, _ := strconv.ParseInt(groups[0][4], 10, 64)
 		return &StmtCreateDatabase{
-			Stmt: &Stmt{
-				query:    query,
-				conn:     c,
-				numInput: 0,
-			},
+			Stmt:        &Stmt{query: query, conn: c, numInput: 0},
 			dbName:      dbName,
 			ifNotExists: ifNotExists,
 			ru:          int(ru),
@@ -44,13 +44,14 @@ func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 		dbName := groups[0][2]
 		ifExists := groups[0][1] != ""
 		return &StmtDropDatabase{
-			Stmt: &Stmt{
-				query:    query,
-				conn:     c,
-				numInput: 0,
-			},
+			Stmt:     &Stmt{query: query, conn: c, numInput: 0},
 			dbName:   dbName,
 			ifExists: ifExists,
+		}, nil
+	}
+	if regExpListDbs.MatchString(query) {
+		return &StmtListDatabases{
+			Stmt: &Stmt{query: query, conn: c, numInput: 0},
 		}, nil
 	}
 
@@ -201,4 +202,93 @@ func (s *StmtDropDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 		err = nil
 	}
 	return nil, err
+}
+
+/*----------------------------------------------------------------------*/
+
+// StmtListDatabases implements "LIST DATABASES" query.
+//
+// Syntax: LIST DATABASES (LIST DATABASE is also accepted).
+type StmtListDatabases struct {
+	*Stmt
+}
+
+// Exec implements driver.Stmt.Exec.
+func (s *StmtListDatabases) Exec(_ []driver.Value) (driver.Result, error) {
+	return nil, errors.New("this operation is not supported, please use query")
+}
+
+// Query implements driver.Stmt.Query.
+func (s *StmtListDatabases) Query(_ []driver.Value) (driver.Rows, error) {
+	method := "GET"
+	url := s.conn.endpoint + "/dbs"
+	req := s.conn.buildJsonRequest(method, url, nil)
+	req = s.conn.addAuthHeader(req, method, "dbs", "")
+
+	resp := s.conn.client.Do(req)
+	err := s.buildError(resp)
+	var rows driver.Rows
+	if err == nil {
+		body, _ := resp.Body()
+		var listDbResult listDbResult
+		err = json.Unmarshal(body, &listDbResult)
+		sort.Slice(listDbResult.Databases, func(i, j int) bool {
+			// sort databases by id
+			if listDbResult.Databases[i].Id < listDbResult.Databases[j].Id {
+				return true
+			}
+			return false
+		})
+		rows = &RowsListDatabases{result: listDbResult, cursorCount: 0}
+	}
+	return rows, err
+}
+
+type dbInfo struct {
+	Id    string `json:"id"`
+	Rid   string `json:"_rid"`
+	Ts    int    `json:"_ts"`
+	Self  string `json:"_self"`
+	Etag  string `json:"_etag"`
+	Colls string `json:"_colls"`
+	Users string `json:"_users"`
+}
+
+type listDbResult struct {
+	Rid       string   `json:"_rid"`
+	Databases []dbInfo `json:"Databases"`
+	Count     int      `json:"_count"`
+}
+
+// RowsListDatabases captures the result from LIST DATABASES operation.
+type RowsListDatabases struct {
+	result      listDbResult
+	cursorCount int
+}
+
+// Columns implements driver.Rows.Columns.
+func (r *RowsListDatabases) Columns() []string {
+	return []string{"id", "_rid", "_ts", "_self", "_etag", "_colls", "_users"}
+}
+
+// Close implements driver.Rows.Close.
+func (r *RowsListDatabases) Close() error {
+	return nil
+}
+
+// Next implements driver.Rows.Next.
+func (r *RowsListDatabases) Next(dest []driver.Value) error {
+	if r.cursorCount >= len(r.result.Databases) {
+		return io.EOF
+	}
+	rowData := r.result.Databases[r.cursorCount]
+	r.cursorCount++
+	dest[0] = rowData.Id
+	dest[1] = rowData.Rid
+	dest[2] = rowData.Ts
+	dest[3] = rowData.Self
+	dest[4] = rowData.Etag
+	dest[5] = rowData.Colls
+	dest[6] = rowData.Users
+	return nil
 }

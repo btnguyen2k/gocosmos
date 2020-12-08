@@ -2,6 +2,7 @@ package go_cosmos
 
 import (
 	"database/sql"
+	"fmt"
 	"os"
 	"strings"
 	"testing"
@@ -121,5 +122,63 @@ func Test_Exec_DropDatabase(t *testing.T) {
 	_, err = db.Exec("DROP DATABASE IF EXISTS dbtemp")
 	if err != nil {
 		t.Fatalf("%s failed: %s", name, err)
+	}
+}
+
+func Test_Exec_ListDatabases(t *testing.T) {
+	name := "Test_Exec_ListDatabases"
+	db := _openDb(t, name)
+	_, err := db.Exec("LIST DATABASES")
+	if err == nil || strings.Index(err.Error(), "not supported") < 0 {
+		t.Fatalf("%s failed: expected 'not support' error, but received %#v", name, err)
+	}
+}
+
+func Test_Query_ListDatabases(t *testing.T) {
+	name := "Test_Query_ListDatabases"
+	db := _openDb(t, name)
+
+	db.Exec("CREATE DATABASE dbtemp")
+	db.Exec("CREATE DATABASE dbtemp1")
+	db.Exec("CREATE DATABASE dbtemp2")
+
+	dbRows, err := db.Query("LIST DATABASES")
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+	colTypes, err := dbRows.ColumnTypes()
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+	numCols := len(colTypes)
+	result := make(map[string]map[string]interface{})
+	for dbRows.Next() {
+		vals := make([]interface{}, numCols)
+		scanVals := make([]interface{}, numCols)
+		for i := 0; i < numCols; i++ {
+			scanVals[i] = &vals[i]
+		}
+		if err := dbRows.Scan(scanVals...); err == nil {
+			row := make(map[string]interface{})
+			for i, v := range colTypes {
+				row[v.Name()] = vals[i]
+			}
+			id := fmt.Sprintf("%s", row["id"])
+			result[id] = row
+		} else if err != sql.ErrNoRows {
+			t.Fatalf("%s failed: %s", name, err)
+		}
+	}
+	_, ok1 := result["dbtemp"]
+	_, ok2 := result["dbtemp1"]
+	_, ok3 := result["dbtemp2"]
+	if !ok1 {
+		t.Fatalf("%s failed: database %s not found", name, "dbtemp")
+	}
+	if !ok2 {
+		t.Fatalf("%s failed: database %s not found", name, "dbtemp1")
+	}
+	if !ok3 {
+		t.Fatalf("%s failed: database %s not found", name, "dbtemp2")
 	}
 }

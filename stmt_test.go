@@ -44,11 +44,11 @@ func Test_parseQuery_CreateDatabase(t *testing.T) {
 	}
 	testData := map[string]testStruct{
 		"CREATE DATABASE db1":                           {dbName: "db1", ifNotExists: false, ru: 0},
-		"CREATE DATABASE db2 WITH ru=0":                 {dbName: "db2", ifNotExists: false, ru: 0},
-		"CREATE DATABASE db3 WITH ru=100":               {dbName: "db3", ifNotExists: false, ru: 100},
+		"create database db2 WITH ru=0":                 {dbName: "db2", ifNotExists: false, ru: 0},
+		"CREATE DATABASE db3 with ru=100":               {dbName: "db3", ifNotExists: false, ru: 100},
 		"CREATE DATABASE IF NOT EXISTS db4":             {dbName: "db4", ifNotExists: true, ru: 0},
-		"CREATE DATABASE IF NOT EXISTS db5 WITH ru=0":   {dbName: "db5", ifNotExists: true, ru: 0},
-		"CREATE DATABASE IF NOT EXISTS db6 WITH ru=100": {dbName: "db6", ifNotExists: true, ru: 100},
+		"create database IF NOT EXISTS db5 with ru=0":   {dbName: "db5", ifNotExists: true, ru: 0},
+		"CREATE DATABASE if not exists db6 WITH ru=100": {dbName: "db6", ifNotExists: true, ru: 100},
 	}
 
 	for query, data := range testData {
@@ -74,18 +74,31 @@ func Test_parseQuery_DropDatabase(t *testing.T) {
 	}
 	testData := map[string]testStruct{
 		"DROP DATABASE db1":           {dbName: "db1", ifExists: false},
-		"DROP DATABASE IF EXISTS db4": {dbName: "db4", ifExists: true},
+		"drop database IF EXISTS db4": {dbName: "db4", ifExists: true},
 	}
 
 	for query, data := range testData {
 		if stmt, err := parseQuery(nil, query); err != nil {
 			t.Fatalf("%s failed: %s", name+"/"+query, err)
 		} else if dbstmt, ok := stmt.(*StmtDropDatabase); !ok {
-			t.Fatalf("%s failed: the parsed stmt must be of type *StmtCreateDatabase", name+"/"+query)
+			t.Fatalf("%s failed: the parsed stmt must be of type *StmtDropDatabase", name+"/"+query)
 		} else if dbstmt.dbName != data.dbName {
 			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
 		} else if dbstmt.ifExists != data.ifExists {
 			t.Fatalf("%s failed: <if-exists> expected %#v but received %#v", name+"/"+query, data.ifExists, dbstmt.ifExists)
+		}
+	}
+}
+
+func Test_parseQuery_ListDatabases(t *testing.T) {
+	name := "Test_parseQuery_ListDatabases"
+	testData := []string{"LIST DATABASES", "list database"}
+
+	for _, query := range testData {
+		if stmt, err := parseQuery(nil, query); err != nil {
+			t.Fatalf("%s failed: %s", name+"/"+query, err)
+		} else if _, ok := stmt.(*StmtListDatabases); !ok {
+			t.Fatalf("%s failed: the parsed stmt must be of type *StmtListDatabases", name+"/"+query)
 		}
 	}
 }
