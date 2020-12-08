@@ -21,6 +21,29 @@ func Test_OpenDatabase(t *testing.T) {
 	}
 }
 
+func TestDriver_invalidConnectionString(t *testing.T) {
+	name := "TestDriver_invalidConnectionString"
+	driver := "gocosmos"
+	{
+		db, _ := sql.Open(driver, "AccountEndpoint;AccountKey=demo")
+		if err := db.Ping(); err == nil {
+			t.Fatalf("%s failed: should have error", name)
+		}
+	}
+	{
+		db, _ := sql.Open(driver, "AccountEndpoint=demo;AccountKey")
+		if err := db.Ping(); err == nil {
+			t.Fatalf("%s failed: should have error", name)
+		}
+	}
+	{
+		db, _ := sql.Open(driver, "AccountEndpoint=demo;AccountKey=demo/invalid_key")
+		if err := db.Ping(); err == nil {
+			t.Fatalf("%s failed: should have error", name)
+		}
+	}
+}
+
 func TestDriver_missingEndpoint(t *testing.T) {
 	name := "TestDriver_missingEndpoint"
 	driver := "gocosmos"
@@ -93,7 +116,7 @@ func Test_Exec_CreateDatabase(t *testing.T) {
 		t.Fatalf("%s failed: %s", name, err)
 	}
 
-	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp WITH ru=400")
 	if err != nil {
 		t.Fatalf("%s failed: %s", name, err)
 	}
@@ -139,8 +162,8 @@ func Test_Query_ListDatabases(t *testing.T) {
 	db := _openDb(t, name)
 
 	db.Exec("CREATE DATABASE dbtemp")
-	db.Exec("CREATE DATABASE dbtemp1")
 	db.Exec("CREATE DATABASE dbtemp2")
+	db.Exec("CREATE DATABASE dbtemp1")
 
 	dbRows, err := db.Query("LIST DATABASES")
 	if err != nil {
