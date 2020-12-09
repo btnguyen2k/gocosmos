@@ -205,3 +205,62 @@ func Test_Query_ListDatabases(t *testing.T) {
 		t.Fatalf("%s failed: database %s not found", name, "dbtemp2")
 	}
 }
+
+func Test_Exec_ListCollections(t *testing.T) {
+	name := "Test_Exec_ListCollections"
+	db := _openDb(t, name)
+	_, err := db.Exec("LIST COLLECTIONS FROM dbtemp")
+	if err == nil || strings.Index(err.Error(), "not supported") < 0 {
+		t.Fatalf("%s failed: expected 'not support' error, but received %#v", name, err)
+	}
+}
+
+func Test_Query_ListCollections(t *testing.T) {
+	name := "Test_Query_ListCollections"
+	db := _openDb(t, name)
+
+	db.Exec("CREATE DATABASE dbtemp")
+	// db.Exec("CREATE COLLECTION dbtemp.tbltemp")
+	// db.Exec("CREATE TABLE dbtemp.tbltemp2")
+	// db.Exec("CREATE COLLECTION dbtemp.tbltemp1")
+
+	dbRows, err := db.Query("LIST COLLECTIONS FROM dbtemp")
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+	colTypes, err := dbRows.ColumnTypes()
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+	numCols := len(colTypes)
+	result := make(map[string]map[string]interface{})
+	for dbRows.Next() {
+		vals := make([]interface{}, numCols)
+		scanVals := make([]interface{}, numCols)
+		for i := 0; i < numCols; i++ {
+			scanVals[i] = &vals[i]
+		}
+		if err := dbRows.Scan(scanVals...); err == nil {
+			row := make(map[string]interface{})
+			for i, v := range colTypes {
+				row[v.Name()] = vals[i]
+			}
+			id := fmt.Sprintf("%s", row["id"])
+			result[id] = row
+		} else if err != sql.ErrNoRows {
+			t.Fatalf("%s failed: %s", name, err)
+		}
+	}
+	_, ok1 := result["tbltemp"]
+	_, ok2 := result["tbltemp1"]
+	_, ok3 := result["tbltemp2"]
+	if !ok1 {
+		t.Fatalf("%s failed: collection %s not found", name, "dbtemp.tbltemp")
+	}
+	if !ok2 {
+		t.Fatalf("%s failed: collection %s not found", name, "dbtemp.tbltemp1")
+	}
+	if !ok3 {
+		t.Fatalf("%s failed: collection %s not found", name, "dbtemp.tbltemp2")
+	}
+}

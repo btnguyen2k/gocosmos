@@ -9,7 +9,7 @@ on:
 jobs:
   test:
     name: Build and Test
-    runs-on: windows-latest
+    runs-on: windows-2016
     steps:
       - name: Set up Go env
         uses: actions/setup-go@v2

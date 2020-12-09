@@ -6,7 +6,7 @@ Features:
 - Databases:
   - [x] CREATE DATABASE
   - [x] DROP DATABASE
-  - [ ] LIST DATABASES
+  - [x] LIST DATABASES
 - Tables/Collections
   - [ ] CREATE TABLE/COLLECTION
   - [ ] DROP TABLE/COLLECTION
