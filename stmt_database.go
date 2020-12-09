@@ -76,7 +76,10 @@ func (s *StmtCreateDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 
 	resp := s.conn.client.Do(req)
 	err := s.buildError(resp)
-	result := &ResultCreateDatabase{Successful: err == nil, StatusCode: resp.StatusCode()}
+	result := &ResultCreateDatabase{Successful: err == nil}
+	if resp.Error() == nil {
+		result.StatusCode = resp.StatusCode()
+	}
 	if err == nil {
 		rid, _ := resp.GetValueAsType("_rid", reddo.TypeString)
 		result.InsertId = rid.(string)
