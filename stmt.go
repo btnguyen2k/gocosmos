@@ -14,18 +14,18 @@ var (
 	reC = regexp.MustCompile(`:\d+`)
 	reD = regexp.MustCompile(`\$\d+`)
 
-	reCreateDb = regexp.MustCompile(`(?i)^CREATE\s+DATABASE(\s+IF\s+NOT\s+EXISTS)?\s+([\w\-]+)((\s+WITH\s+([\w-]+)\s*=\s*([\w-]+))*)$`)
+	reCreateDb = regexp.MustCompile(`(?i)^CREATE\s+DATABASE(\s+IF\s+NOT\s+EXISTS)?\s+([\w\-]+)((\s+WITH\s+([\w-]+)\s*=\s*([\w/\.,;:'"-]+))*)$`)
 	reDropDb   = regexp.MustCompile(`(?i)^DROP\s+DATABASE(\s+IF\s+EXISTS)?\s+([\w\-]+)$`)
 	reListDbs  = regexp.MustCompile(`(?i)^LIST\s+DATABASES?$`)
 
-	reCreateColl = regexp.MustCompile(`(?i)^CREATE\s+(COLLECTION|TABLE)(\s+IF\s+NOT\s+EXISTS)?\s+([\w\-]+)\.([\w\-]+)((\s+WITH\s+([\w-]+)\s*=\s*([\w-]+))*)$`)
+	reCreateColl = regexp.MustCompile(`(?i)^CREATE\s+(COLLECTION|TABLE)(\s+IF\s+NOT\s+EXISTS)?\s+([\w\-]+)\.([\w\-]+)((\s+WITH\s+([\w-]+)\s*=\s*([\w/\.,;:'"-]+))*)$`)
 	reListColls  = regexp.MustCompile(`(?i)^LIST\s+(COLLECTIONS?|TABLES?)\s+FROM\s+([\w\-]+)$`)
 )
 
 func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 	query = strings.TrimSpace(query)
-	if reCreateDb.MatchString(query) {
-		groups := reCreateDb.FindAllStringSubmatch(query, -1)
+	if re := reCreateDb; re.MatchString(query) {
+		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtCreateDatabase{
 			Stmt:        &Stmt{query: query, conn: c, numInput: 0},
 			dbName:      strings.TrimSpace(groups[0][2]),
@@ -36,8 +36,8 @@ func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 		}
 		return stmt, stmt.validateWithOpts()
 	}
-	if reDropDb.MatchString(query) {
-		groups := reDropDb.FindAllStringSubmatch(query, -1)
+	if re := reDropDb; re.MatchString(query) {
+		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtDropDatabase{
 			Stmt:     &Stmt{query: query, conn: c, numInput: 0},
 			dbName:   strings.TrimSpace(groups[0][2]),
@@ -45,15 +45,15 @@ func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 		}
 		return stmt, stmt.validateWithOpts()
 	}
-	if reListDbs.MatchString(query) {
+	if re := reListDbs; re.MatchString(query) {
 		stmt := &StmtListDatabases{
 			Stmt: &Stmt{query: query, conn: c, numInput: 0},
 		}
 		return stmt, stmt.validateWithOpts()
 	}
 
-	if reCreateColl.MatchString(query) {
-		groups := reListColls.FindAllStringSubmatch(query, -1)
+	if re := reCreateColl; re.MatchString(query) {
+		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtCreateCollection{
 			Stmt:        &Stmt{query: query, conn: c, numInput: 0},
 			ifNotExists: strings.TrimSpace(groups[0][2]) != "",
@@ -94,7 +94,7 @@ type Stmt struct {
 	withOpts map[string]string
 }
 
-var reWithOpt = regexp.MustCompile(`(?i)WITH\s+([\w-]+)\s*=\s*([\w-]+)`)
+var reWithOpt = regexp.MustCompile(`(?i)WITH\s+([\w-]+)\s*=\s*([\w/\.,;:'"-]+)`)
 
 // parseWithOpts parses "WITH..." clause and store result in withOpts map.
 // This function returns no error. Sub-implementations may override this behavior.
