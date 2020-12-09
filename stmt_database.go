@@ -81,7 +81,7 @@ func (s *StmtCreateDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 		rid, _ := resp.GetValueAsType("_rid", reddo.TypeString)
 		result.InsertId = rid.(string)
 	}
-	if err != nil && resp.StatusCode() == 409 && s.ifNotExists {
+	if err != nil && resp.Error() == nil && resp.StatusCode() == 409 && s.ifNotExists {
 		err = nil
 	}
 	return result, err
@@ -144,7 +144,7 @@ func (s *StmtDropDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 
 	resp := s.conn.client.Do(req)
 	err := s.buildError(resp)
-	if err != nil && resp.StatusCode() == 404 && s.ifExists {
+	if err != nil && resp.Error() == nil && resp.StatusCode() == 404 && s.ifExists {
 		err = nil
 	}
 	return nil, err
