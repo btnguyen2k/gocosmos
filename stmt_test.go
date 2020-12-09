@@ -1,6 +1,7 @@
 package go_cosmos
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -12,18 +13,18 @@ func TestStmt_NumInput(t *testing.T) {
 		"CREATE DATABASE IF NOT EXISTS dbtemp": 0,
 		"DROP DATABASE IF EXISTS dbtemp":       0,
 
-		"CREATE TABLE tbltemp":                    0,
-		"DROP TABLE tbltemp":                      0,
-		"CREATE TABLE IF NOT EXISTS tbltemp":      0,
-		"DROP TABLE IF EXISTS tbltemp":            0,
-		"CREATE COLLECTION tbltemp":               0,
-		"DROP COLLECTION tbltemp":                 0,
-		"CREATE COLLECTION IF NOT EXISTS tbltemp": 0,
-		"DROP COLLECTION IF EXISTS tbltemp":       0,
+		"CREATE TABLE db.tbltemp WITH pk=/id":                    0,
+		"DROP TABLE db.tbltemp":                                  0,
+		"CREATE TABLE IF NOT EXISTS db.tbltemp WITH pk=/id":      0,
+		"DROP TABLE IF EXISTS db.tbltemp":                        0,
+		"CREATE COLLECTION db.tbltemp WITH pk=/id":               0,
+		"DROP COLLECTION db.tbltemp":                             0,
+		"CREATE COLLECTION IF NOT EXISTS db.tbltemp WITH pk=/id": 0,
+		"DROP COLLECTION IF EXISTS db.tbltemp":                   0,
 
-		"SELECT * FROM tbltemp WHERE id=@1 AND email=$2 OR username=:3": 3,
-		"INSERT INTO tbltemp (id, name) VALUES ($1, :2)":                2,
-		"DELETE FROM tbltemp WHERE id=@1":                               1,
+		// "SELECT * FROM tbltemp WHERE id=@1 AND email=$2 OR username=:3": 3,
+		// "INSERT INTO tbltemp (id, name) VALUES ($1, :2)":                2,
+		// "DELETE FROM tbltemp WHERE id=@1":                               1,
 	}
 
 	for query, numInput := range testData {
@@ -133,10 +134,10 @@ func Test_parseQuery_CreateCollection(t *testing.T) {
 		uk          [][]string
 	}
 	testData := map[string]testStruct{
-		"CREATE COLLECTION db1.table1 WITH pk=/id":                                             {dbName: "db1", collName: "table1", ifNotExists: false, ru: 0, maxru: 0, pk: "/id", isLargePk: false, uk: nil},
-		"create table db-2.table_2 WITH pk=/email WITH ru=100":                                 {dbName: "db-2", collName: "table_2", ifNotExists: false, ru: 100, maxru: 0, pk: "/email", isLargePk: false, uk: nil},
-		"CREATE collection IF NOT EXISTS db_3.table-3 with largePK=/id WITH maxru=100":         {dbName: "db_3", collName: "table-3", ifNotExists: true, ru: 0, maxru: 100, pk: "/id", isLargePk: true, uk: nil},
-		"create TABLE if not exists db-0_1.table_0-1 WITH pk=/a/b/c with uk=/a:/b,/c/d;/e/f/g": {dbName: "db-0_1", collName: "table_0-1", ifNotExists: true, ru: 0, maxru: 0, pk: "/a/b/c", isLargePk: false, uk: [][]string{{"/a"}, {"/b", "/c/d"}, {"/e/f/g"}}},
+		"CREATE COLLECTION db1.table1 WITH pk=/id":                                                  {dbName: "db1", collName: "table1", ifNotExists: false, ru: 0, maxru: 0, pk: "/id", isLargePk: false, uk: nil},
+		"create table db-2.table_2 WITH PK=/email WITH ru=100":                                      {dbName: "db-2", collName: "table_2", ifNotExists: false, ru: 100, maxru: 0, pk: "/email", isLargePk: false, uk: nil},
+		"CREATE collection IF NOT EXISTS db_3.table-3 with largePK=/id WITH maxru=100":              {dbName: "db_3", collName: "table-3", ifNotExists: true, ru: 0, maxru: 100, pk: "/id", isLargePk: true, uk: nil},
+		"create TABLE if not exists db-0_1.table_0-1 WITH LARGEpk=/a/b/c with uk=/a:/b,/c/d;/e/f/g": {dbName: "db-0_1", collName: "table_0-1", ifNotExists: true, ru: 0, maxru: 0, pk: "/a/b/c", isLargePk: false, uk: [][]string{{"/a"}, {"/b", "/c/d"}, {"/e/f/g"}}},
 	}
 	for query, data := range testData {
 		if stmt, err := parseQuery(nil, query); err != nil {
@@ -153,21 +154,69 @@ func Test_parseQuery_CreateCollection(t *testing.T) {
 			t.Fatalf("%s failed: <ru> expected %#v but received %#v", name+"/"+query, data.ru, dbstmt.ru)
 		} else if dbstmt.maxru != data.maxru {
 			t.Fatalf("%s failed: <maxru> expected %#v but received %#v", name+"/"+query, data.maxru, dbstmt.maxru)
+		} else if dbstmt.pk != data.pk {
+			t.Fatalf("%s failed: <pk> expected %#v but received %#v", name+"/"+query, data.pk, dbstmt.pk)
+		} else if !reflect.DeepEqual(dbstmt.uk, data.uk) {
+			t.Fatalf("%s failed: <uk> expected %#v but received %#v", name+"/"+query, data.uk, dbstmt.uk)
 		}
 	}
 
-	// invalidQueries := []string{
-	// 	"CREATE DATABASE dbtemp WITH ru=400 WITH maxru=1000",
-	// 	"CREATE DATABASE dbtemp WITH ru=-1 WITH maxru=1000",
-	// 	"CREATE DATABASE dbtemp WITH ru=400 WITH maxru=-1",
-	// 	"CREATE DATABASE dbtemp WITH ru=-1",
-	// 	"CREATE DATABASE dbtemp WITH maxru=-1",
-	// }
-	// for _, query := range invalidQueries {
-	// 	if _, err := parseQuery(nil, query); err == nil {
-	// 		t.Fatalf("%s failed: query must not be parsed/validated successfuly", name+"/"+query)
-	// 	}
-	// }
+	invalidQueries := []string{
+		"CREATE collection db.coll",
+		"CREATE collection db.coll WITH pk=/a WITH largepk=/b",
+		"CREATE collection db.coll WITH pk=",
+		"CREATE collection db.coll WITH largepk=",
+		"CREATE collection db.coll WITH pk=/id WITH ru=400 WITH maxru=1000",
+		"create TABLE db.coll WITH pk=/id WITH ru=-1 WITH maxru=1000",
+		"CREATE COLLECTION db.coll WITH pk=/id WITH ru=400 WITH maxru=-1",
+		"CREATE TABLE db.table WITH pk=/id WITH ru=-1",
+		"CREATE COLLECTION db.table WITH pk=/id WITH ru=-1",
+		"CREATE TABLE db WITH pk=/id", // no collection name
+	}
+	for _, query := range invalidQueries {
+		if _, err := parseQuery(nil, query); err == nil {
+			t.Fatalf("%s failed: query must not be parsed/validated successfuly", name+"/"+query)
+		}
+	}
+}
+
+func Test_parseQuery_DropCollection(t *testing.T) {
+	name := "Test_parseQuery_DropCollection"
+	type testStruct struct {
+		dbName   string
+		collName string
+		ifExists bool
+	}
+	testData := map[string]testStruct{
+		"DROP COLLECTION db1.table1":             {dbName: "db1", collName: "table1", ifExists: false},
+		"DROP table db-2.table_2":                {dbName: "db-2", collName: "table_2", ifExists: false},
+		"drop collection IF EXISTS db_3.table-3": {dbName: "db_3", collName: "table-3", ifExists: true},
+		"Drop Table If Exists db-4_0.table_4-0":  {dbName: "db-4_0", collName: "table_4-0", ifExists: true},
+	}
+
+	for query, data := range testData {
+		if stmt, err := parseQuery(nil, query); err != nil {
+			t.Fatalf("%s failed: %s", name+"/"+query, err)
+		} else if dbstmt, ok := stmt.(*StmtDropCollection); !ok {
+			t.Fatalf("%s failed: the parsed stmt must be of type *StmtDropDatabase", name+"/"+query)
+		} else if dbstmt.dbName != data.dbName {
+			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
+		} else if dbstmt.collName != data.collName {
+			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
+		} else if dbstmt.ifExists != data.ifExists {
+			t.Fatalf("%s failed: <if-exists> expected %#v but received %#v", name+"/"+query, data.ifExists, dbstmt.ifExists)
+		}
+	}
+
+	invalidQueries := []string{
+		"DROP collection db", // no collection name
+		"drop TABLE db",      // no collection name
+	}
+	for _, query := range invalidQueries {
+		if _, err := parseQuery(nil, query); err == nil {
+			t.Fatalf("%s failed: query must not be parsed/validated successfuly", name+"/"+query)
+		}
+	}
 }
 
 func Test_parseQuery_ListCollections(t *testing.T) {

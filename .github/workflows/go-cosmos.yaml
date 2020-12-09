@@ -26,5 +26,3 @@ jobs:
           go test -cover -coverprofile="coverage.txt" -v -count 1 .
       - name: Codecov
         uses: codecov/codecov-action@v1.0.15
-        with:
-          verbose: true

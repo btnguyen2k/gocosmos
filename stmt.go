@@ -19,6 +19,7 @@ var (
 	reListDbs  = regexp.MustCompile(`(?i)^LIST\s+DATABASES?$`)
 
 	reCreateColl = regexp.MustCompile(`(?i)^CREATE\s+(COLLECTION|TABLE)(\s+IF\s+NOT\s+EXISTS)?\s+([\w\-]+)\.([\w\-]+)((\s+WITH\s+([\w-]+)\s*=\s*([\w/\.,;:'"-]+))*)$`)
+	reDropColl   = regexp.MustCompile(`(?i)^DROP\s+(COLLECTION|TABLE)(\s+IF\s+EXISTS)?\s+([\w\-]+)\.([\w\-]+)$`)
 	reListColls  = regexp.MustCompile(`(?i)^LIST\s+(COLLECTIONS?|TABLES?)\s+FROM\s+([\w\-]+)$`)
 )
 
@@ -65,6 +66,16 @@ func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 		}
 		return stmt, stmt.validateWithOpts()
 	}
+	if re := reDropColl; re.MatchString(query) {
+		groups := re.FindAllStringSubmatch(query, -1)
+		stmt := &StmtDropCollection{
+			Stmt:     &Stmt{query: query, conn: c, numInput: 0},
+			dbName:   strings.TrimSpace(groups[0][3]),
+			collName: strings.TrimSpace(groups[0][4]),
+			ifExists: strings.TrimSpace(groups[0][2]) != "",
+		}
+		return stmt, stmt.validateWithOpts()
+	}
 	if reListColls.MatchString(query) {
 		groups := reListColls.FindAllStringSubmatch(query, -1)
 		stmt := &StmtListCollections{
@@ -74,16 +85,18 @@ func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 		return stmt, stmt.validateWithOpts()
 	}
 
-	numInput := 0
-	for _, regExp := range []*regexp.Regexp{reA, reC, reD} {
-		numInput += len(regExp.FindAllString(query, -1))
-	}
-	stmt := &Stmt{
-		query:    query,
-		conn:     c,
-		numInput: numInput,
-	}
-	return stmt, nil
+	return nil, fmt.Errorf("invalid query: %s", query)
+
+	// numInput := 0
+	// for _, regExp := range []*regexp.Regexp{reA, reC, reD} {
+	// 	numInput += len(regExp.FindAllString(query, -1))
+	// }
+	// stmt := &Stmt{
+	// 	query:    query,
+	// 	conn:     c,
+	// 	numInput: numInput,
+	// }
+	// return stmt, nil
 }
 
 // Stmt is Azure CosmosDB prepared statement handle.
@@ -122,15 +135,15 @@ func (s *Stmt) NumInput() int {
 	return s.numInput
 }
 
-// Exec implements driver.Stmt.Exec.
-func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
-	panic("[Exec] implement me")
-}
-
-// Query implements driver.Stmt.Query.
-func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
-	panic("[Query] implement me")
-}
+// // Exec implements driver.Stmt.Exec.
+// func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
+// 	panic("[Exec] implement me")
+// }
+//
+// // Query implements driver.Stmt.Query.
+// func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
+// 	panic("[Query] implement me")
+// }
 
 func (s *Stmt) buildError(resp *gjrc.GjrcResponse) error {
 	if resp.Error() != nil {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"regexp"
 	"sort"
 	"strconv"
 
@@ -14,7 +15,7 @@ import (
 
 // StmtCreateCollection implements "CREATE COLLECTION" query.
 //
-// Syntax: CREATE COLLECTION|TABLE [IF NOT EXISTS] <db-name> <WITH [LARGE]PK=partitionKey> [WITH RU|MAXRU=ru] [WITH UK=/path1:/path2,/path3;/path4]
+// Syntax: CREATE COLLECTION|TABLE [IF NOT EXISTS] <db-name>.<collection-name> <WITH [LARGE]PK=partitionKey> [WITH RU|MAXRU=ru] [WITH UK=/path1:/path2,/path3;/path4]
 //
 // - ru: an integer specifying CosmosDB's database throughput expressed in RU/s.
 // - if "IF NOT EXISTS" is specified, Exec will silently swallow the error "409 Conflict".
@@ -70,8 +71,12 @@ func (s *StmtCreateCollection) parseWithOpts(withOptsStr string) error {
 	}
 
 	// unique key
-	if ukOps, ok := s.withOpts["UK"]; ok && ukOps != "" {
-
+	if ukOpts, ok := s.withOpts["UK"]; ok && ukOpts != "" {
+		tokens := regexp.MustCompile(`[;:]+`).Split(ukOpts, -1)
+		for _, token := range tokens {
+			paths := regexp.MustCompile(`[,\s]+`).Split(token, -1)
+			s.uk = append(s.uk, paths)
+		}
 	}
 
 	return nil
@@ -106,8 +111,16 @@ func (s *StmtCreateCollection) Exec(_ []driver.Value) (driver.Result, error) {
 	if s.isLargePk {
 		partitionKeyInfo["Version"] = 2
 	}
-	req := s.conn.buildJsonRequest(method, url, map[string]interface{}{"id": s.collName, "partitionKey": partitionKeyInfo})
-	req = s.conn.addAuthHeader(req, method, "dbs", "dbs/"+s.dbName+"/colls")
+	params := map[string]interface{}{"id": s.collName, "partitionKey": partitionKeyInfo}
+	if len(s.uk) > 0 {
+		uniqueKeys := make([]interface{}, 0)
+		for _, uk := range s.uk {
+			uniqueKeys = append(uniqueKeys, map[string][]string{"paths": uk})
+		}
+		params["uniqueKeyPolicy"] = map[string]interface{}{"uniqueKeys": uniqueKeys}
+	}
+	req := s.conn.buildJsonRequest(method, url, params)
+	req = s.conn.addAuthHeader(req, method, "colls", "dbs/"+s.dbName)
 	if s.ru > 0 {
 		req.Header.Set("x-ms-offer-throughput", strconv.Itoa(s.ru))
 	}
@@ -149,6 +162,40 @@ func (r *ResultCreateCollection) RowsAffected() (int64, error) {
 		return 1, nil
 	}
 	return 0, nil
+}
+
+/*----------------------------------------------------------------------*/
+
+// StmtDropCollection implements "DROP COLLECTION" query.
+//
+// Syntax: DROP COLLECTION|TABLE [IF EXISTS] <db-name>.<collection-name>
+//
+// - if "IF EXISTS" is specified, Exec will silently swallow the error "404 Not Found".
+type StmtDropCollection struct {
+	*Stmt
+	dbName   string
+	collName string
+	ifExists bool
+}
+
+// Query implements driver.Stmt.Query.
+func (s *StmtDropCollection) Query(_ []driver.Value) (driver.Rows, error) {
+	return nil, errors.New("this operation is not supported, please use exec")
+}
+
+// Exec implements driver.Stmt.Exec.
+func (s *StmtDropCollection) Exec(_ []driver.Value) (driver.Result, error) {
+	method := "DELETE"
+	url := s.conn.endpoint + "/dbs/" + s.dbName + "/colls/" + s.collName
+	req := s.conn.buildJsonRequest(method, url, nil)
+	req = s.conn.addAuthHeader(req, method, "colls", "dbs/"+s.dbName+"/colls/"+s.collName)
+
+	resp := s.conn.client.Do(req)
+	err := s.buildError(resp)
+	if err != nil && resp.StatusCode() == 404 && s.ifExists {
+		err = nil
+	}
+	return nil, err
 }
 
 /*----------------------------------------------------------------------*/
@@ -198,17 +245,17 @@ func (s *StmtListCollections) Query(_ []driver.Value) (driver.Rows, error) {
 }
 
 type collectionInfo struct {
-	Id             string `json:"id"`
-	IndexingPolicy string `json:"indexingPolicy"`
-	Rid            string `json:"_rid"`
-	Ts             int    `json:"_ts"`
-	Self           string `json:"_self"`
-	Etag           string `json:"_etag"`
-	Docs           string `json:"_docs"`
-	Sprocs         string `json:"_sprocs"`
-	Triggers       string `json:"_triggers"`
-	Udfs           string `json:"_udfs"`
-	Conflicts      string `json:"_conflicts"`
+	Id             string      `json:"id"`
+	IndexingPolicy interface{} `json:"indexingPolicy"`
+	Rid            string      `json:"_rid"`
+	Ts             int         `json:"_ts"`
+	Self           string      `json:"_self"`
+	Etag           string      `json:"_etag"`
+	Docs           string      `json:"_docs"`
+	Sprocs         string      `json:"_sprocs"`
+	Triggers       string      `json:"_triggers"`
+	Udfs           string      `json:"_udfs"`
+	Conflicts      string      `json:"_conflicts"`
 }
 
 type listCollectionResult struct {

@@ -96,6 +96,8 @@ func TestDriver_Close(t *testing.T) {
 	}
 }
 
+/*----------------------------------------------------------------------*/
+
 func Test_Query_CreateDatabase(t *testing.T) {
 	name := "Test_Query_CreateDatabase"
 	db := _openDb(t, name)
@@ -111,14 +113,26 @@ func Test_Exec_CreateDatabase(t *testing.T) {
 
 	db.Exec("DROP DATABASE IF EXISTS dbtemp")
 
-	_, err := db.Exec("CREATE DATABASE dbtemp")
+	result, err := db.Exec("CREATE DATABASE dbtemp WITH ru=400")
 	if err != nil && err != ErrConflict {
 		t.Fatalf("%s failed: %s", name, err)
 	}
+	if id, err := result.LastInsertId(); id != 0 && err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	}
+	if numRows, err := result.RowsAffected(); numRows != 1 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
 
-	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp WITH ru=400")
+	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp WITH maxru=4000")
 	if err != nil {
 		t.Fatalf("%s failed: %s", name, err)
+	}
+	if id, err := result.LastInsertId(); id != 0 && err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	}
+	if numRows, err := result.RowsAffected(); numRows != 1 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
 	}
 }
 
@@ -206,6 +220,73 @@ func Test_Query_ListDatabases(t *testing.T) {
 	}
 }
 
+/*----------------------------------------------------------------------*/
+
+func Test_Query_CreateCollection(t *testing.T) {
+	name := "Test_Query_CreateCollection"
+	db := _openDb(t, name)
+	_, err := db.Query("CREATE COLLECTION dbtemp.tbltemp WITH pk=/id")
+	if err == nil || strings.Index(err.Error(), "not supported") < 0 {
+		t.Fatalf("%s failed: expected 'not support' error, but received %#v", name, err)
+	}
+}
+
+func Test_Exec_CreateCollection(t *testing.T) {
+	name := "Test_Exec_CreateCollection"
+	db := _openDb(t, name)
+
+	db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+
+	result, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/id WITH ru=400")
+	if err != nil && err != ErrConflict {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+	if id, err := result.LastInsertId(); id != 0 && err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	}
+	if numRows, err := result.RowsAffected(); numRows != 1 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+
+	_, err = db.Exec("CREATE TABLE IF NOT EXISTS dbtemp.tbltemp1 WITH largepk=/a/b/c WITH maxru=4000 WITH uk=/a;/b,/c/d")
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+	if id, err := result.LastInsertId(); id != 0 && err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	}
+	if numRows, err := result.RowsAffected(); numRows != 1 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+}
+
+func Test_Query_DropCollection(t *testing.T) {
+	name := "Test_Query_DropCollection"
+	db := _openDb(t, name)
+	_, err := db.Query("DROP COLLECTION dbtemp.tbltemp")
+	if err == nil || strings.Index(err.Error(), "not supported") < 0 {
+		t.Fatalf("%s failed: expected 'not support' error, but received %#v", name, err)
+	}
+}
+
+func Test_Exec_DropCollection(t *testing.T) {
+	name := "Test_Exec_DropCollection"
+	db := _openDb(t, name)
+
+	db.Exec("CREATE COLLECTION IF NOT EXISTS dbtemp.tbltemp WITH pk=/id")
+
+	_, err := db.Exec("DROP COLLECTION dbtemp.tbltemp")
+	if err != nil && err != ErrNotFound {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+
+	_, err = db.Exec("DROP TABLE IF EXISTS dbtemp.tbltemp")
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+}
+
 func Test_Exec_ListCollections(t *testing.T) {
 	name := "Test_Exec_ListCollections"
 	db := _openDb(t, name)
@@ -220,9 +301,9 @@ func Test_Query_ListCollections(t *testing.T) {
 	db := _openDb(t, name)
 
 	db.Exec("CREATE DATABASE dbtemp")
-	// db.Exec("CREATE COLLECTION dbtemp.tbltemp")
-	// db.Exec("CREATE TABLE dbtemp.tbltemp2")
-	// db.Exec("CREATE COLLECTION dbtemp.tbltemp1")
+	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/a")
+	db.Exec("CREATE TABLE dbtemp.tbltemp2 WITH pk=/b")
+	db.Exec("CREATE COLLECTION dbtemp.tbltemp1 WITH pk=/c")
 
 	dbRows, err := db.Query("LIST COLLECTIONS FROM dbtemp")
 	if err != nil {
