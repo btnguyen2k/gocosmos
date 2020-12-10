@@ -23,8 +23,8 @@ func TestStmt_NumInput(t *testing.T) {
 		"DROP COLLECTION IF EXISTS db.tbltemp":                   0,
 
 		// "SELECT * FROM tbltemp WHERE id=@1 AND email=$2 OR username=:3": 3,
-		// "INSERT INTO tbltemp (id, name) VALUES ($1, :2)":                2,
-		// "DELETE FROM tbltemp WHERE id=@1":                               1,
+		"INSERT INTO db.tbltemp (id, name, email) VALUES ($1, :2, @3)": 3,
+		// "DELETE FROM tbltemp WHERE id=$1 OR (email=:2 AND username=@3)":                               3,
 	}
 
 	for query, numInput := range testData {
@@ -202,7 +202,7 @@ func Test_parseQuery_DropCollection(t *testing.T) {
 		} else if dbstmt.dbName != data.dbName {
 			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
 		} else if dbstmt.collName != data.collName {
-			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
+			t.Fatalf("%s failed: <collection-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
 		} else if dbstmt.ifExists != data.ifExists {
 			t.Fatalf("%s failed: <if-exists> expected %#v but received %#v", name+"/"+query, data.ifExists, dbstmt.ifExists)
 		}
@@ -235,6 +235,43 @@ func Test_parseQuery_ListCollections(t *testing.T) {
 			t.Fatalf("%s failed: the parsed stmt must be of type *StmtListDatabases", name+"/"+query)
 		} else if dbstmt.dbName != data {
 			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data, dbstmt.dbName)
+		}
+	}
+}
+
+func Test_parseQuery_Insert(t *testing.T) {
+	name := "Test_parseQuery_Insert"
+	type testStruct struct {
+		dbName   string
+		collName string
+		fields   []string
+		values   []interface{}
+	}
+	testData := map[string]testStruct{
+		`INSERT INTO db1.table1 (a, b, c, d, e, f) VALUES (null, 1.0, true, "\"a string 'with' \\\"quote\\\"\"", "{\"key\":\"value\"}", "[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]")`: {
+			dbName: "db1", collName: "table1", fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{
+				nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`},
+			},
+		},
+		`INSERT INTO db-2.table_2 (a,b,c) VALUES ($1, :3, @2)`: {
+			dbName: "db-2", collName: "table_2", fields: []string{"a", "b", "c"}, values: []interface{}{
+				placeholder{1}, placeholder{3}, placeholder{2},
+			},
+		},
+	}
+	for query, data := range testData {
+		if stmt, err := parseQuery(nil, query); err != nil {
+			t.Fatalf("%s failed: %s", name+"/"+query, err)
+		} else if dbstmt, ok := stmt.(*StmtInsert); !ok {
+			t.Fatalf("%s failed: the parsed stmt must be of type *StmtInsert", name+"/"+query)
+		} else if dbstmt.dbName != data.dbName {
+			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
+		} else if dbstmt.collName != data.collName {
+			t.Fatalf("%s failed: <collection-name> expected %#v but received %#v", name+"/"+query, data.collName, dbstmt.collName)
+		} else if !reflect.DeepEqual(dbstmt.fields, data.fields) {
+			t.Fatalf("%s failed: <fields> expected %#v but received %#v", name+"/"+query, data.fields, dbstmt.fields)
+		} else if !reflect.DeepEqual(dbstmt.values, data.values) {
+			t.Fatalf("%s failed: <values> expected %#v but received %#v", name+"/"+query, data.values, dbstmt.values)
 		}
 	}
 }

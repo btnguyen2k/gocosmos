@@ -9,18 +9,27 @@ import (
 	"github.com/btnguyen2k/consu/gjrc"
 )
 
-var (
-	reA = regexp.MustCompile(`@\d+`)
-	reC = regexp.MustCompile(`:\d+`)
-	reD = regexp.MustCompile(`\$\d+`)
+const (
+	field       = `([\w\-]+)`
+	ifNotExists = `(\s+IF\s+NOT\s+EXISTS)?`
+	ifExists    = `(\s+IF\s+EXISTS)?`
+	with        = `((\s+WITH\s+([\w-]+)\s*=\s*([\w/\.,;:'"-]+))*)`
+)
 
-	reCreateDb = regexp.MustCompile(`(?i)^CREATE\s+DATABASE(\s+IF\s+NOT\s+EXISTS)?\s+([\w\-]+)((\s+WITH\s+([\w-]+)\s*=\s*([\w/\.,;:'"-]+))*)$`)
-	reDropDb   = regexp.MustCompile(`(?i)^DROP\s+DATABASE(\s+IF\s+EXISTS)?\s+([\w\-]+)$`)
+var (
+	// reA = regexp.MustCompile(`@\d+`)
+	// reC = regexp.MustCompile(`:\d+`)
+	// reD = regexp.MustCompile(`\$\d+`)
+
+	reCreateDb = regexp.MustCompile(`(?i)^CREATE\s+DATABASE` + ifNotExists + `\s+` + field + with + `$`)
+	reDropDb   = regexp.MustCompile(`(?i)^DROP\s+DATABASE` + ifExists + `\s+` + field + `$`)
 	reListDbs  = regexp.MustCompile(`(?i)^LIST\s+DATABASES?$`)
 
-	reCreateColl = regexp.MustCompile(`(?i)^CREATE\s+(COLLECTION|TABLE)(\s+IF\s+NOT\s+EXISTS)?\s+([\w\-]+)\.([\w\-]+)((\s+WITH\s+([\w-]+)\s*=\s*([\w/\.,;:'"-]+))*)$`)
-	reDropColl   = regexp.MustCompile(`(?i)^DROP\s+(COLLECTION|TABLE)(\s+IF\s+EXISTS)?\s+([\w\-]+)\.([\w\-]+)$`)
-	reListColls  = regexp.MustCompile(`(?i)^LIST\s+(COLLECTIONS?|TABLES?)\s+FROM\s+([\w\-]+)$`)
+	reCreateColl = regexp.MustCompile(`(?i)^CREATE\s+(COLLECTION|TABLE)` + ifNotExists + `\s+` + field + `\.` + field + with + `$`)
+	reDropColl   = regexp.MustCompile(`(?i)^DROP\s+(COLLECTION|TABLE)` + ifExists + `\s+` + field + `\.` + field + `$`)
+	reListColls  = regexp.MustCompile(`(?i)^LIST\s+(COLLECTIONS?|TABLES?)\s+FROM\s+` + field + `$`)
+
+	reInsert = regexp.MustCompile(`(?i)^INSERT\s+INTO\s+` + field + `\.` + field + `\s*\(([^)]*?)\)\s*VALUES\s*\(([^)]*?)\)$`)
 )
 
 func parseQuery(c *Conn, query string) (driver.Stmt, error) {
@@ -76,8 +85,8 @@ func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 		}
 		return stmt, stmt.validateWithOpts()
 	}
-	if reListColls.MatchString(query) {
-		groups := reListColls.FindAllStringSubmatch(query, -1)
+	if re := reListColls; re.MatchString(query) {
+		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtListCollections{
 			Stmt:   &Stmt{query: query, conn: c, numInput: 0},
 			dbName: strings.TrimSpace(groups[0][2]),
@@ -85,12 +94,28 @@ func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 		return stmt, stmt.validateWithOpts()
 	}
 
-	return nil, fmt.Errorf("invalid query: %s", query)
-
 	// numInput := 0
 	// for _, regExp := range []*regexp.Regexp{reA, reC, reD} {
 	// 	numInput += len(regExp.FindAllString(query, -1))
 	// }
+
+	if re := reInsert; re.MatchString(query) {
+		groups := re.FindAllStringSubmatch(query, -1)
+		stmt := &StmtInsert{
+			Stmt:      &Stmt{query: query, conn: c, numInput: 0},
+			dbName:    strings.TrimSpace(groups[0][1]),
+			collName:  strings.TrimSpace(groups[0][2]),
+			fieldsStr: strings.TrimSpace(groups[0][3]),
+			valuesStr: strings.TrimSpace(groups[0][4]),
+		}
+		if err := stmt.parse(); err != nil {
+			return nil, err
+		}
+		return stmt, stmt.validate()
+	}
+
+	return nil, fmt.Errorf("invalid query: %s", query)
+
 	// stmt := &Stmt{
 	// 	query:    query,
 	// 	conn:     c,

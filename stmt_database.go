@@ -12,7 +12,7 @@ import (
 	"github.com/btnguyen2k/consu/reddo"
 )
 
-// StmtCreateDatabase implements "CREATE DATABASE" query.
+// StmtCreateDatabase implements "CREATE DATABASE" operation.
 //
 // Syntax: CREATE DATABASE [IF NOT EXISTS] <db-name> [WITH RU|MAXRU=ru]
 //
@@ -115,7 +115,7 @@ func (r *ResultCreateDatabase) RowsAffected() (int64, error) {
 
 /*----------------------------------------------------------------------*/
 
-// StmtDropDatabase implements "DROP DATABASE" query.
+// StmtDropDatabase implements "DROP DATABASE" operation.
 //
 // Syntax: DROP DATABASE [IF EXISTS] <db-name>
 //
@@ -155,7 +155,7 @@ func (s *StmtDropDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 
 /*----------------------------------------------------------------------*/
 
-// StmtListDatabases implements "LIST DATABASES" query.
+// StmtListDatabases implements "LIST DATABASES" operation.
 //
 // Syntax: LIST DATABASES|DATABASE
 type StmtListDatabases struct {

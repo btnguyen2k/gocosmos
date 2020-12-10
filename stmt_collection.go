@@ -13,7 +13,7 @@ import (
 	"github.com/btnguyen2k/consu/reddo"
 )
 
-// StmtCreateCollection implements "CREATE COLLECTION" query.
+// StmtCreateCollection implements "CREATE COLLECTION" operation.
 //
 // Syntax: CREATE COLLECTION|TABLE [IF NOT EXISTS] <db-name>.<collection-name> <WITH [LARGE]PK=partitionKey> [WITH RU|MAXRU=ru] [WITH UK=/path1:/path2,/path3;/path4]
 //
@@ -166,7 +166,7 @@ func (r *ResultCreateCollection) RowsAffected() (int64, error) {
 
 /*----------------------------------------------------------------------*/
 
-// StmtDropCollection implements "DROP COLLECTION" query.
+// StmtDropCollection implements "DROP COLLECTION" operation.
 //
 // Syntax: DROP COLLECTION|TABLE [IF EXISTS] <db-name>.<collection-name>
 //
@@ -200,7 +200,7 @@ func (s *StmtDropCollection) Exec(_ []driver.Value) (driver.Result, error) {
 
 /*----------------------------------------------------------------------*/
 
-// StmtListCollections implements "LIST DATABASES" query.
+// StmtListCollections implements "LIST DATABASES" operation.
 //
 // Syntax:
 // - LIST COLLECTIONS|TABLES|COLLECTION|TABLE FROM <db-name>
