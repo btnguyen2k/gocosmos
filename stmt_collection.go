@@ -161,7 +161,7 @@ func (r *ResultCreateCollection) LastInsertId() (int64, error) {
 	return 0, errors.New("this operation is not supported, please read _rid value from field InsertId")
 }
 
-// LastInsertId implements driver.Result.RowsAffected.
+// RowsAffected implements driver.Result.RowsAffected.
 func (r *ResultCreateCollection) RowsAffected() (int64, error) {
 	if r.Successful {
 		return 1, nil
