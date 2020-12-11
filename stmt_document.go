@@ -229,7 +229,7 @@ func (s *StmtDelete) parse() error {
 			if err != nil || index < 1 {
 				return fmt.Errorf("invalid id placeholder literate: %s", s.idStr)
 			}
-			s.id = &placeholder{index}
+			s.id = placeholder{index}
 		} else {
 			return fmt.Errorf("invalid id literate: %s", s.idStr)
 		}
@@ -238,7 +238,7 @@ func (s *StmtDelete) parse() error {
 }
 
 func (s *StmtDelete) validate() error {
-	if s.id == "" {
+	if s.idStr == "" {
 		return errors.New("id value is missing")
 	}
 	return nil

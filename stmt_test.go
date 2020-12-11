@@ -290,3 +290,48 @@ func Test_parseQuery_Insert(t *testing.T) {
 		}
 	}
 }
+
+func Test_parseQuery_Delete(t *testing.T) {
+	name := "Test_parseQuery_Delete"
+	type testStruct struct {
+		dbName   string
+		collName string
+		idStr    string
+		id       interface{}
+	}
+	testData := map[string]testStruct{
+		`DELETE FROM db1.table1 WHERE id=abc`:      {dbName: "db1", collName: "table1", idStr: "abc", id: nil},
+		`DELETE FROM db-2.table_2 WHERE id="def"`:  {dbName: "db-2", collName: "table_2", idStr: "def", id: nil},
+		`DELETE FROM db_3-0.table-3_0 WHERE id=@2`: {dbName: "db_3-0", collName: "table-3_0", idStr: "@2", id: placeholder{2}},
+	}
+	for query, data := range testData {
+		if stmt, err := parseQuery(nil, query); err != nil {
+			t.Fatalf("%s failed: %s", name+"/"+query, err)
+		} else if dbstmt, ok := stmt.(*StmtDelete); !ok {
+			t.Fatalf("%s failed: the parsed stmt must be of type *StmtDelete", name+"/"+query)
+		} else if dbstmt.dbName != data.dbName {
+			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
+		} else if dbstmt.collName != data.collName {
+			t.Fatalf("%s failed: <collection-name> expected %#v but received %#v", name+"/"+query, data.collName, dbstmt.collName)
+		} else if dbstmt.idStr != data.idStr {
+			t.Fatalf("%s failed: <id-str> expected %#v but received %#v", name+"/"+query, data.idStr, dbstmt.idStr)
+		} else if !reflect.DeepEqual(dbstmt.id, data.id) {
+			t.Fatalf("%s failed: <id> expected %#v but received %#v", name+"/"+query, data.id, dbstmt.id)
+		}
+	}
+
+	// invalidQueries := []string{
+	// 	`INSERT INTO db (a,b,c) VALUES (1,2,3)`,           // no collection name
+	// 	`INSERT INTO db.table (a,b,c)`,                    // no VALUES part
+	// 	`INSERT INTO db.table VALUES (1,2,3)`,             // no column list
+	// 	`INSERT INTO db.table (a) VALUES ('a string')`,    // invalid string literature
+	// 	`INSERT INTO db.table (a) VALUES ("a string")`,    // should be "\"a string\""
+	// 	`INSERT INTO db.table (a) VALUES ("{key:value}")`, // should be "{\"key\:\"value\"}"
+	// 	`INSERT INTO db.table (a,b) VALUES (1,2,3)`,       // number of field and value mismatch
+	// }
+	// for _, query := range invalidQueries {
+	// 	if _, err := parseQuery(nil, query); err == nil {
+	// 		t.Fatalf("%s failed: query must not be parsed/validated successfuly", name+"/"+query)
+	// 	}
+	// }
+}
