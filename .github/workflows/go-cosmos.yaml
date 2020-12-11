@@ -22,8 +22,8 @@ jobs:
       - name: Install and Run Azure CosmosDB emulator
         run: |
           choco install azure-cosmosdb-emulator
-          # & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe"
-          & "C:\Program Files\Azure Cosmos DB Emulator\CosmosDB.Emulator.exe"
+          & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe"
+          Start-Sleep -s 10
           try { Invoke-RestMethod https://127.0.0.1:8081/ } catch {}
       - name: Test
         run: |
