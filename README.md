@@ -15,4 +15,4 @@ Features:
   - [x] INSERT query
   - [ ] SELECT query
   - [ ] UPDATE query
-  - [ ] DELETE query
+  - [x] DELETE query

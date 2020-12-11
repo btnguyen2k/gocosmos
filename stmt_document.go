@@ -270,9 +270,13 @@ func (s *StmtDelete) Exec(args []driver.Value) (driver.Result, error) {
 	case 403:
 		err = ErrForbidden
 	case 404:
-		err = nil
-	case 409:
-		err = ErrConflict
+		// consider "document not found" as successful operation
+		// but database/collection not found is not!
+		if strings.Index(err.Error(), "ResourceType: Document") >= 0 {
+			err = nil
+		} else {
+			err = ErrNotFound
+		}
 	}
 	return result, err
 }
