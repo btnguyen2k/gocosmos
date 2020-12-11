@@ -24,10 +24,11 @@ jobs:
           choco install azure-cosmosdb-emulator
           ls -l "C:\Program Files\Azure Cosmos DB Emulator\"
           & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe"
+          Start-Sleep -s 10
           # docker ps -a
-          netstat -ntp tcp
-          # $env:COSMOSDB_DRIVER='gocosmos'
-          # $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=='
+          netstat -nt
+          $env:COSMOSDB_DRIVER='gocosmos'
+          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=='
           go test -cover -coverprofile="coverage.txt" -v -count 1 .
       - name: Codecov
         uses: codecov/codecov-action@v1.0.15
