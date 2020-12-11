@@ -488,3 +488,73 @@ func Test_Exec_InsertPlaceholder(t *testing.T) {
 		t.Fatalf("%s failed: expected ErrConflict but received %#v", name, err)
 	}
 }
+
+func Test_Query_Delete(t *testing.T) {
+	name := "Test_Query_Delete"
+	db := _openDb(t, name)
+	_, err := db.Query("DELETE FROM db.table WHERE id=1", nil)
+	if err == nil || strings.Index(err.Error(), "not supported") < 0 {
+		t.Fatalf("%s failed: expected 'not support' error, but received %#v", name, err)
+	}
+}
+
+func Test_Exec_Delete(t *testing.T) {
+	name := "Test_Exec_Delete"
+	db := _openDb(t, name)
+
+	db.Exec("DROP DATABASE db_not_exists")
+	db.Exec("DROP DATABASE dbtemp")
+	db.Exec("CREATE DATABASE dbtemp")
+	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
+	db.Exec(`INSERT INTO dbtemp.tbltemp (id,username,email) VALUES (:1,@2,$3)`, "1", "user", "user@domain1.com")
+	db.Exec(`INSERT INTO dbtemp.tbltemp (id,username,email) VALUES (:1,@2,$3)`, "2", "user", "user@domain2.com")
+	db.Exec(`INSERT INTO dbtemp.tbltemp (id,username,email) VALUES (:1,@2,$3)`, "3", "user", "user@domain3.com")
+	db.Exec(`INSERT INTO dbtemp.tbltemp (id,username,email) VALUES (:1,@2,$3)`, "4", "user", "user@domain4.com")
+	db.Exec(`INSERT INTO dbtemp.tbltemp (id,username,email) VALUES (:1,@2,$3)`, "5", "user", "user@domain5.com")
+
+	if dbResult, err := db.Exec(`DELETE FROM dbtemp.tbltemp WHERE id=1`, "user"); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	} else if id, err := dbResult.LastInsertId(); id != 0 && err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	} else if numRows, err := dbResult.RowsAffected(); numRows != 1 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+
+	if dbResult, err := db.Exec(`DELETE FROM dbtemp.tbltemp WHERE id="2"`, "user"); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	} else if id, err := dbResult.LastInsertId(); id != 0 && err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	} else if numRows, err := dbResult.RowsAffected(); numRows != 1 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+
+	if dbResult, err := db.Exec(`DELETE FROM dbtemp.tbltemp WHERE id=:1`, "3", "user"); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	} else if id, err := dbResult.LastInsertId(); id != 0 && err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	} else if numRows, err := dbResult.RowsAffected(); numRows != 1 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+	if dbResult, err := db.Exec(`DELETE FROM dbtemp.tbltemp WHERE id=@1`, "4", "user"); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	} else if id, err := dbResult.LastInsertId(); id != 0 && err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	} else if numRows, err := dbResult.RowsAffected(); numRows != 1 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+	if dbResult, err := db.Exec(`DELETE FROM dbtemp.tbltemp WHERE id=$1`, "5", "user"); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	} else if id, err := dbResult.LastInsertId(); id != 0 && err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	} else if numRows, err := dbResult.RowsAffected(); numRows != 1 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+
+	if dbResult, err := db.Exec(`DELETE FROM dbtemp.tbltemp WHERE id=1`, "user"); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	} else if id, err := dbResult.LastInsertId(); id != 0 && err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	} else if numRows, err := dbResult.RowsAffected(); numRows != 0 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=0/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+}

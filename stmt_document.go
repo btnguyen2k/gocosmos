@@ -210,6 +210,7 @@ type StmtDelete struct {
 }
 
 func (s *StmtDelete) parse() error {
+	s.numInput = 1
 	hasPrefix := strings.HasPrefix(s.idStr, `"`)
 	hasSuffix := strings.HasSuffix(s.idStr, `"`)
 	if hasPrefix != hasSuffix {
@@ -224,6 +225,7 @@ func (s *StmtDelete) parse() error {
 				return fmt.Errorf("invalid id placeholder literate: %s", s.idStr)
 			}
 			s.id = placeholder{index}
+			s.numInput++
 		} else {
 			return fmt.Errorf("invalid id literate: %s", s.idStr)
 		}
