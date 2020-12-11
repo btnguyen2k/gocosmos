@@ -196,8 +196,6 @@ func (s *StmtListDatabases) Query(_ []driver.Value) (driver.Rows, error) {
 	switch statusCode {
 	case 403:
 		err = ErrForbidden
-	case 404:
-		err = ErrNotFound
 	}
 	return rows, err
 }

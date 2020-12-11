@@ -426,16 +426,17 @@ func Test_Exec_Insert(t *testing.T) {
 	name := "Test_Exec_Insert"
 	db := _openDb(t, name)
 
+	db.Exec("DROP DATABASE db_not_exists")
 	db.Exec("DROP DATABASE dbtemp")
 	db.Exec("CREATE DATABASE dbtemp")
 	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
 
 	if dbResult, err := db.Exec(`INSERT INTO dbtemp.tbltemp (id, username, email, grade, actived) VALUES ("\"1\"", "\"user\"", "\"user@domain1.com\"", 7, true)`, "user"); err != nil {
 		t.Fatalf("%s failed: %s", name, err)
-	} else if numRows, err := dbResult.RowsAffected(); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	} else if numRows != 1 {
-		t.Fatalf("%s failed: expected numRows is %#v but received %#v", name, 1, numRows)
+	} else if id, err := dbResult.LastInsertId(); id != 0 && err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	} else if numRows, err := dbResult.RowsAffected(); numRows != 1 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
 	}
 
 	if _, err := db.Exec(`INSERT INTO dbtemp.tbltemp (id,username,email,grade,actived) VALUES ("\"1\"", "\"user\"", "\"user@domain2.com\"", 8, false)`, "user"); err != ErrConflict {
@@ -446,6 +447,15 @@ func Test_Exec_Insert(t *testing.T) {
 	if _, err := db.Exec(`INSERT INTO dbtemp.tbltemp (id,username,email,grade,actived) VALUES ("\"2\"", "\"user\"", "\"user@domain1.com\"", 9, false)`, "user"); err != ErrConflict {
 		// duplicated unique index
 		t.Fatalf("%s failed: expected ErrConflict but received %#v", name, err)
+	}
+
+	if _, err := db.Exec(`INSERT INTO db_not_exists.table (id,username,email) VALUES ("\"x\"", "\"y\"", "\"x\"")`, "y"); err != ErrNotFound {
+		// database/table not found
+		t.Fatalf("%s failed: expected ErrNotFound but received %#v", name, err)
+	}
+	if _, err := db.Exec(`INSERT INTO dbtemp.tbl_not_found (id,username,email) VALUES ("\"x\"", "\"y\"", "\"x\"")`, "y"); err != ErrNotFound {
+		// database/table not found
+		t.Fatalf("%s failed: expected ErrNotFound but received %#v", name, err)
 	}
 }
 
@@ -460,10 +470,10 @@ func Test_Exec_InsertPlaceholder(t *testing.T) {
 	if dbResult, err := db.Exec(`INSERT INTO dbtemp.tbltemp (id, username, email, grade, actived, data) VALUES (:1, $2, @3, @4, $5, :6)`,
 		"1", "user", "user@domain1.com", 1, true, map[string]interface{}{"str": "a string", "num": 1.23, "bool": true, "date": time.Now()}, "user"); err != nil {
 		t.Fatalf("%s failed: %s", name, err)
-	} else if numRows, err := dbResult.RowsAffected(); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	} else if numRows != 1 {
-		t.Fatalf("%s failed: expected numRows is %#v but received %#v", name, 1, numRows)
+	} else if id, err := dbResult.LastInsertId(); id != 0 && err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	} else if numRows, err := dbResult.RowsAffected(); numRows != 1 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
 	}
 
 	if _, err := db.Exec(`INSERT INTO dbtemp.tbltemp (id, username, email, grade, actived, data) VALUES (:1, $2, @3, @4, $5, :6)`,

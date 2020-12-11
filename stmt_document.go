@@ -129,12 +129,12 @@ func (s *StmtInsert) Exec(args []driver.Value) (driver.Result, error) {
 				return nil, fmt.Errorf("invalid value index %d", ph.index)
 			}
 			params[s.fields[i]] = args[ph.index-1]
-		case *placeholder:
-			ph := s.values[i].(*placeholder)
-			if ph.index <= 0 || ph.index >= len(args) {
-				return nil, fmt.Errorf("invalid value index %d", ph.index)
-			}
-			params[s.fields[i]] = args[ph.index-1]
+		// case *placeholder:
+		// 	ph := s.values[i].(*placeholder)
+		// 	if ph.index <= 0 || ph.index >= len(args) {
+		// 		return nil, fmt.Errorf("invalid value index %d", ph.index)
+		// 	}
+		// 	params[s.fields[i]] = args[ph.index-1]
 		default:
 			params[s.fields[i]] = s.values[i]
 		}

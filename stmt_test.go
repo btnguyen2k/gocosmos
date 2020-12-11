@@ -326,6 +326,9 @@ func Test_parseQuery_Delete(t *testing.T) {
 		`DELETE FROM db.table WHERE id=`, // id is empty
 		`DELETE FROM db.table WHERE id="1`,
 		`DELETE FROM db.table WHERE id=2"`,
+		`DELETE FROM db.table WHERE id=@1 a`,
+		`DELETE FROM db.table WHERE id=b $2`,
+		`DELETE FROM db.table WHERE id=c :3 d`,
 	}
 	for _, query := range invalidQueries {
 		if _, err := parseQuery(nil, query); err == nil {
