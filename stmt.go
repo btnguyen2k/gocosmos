@@ -111,7 +111,7 @@ func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 			Stmt:     &Stmt{query: query, conn: c, numInput: 0},
 			dbName:   strings.TrimSpace(groups[0][1]),
 			collName: strings.TrimSpace(groups[0][2]),
-			id:       strings.TrimSpace(groups[0][3]),
+			idStr:    strings.TrimSpace(groups[0][3]),
 		}
 		if err := stmt.parse(); err != nil {
 			return nil, err

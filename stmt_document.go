@@ -211,26 +211,45 @@ type StmtDelete struct {
 	*Stmt
 	dbName   string
 	collName string
-	id       string
+	idStr    string
+	id       interface{}
 }
 
 func (s *StmtDelete) parse() error {
-	if strings.HasPrefix(s.id, `"`) && strings.HasSuffix(s.id, `"`) {
-		s.id = strings.TrimSpace(s.id[1 : len(s.id)-1])
+	hasPrefix := strings.HasPrefix(s.idStr, `"`)
+	hasSuffix := strings.HasSuffix(s.idStr, `"`)
+	if hasPrefix != hasSuffix {
+		return fmt.Errorf("invalid id literate: %s", s.idStr)
+	}
+	if hasPrefix && hasSuffix {
+		s.idStr = strings.TrimSpace(s.idStr[1 : len(s.idStr)-1])
+	} else if loc := reValPlaceholder.FindStringIndex(s.idStr); loc != nil {
+		if loc[0] == 0 && loc[1] == len(s.idStr) {
+			index, err := strconv.Atoi(s.idStr[loc[0]+1:])
+			if err != nil || index < 1 {
+				return fmt.Errorf("invalid id placeholder literate: %s", s.idStr)
+			}
+			s.id = &placeholder{index}
+		} else {
+			return fmt.Errorf("invalid id literate: %s", s.idStr)
+		}
 	}
 	return nil
 }
 
 func (s *StmtDelete) validate() error {
+	if s.id == "" {
+		return errors.New("id value is missing")
+	}
 	return nil
 }
 
 // Exec implements driver.Stmt.Exec.
 // This function always return nil driver.Result.
 func (s *StmtDelete) Exec(args []driver.Value) (driver.Result, error) {
-	return nil, nil
-	// method := "POST"
-	// url := s.conn.endpoint + "/dbs/" + s.dbName + "/colls/" + s.collName + "/docs"
+	method := "DELETE"
+	url := s.conn.endpoint + "/dbs/" + s.dbName + "/colls/" + s.collName + "/docs/" + s.idStr
+	fmt.Println(method, url)
 	// params := make(map[string]interface{})
 	// for i := 0; i < len(s.fields); i++ {
 	// 	switch s.values[i].(type) {
@@ -274,6 +293,7 @@ func (s *StmtDelete) Exec(args []driver.Value) (driver.Result, error) {
 	// 	err = ErrConflict
 	// }
 	// return result, err
+	return nil, nil
 }
 
 // Query implements driver.Stmt.Query.
