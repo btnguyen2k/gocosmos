@@ -264,6 +264,7 @@ func Test_Exec_CreateCollection(t *testing.T) {
 	name := "Test_Exec_CreateCollection"
 	db := _openDb(t, name)
 
+	db.Exec("DROP DATABASE IF EXISTS db_not_exists")
 	db.Exec("DROP DATABASE IF EXISTS dbtemp")
 	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
 
@@ -306,6 +307,11 @@ func Test_Exec_CreateCollection(t *testing.T) {
 	}
 	if numRows, err := result.RowsAffected(); numRows != 1 || err != nil {
 		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+
+	_, err = db.Exec(`CREATE COLLECTION db_not_exists.table WITH pk=/a`)
+	if err != ErrNotFound {
+		t.Fatalf("%s failed: expected ErrNotFound but received %#v", name, err)
 	}
 }
 

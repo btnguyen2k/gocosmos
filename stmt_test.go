@@ -320,18 +320,16 @@ func Test_parseQuery_Delete(t *testing.T) {
 		}
 	}
 
-	// invalidQueries := []string{
-	// 	`INSERT INTO db (a,b,c) VALUES (1,2,3)`,           // no collection name
-	// 	`INSERT INTO db.table (a,b,c)`,                    // no VALUES part
-	// 	`INSERT INTO db.table VALUES (1,2,3)`,             // no column list
-	// 	`INSERT INTO db.table (a) VALUES ('a string')`,    // invalid string literature
-	// 	`INSERT INTO db.table (a) VALUES ("a string")`,    // should be "\"a string\""
-	// 	`INSERT INTO db.table (a) VALUES ("{key:value}")`, // should be "{\"key\:\"value\"}"
-	// 	`INSERT INTO db.table (a,b) VALUES (1,2,3)`,       // number of field and value mismatch
-	// }
-	// for _, query := range invalidQueries {
-	// 	if _, err := parseQuery(nil, query); err == nil {
-	// 		t.Fatalf("%s failed: query must not be parsed/validated successfuly", name+"/"+query)
-	// 	}
-	// }
+	invalidQueries := []string{
+		`DELETE FROM db WHERE id=1`,      // no collection name
+		`DELETE FROM db.table`,           // no WHERE part
+		`DELETE FROM db.table WHERE id=`, // id is empty
+		`DELETE FROM db.table WHERE id="1`,
+		`DELETE FROM db.table WHERE id=2"`,
+	}
+	for _, query := range invalidQueries {
+		if _, err := parseQuery(nil, query); err == nil {
+			t.Fatalf("%s failed: query must not be parsed/validated successfuly", name+"/"+query)
+		}
+	}
 }
