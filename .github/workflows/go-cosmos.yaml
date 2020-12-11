@@ -23,7 +23,9 @@ jobs:
         run: |
           choco install azure-cosmosdb-emulator
           ls -l "C:\Program Files\Azure Cosmos DB Emulator\"
-          & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe"
+          # & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe"
+          # Start-Sleep -s 10
+          & "C:\Program Files\Azure Cosmos DB Emulator\CosmosDB.Emulator.exe"
           Start-Sleep -s 10
           # docker ps -a
           netstat -nt
