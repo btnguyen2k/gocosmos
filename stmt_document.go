@@ -122,7 +122,22 @@ func (s *StmtInsert) Exec(args []driver.Value) (driver.Result, error) {
 	url := s.conn.endpoint + "/dbs/" + s.dbName + "/colls/" + s.collName + "/docs"
 	params := make(map[string]interface{})
 	for i := 0; i < len(s.fields); i++ {
-		params[s.fields[i]] = s.values[i]
+		switch s.values[i].(type) {
+		case placeholder:
+			ph := s.values[i].(placeholder)
+			if ph.index <= 0 || ph.index >= len(args) {
+				return nil, fmt.Errorf("invalid value index %d", ph.index)
+			}
+			params[s.fields[i]] = args[ph.index-1]
+		case *placeholder:
+			ph := s.values[i].(*placeholder)
+			if ph.index <= 0 || ph.index >= len(args) {
+				return nil, fmt.Errorf("invalid value index %d", ph.index)
+			}
+			params[s.fields[i]] = args[ph.index-1]
+		default:
+			params[s.fields[i]] = s.values[i]
+		}
 	}
 	req := s.conn.buildJsonRequest(method, url, params)
 	req = s.conn.addAuthHeader(req, method, "docs", "dbs/"+s.dbName+"/colls/"+s.collName)
@@ -185,3 +200,16 @@ func (r *ResultInsert) RowsAffected() (int64, error) {
 }
 
 /*----------------------------------------------------------------------*/
+
+// StmtDelete implements "DELETE" operation.
+//
+// Syntax: DELETE <db-name>.<collection-name> WHERE id=<id-value>
+//
+// - currently DELETE only removes one document specified by id.
+// - <id-value> is treated as a string. Either `WHERE id=abc` or `WHERE id="abc"` is accepted.
+type StmtDelete struct {
+	*Stmt
+	dbName   string
+	collName string
+	id       string
+}

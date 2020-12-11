@@ -69,3 +69,9 @@ func (c *Conn) Close() error {
 func (c *Conn) Begin() (driver.Tx, error) {
 	panic("implement me")
 }
+
+// CheckNamedValue implements driver.NamedValueChecker.CheckNamedValue.
+func (c *Conn) CheckNamedValue(value *driver.NamedValue) error {
+	// since CosmosDB is document db, it accepts any value types
+	return nil
+}

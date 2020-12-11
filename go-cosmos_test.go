@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func Test_OpenDatabase(t *testing.T) {
@@ -437,6 +438,36 @@ func Test_Exec_Insert(t *testing.T) {
 	}
 
 	if _, err := db.Exec(`INSERT INTO dbtemp.tbltemp (id,username,email,grade,actived) VALUES ("\"2\"", "\"user\"", "\"user@domain1.com\"", 9, false)`, "user"); err != ErrConflict {
+		// duplicated unique index
+		t.Fatalf("%s failed: expected ErrConflict but received %#v", name, err)
+	}
+}
+
+func Test_Exec_InsertPlaceholder(t *testing.T) {
+	name := "Test_Exec_InsertPlaceholder"
+	db := _openDb(t, name)
+
+	db.Exec("DROP DATABASE dbtemp")
+	db.Exec("CREATE DATABASE dbtemp")
+	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
+
+	if dbResult, err := db.Exec(`INSERT INTO dbtemp.tbltemp (id, username, email, grade, actived, data) VALUES (:1, $2, @3, @4, $5, :6)`,
+		"1", "user", "user@domain1.com", 1, true, map[string]interface{}{"str": "a string", "num": 1.23, "bool": true, "date": time.Now()}, "user"); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	} else if numRows, err := dbResult.RowsAffected(); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	} else if numRows != 1 {
+		t.Fatalf("%s failed: expected numRows is %#v but received %#v", name, 1, numRows)
+	}
+
+	if _, err := db.Exec(`INSERT INTO dbtemp.tbltemp (id, username, email, grade, actived, data) VALUES (:1, $2, @3, @4, $5, :6)`,
+		"1", "user", "user@domain2.com", 2, false, nil, "user"); err != ErrConflict {
+		// duplicated id
+		t.Fatalf("%s failed: expected ErrConflict but received %#v", name, err)
+	}
+
+	if _, err := db.Exec(`INSERT INTO dbtemp.tbltemp (id, username, email, grade, actived, data) VALUES (:1, $2, @3, @4, $5, :6)`,
+		"2", "user", "user@domain1.com", 3, false, nil, "user"); err != ErrConflict {
 		// duplicated unique index
 		t.Fatalf("%s failed: expected ErrConflict but received %#v", name, err)
 	}

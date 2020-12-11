@@ -11,5 +11,8 @@ Features:
   - [x] CREATE TABLE/COLLECTION
   - [x] DROP TABLE/COLLECTION
   - [x] LIST TABLES/COLLECTIONS
-- Items:
-  - [ ] Azure CosmosDB SQL to INSERT/UPDATE/SELECT/DELETE items.
+- Items/Documents:
+  - [x] INSERT query
+  - [ ] SELECT query
+  - [ ] UPDATE query
+  - [ ] DELETE query

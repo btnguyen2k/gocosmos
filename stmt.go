@@ -30,6 +30,7 @@ var (
 	reListColls  = regexp.MustCompile(`(?i)^LIST\s+(COLLECTIONS?|TABLES?)\s+FROM\s+` + field + `$`)
 
 	reInsert = regexp.MustCompile(`(?i)^INSERT\s+INTO\s+` + field + `\.` + field + `\s*\(([^)]*?)\)\s*VALUES\s*\(([^)]*?)\)$`)
+	// reInsert = regexp.MustCompile(`(?i)^INSERT\s+INTO\s+` + field + `\.` + field + `\s*\(([^)]*?)\)\s*VALUES\s*\(([^)]*?)\)$`)
 )
 
 func parseQuery(c *Conn, query string) (driver.Stmt, error) {
