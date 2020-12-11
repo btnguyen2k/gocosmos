@@ -215,6 +215,9 @@ type StmtDelete struct {
 }
 
 func (s *StmtDelete) parse() error {
+	if strings.HasPrefix(s.id, `"`) && strings.HasSuffix(s.id, `"`) {
+		s.id = strings.TrimSpace(s.id[1 : len(s.id)-1])
+	}
 	return nil
 }
 
