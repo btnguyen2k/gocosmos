@@ -112,9 +112,11 @@ func Test_Exec_CreateDatabase(t *testing.T) {
 	db := _openDb(t, name)
 
 	db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	db.Exec("DROP DATABASE IF EXISTS dbtemp1")
 
+	// first creation should be successful
 	result, err := db.Exec("CREATE DATABASE dbtemp WITH ru=400")
-	if err != nil && err != ErrConflict {
+	if err != nil {
 		t.Fatalf("%s failed: %s", name, err)
 	}
 	if id, err := result.LastInsertId(); id != 0 && err == nil {
@@ -124,7 +126,25 @@ func Test_Exec_CreateDatabase(t *testing.T) {
 		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
 	}
 
-	_, err = db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp WITH maxru=4000")
+	// second creation should return ErrConflict
+	_, err = db.Exec("CREATE DATABASE dbtemp WITH ru=400")
+	if err != ErrConflict {
+		t.Fatalf("%s failed: expected ErrConflict but received %#v", name, err)
+	}
+
+	// third creation should be successful with "IF NOT EXISTS"
+	result, err = db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp WITH maxru=4000")
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+	if id, err := result.LastInsertId(); id != 0 && err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	}
+	if numRows, err := result.RowsAffected(); numRows != 0 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=0/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+
+	result, err = db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp1 WITH maxru=4000")
 	if err != nil {
 		t.Fatalf("%s failed: %s", name, err)
 	}
@@ -151,11 +171,19 @@ func Test_Exec_DropDatabase(t *testing.T) {
 
 	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
 
+	// first drop should be succesful
 	_, err := db.Exec("DROP DATABASE dbtemp")
-	if err != nil && err != ErrNotFound {
+	if err != nil {
 		t.Fatalf("%s failed: %s", name, err)
 	}
 
+	// second drop should return ErrNotFound
+	_, err = db.Exec("DROP DATABASE dbtemp")
+	if err != ErrNotFound {
+		t.Fatalf("%s failed: expected ErrNotFound but received %#v", name, err)
+	}
+
+	// third drop should be successful with "IF EXISTS"
 	_, err = db.Exec("DROP DATABASE IF EXISTS dbtemp")
 	if err != nil {
 		t.Fatalf("%s failed: %s", name, err)
@@ -238,8 +266,9 @@ func Test_Exec_CreateCollection(t *testing.T) {
 	db.Exec("DROP DATABASE IF EXISTS dbtemp")
 	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
 
+	// first creation should be successful
 	result, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/id WITH ru=400")
-	if err != nil && err != ErrConflict {
+	if err != nil {
 		t.Fatalf("%s failed: %s", name, err)
 	}
 	if id, err := result.LastInsertId(); id != 0 && err == nil {
@@ -249,7 +278,25 @@ func Test_Exec_CreateCollection(t *testing.T) {
 		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
 	}
 
-	_, err = db.Exec("CREATE TABLE IF NOT EXISTS dbtemp.tbltemp1 WITH largepk=/a/b/c WITH maxru=4000 WITH uk=/a;/b,/c/d")
+	// second creation should return ErrConflict
+	_, err = db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/id WITH ru=400")
+	if err != ErrConflict {
+		t.Fatalf("%s failed: expected ErrConflict but received %#v", name, err)
+	}
+
+	// third creation should be successful with "IF NOT EXISTS"
+	result, err = db.Exec("CREATE TABLE IF NOT EXISTS dbtemp.tbltemp WITH largepk=/a/b/c WITH maxru=4000 WITH uk=/a;/b,/c/d")
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+	if id, err := result.LastInsertId(); id != 0 && err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	}
+	if numRows, err := result.RowsAffected(); numRows != 0 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=0/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+
+	result, err = db.Exec("CREATE TABLE IF NOT EXISTS dbtemp.tbltemp1 WITH largepk=/a/b/c WITH maxru=4000 WITH uk=/a;/b,/c/d")
 	if err != nil {
 		t.Fatalf("%s failed: %s", name, err)
 	}
@@ -276,11 +323,19 @@ func Test_Exec_DropCollection(t *testing.T) {
 
 	db.Exec("CREATE COLLECTION IF NOT EXISTS dbtemp.tbltemp WITH pk=/id")
 
+	// first drop should be successful
 	_, err := db.Exec("DROP COLLECTION dbtemp.tbltemp")
-	if err != nil && err != ErrNotFound {
+	if err != nil {
 		t.Fatalf("%s failed: %s", name, err)
 	}
 
+	// second drop should return ErrNotFound
+	_, err = db.Exec("DROP COLLECTION dbtemp.tbltemp")
+	if err != ErrNotFound {
+		t.Fatalf("%s failed: expected ErrNotFound but received %#v", name, err)
+	}
+
+	// third drop should be successful with "IF EXISTS"
 	_, err = db.Exec("DROP TABLE IF EXISTS dbtemp.tbltemp")
 	if err != nil {
 		t.Fatalf("%s failed: %s", name, err)
@@ -343,5 +398,46 @@ func Test_Query_ListCollections(t *testing.T) {
 	}
 	if !ok3 {
 		t.Fatalf("%s failed: collection %s not found", name, "dbtemp.tbltemp2")
+	}
+
+	_, err = db.Query("LIST COLLECTIONS FROM db_not_found")
+	if err != ErrNotFound {
+		t.Fatalf("%s failed: expected ErrNotFound but received %#v", name, err)
+	}
+}
+
+func Test_Query_Insert(t *testing.T) {
+	name := "Test_Query_Insert"
+	db := _openDb(t, name)
+	_, err := db.Query("INSERT INTO db.table (a,b,c) VALUES (1,2,3)", nil)
+	if err == nil || strings.Index(err.Error(), "not supported") < 0 {
+		t.Fatalf("%s failed: expected 'not support' error, but received %#v", name, err)
+	}
+}
+
+func Test_Exec_Insert(t *testing.T) {
+	name := "Test_Exec_Insert"
+	db := _openDb(t, name)
+
+	db.Exec("DROP DATABASE dbtemp")
+	db.Exec("CREATE DATABASE dbtemp")
+	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
+
+	if dbResult, err := db.Exec(`INSERT INTO dbtemp.tbltemp (id, username, email, grade, actived) VALUES ("\"1\"", "\"user\"", "\"user@domain1.com\"", 7, true)`, "user"); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	} else if numRows, err := dbResult.RowsAffected(); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	} else if numRows != 1 {
+		t.Fatalf("%s failed: expected numRows is %#v but received %#v", name, 1, numRows)
+	}
+
+	if _, err := db.Exec(`INSERT INTO dbtemp.tbltemp (id,username,email,grade,actived) VALUES ("\"1\"", "\"user\"", "\"user@domain2.com\"", 8, false)`, "user"); err != ErrConflict {
+		// duplicated id
+		t.Fatalf("%s failed: expected ErrConflict but received %#v", name, err)
+	}
+
+	if _, err := db.Exec(`INSERT INTO dbtemp.tbltemp (id,username,email,grade,actived) VALUES ("\"2\"", "\"user\"", "\"user@domain1.com\"", 9, false)`, "user"); err != ErrConflict {
+		// duplicated unique index
+		t.Fatalf("%s failed: expected ErrConflict but received %#v", name, err)
 	}
 }

@@ -23,7 +23,7 @@ func TestStmt_NumInput(t *testing.T) {
 		"DROP COLLECTION IF EXISTS db.tbltemp":                   0,
 
 		// "SELECT * FROM tbltemp WHERE id=@1 AND email=$2 OR username=:3": 3,
-		"INSERT INTO db.tbltemp (id, name, email) VALUES ($1, :2, @3)": 3,
+		"INSERT INTO db.tbltemp (id, name, email) VALUES ($1, :2, @3)": 4,
 		// "DELETE FROM tbltemp WHERE id=$1 OR (email=:2 AND username=@3)":                               3,
 	}
 
@@ -272,6 +272,21 @@ func Test_parseQuery_Insert(t *testing.T) {
 			t.Fatalf("%s failed: <fields> expected %#v but received %#v", name+"/"+query, data.fields, dbstmt.fields)
 		} else if !reflect.DeepEqual(dbstmt.values, data.values) {
 			t.Fatalf("%s failed: <values> expected %#v but received %#v", name+"/"+query, data.values, dbstmt.values)
+		}
+	}
+
+	invalidQueries := []string{
+		`INSERT INTO db (a,b,c) VALUES (1,2,3)`,           // no collection name
+		`INSERT INTO db.table (a,b,c)`,                    // no VALUES part
+		`INSERT INTO db.table VALUES (1,2,3)`,             // no column list
+		`INSERT INTO db.table (a) VALUES ('a string')`,    // invalid string literature
+		`INSERT INTO db.table (a) VALUES ("a string")`,    // should be "\"a string\""
+		`INSERT INTO db.table (a) VALUES ("{key:value}")`, // should be "{\"key\:\"value\"}"
+		`INSERT INTO db.table (a,b) VALUES (1,2,3)`,       // number of field and value mismatch
+	}
+	for _, query := range invalidQueries {
+		if _, err := parseQuery(nil, query); err == nil {
+			t.Fatalf("%s failed: query must not be parsed/validated successfuly", name+"/"+query)
 		}
 	}
 }

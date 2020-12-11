@@ -50,18 +50,17 @@ func (s *StmtCreateDatabase) validateWithOpts() error {
 	if s.ru > 0 && s.maxru > 0 {
 		return errors.New("only one of RU or MAXRU must be specified")
 	}
-	// if s.dbName == "" {
-	// 	return errors.New("database name is missing")
-	// }
 	return nil
 }
 
 // Query implements driver.Stmt.Query.
+// This function is not implemented, use Exec instead.
 func (s *StmtCreateDatabase) Query(_ []driver.Value) (driver.Rows, error) {
 	return nil, errors.New("this operation is not supported, please use exec")
 }
 
 // Exec implements driver.Stmt.Exec.
+// Upon successful call, this function return (*ResultCreateDatabase, nil)
 func (s *StmtCreateDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 	method := "POST"
 	url := s.conn.endpoint + "/dbs"
@@ -75,17 +74,21 @@ func (s *StmtCreateDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 	}
 
 	resp := s.conn.client.Do(req)
-	err := s.buildError(resp)
-	result := &ResultCreateDatabase{Successful: err == nil}
-	if resp.Error() == nil {
-		result.StatusCode = resp.StatusCode()
-	}
+	err, statusCode := s.buildError(resp)
+	result := &ResultCreateDatabase{Successful: err == nil, StatusCode: statusCode}
 	if err == nil {
 		rid, _ := resp.GetValueAsType("_rid", reddo.TypeString)
 		result.InsertId = rid.(string)
 	}
-	if err != nil && resp.Error() == nil && resp.StatusCode() == 409 && s.ifNotExists {
-		err = nil
+	switch statusCode {
+	case 403:
+		err = ErrForbidden
+	case 409:
+		if s.ifNotExists {
+			err = nil
+		} else {
+			err = ErrConflict
+		}
 	}
 	return result, err
 }
@@ -126,19 +129,14 @@ type StmtDropDatabase struct {
 	ifExists bool
 }
 
-// func (s *StmtDropDatabase) validateWithOpts() error {
-// 	if s.dbName == "" {
-// 		return errors.New("database name is missing")
-// 	}
-// 	return nil
-// }
-
 // Query implements driver.Stmt.Query.
+// This function is not implemented, use Exec instead.
 func (s *StmtDropDatabase) Query(_ []driver.Value) (driver.Rows, error) {
 	return nil, errors.New("this operation is not supported, please use exec")
 }
 
 // Exec implements driver.Stmt.Exec.
+// This function always return a nil driver.Result.
 func (s *StmtDropDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 	method := "DELETE"
 	url := s.conn.endpoint + "/dbs/" + s.dbName
@@ -146,9 +144,16 @@ func (s *StmtDropDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 	req = s.conn.addAuthHeader(req, method, "dbs", "dbs/"+s.dbName)
 
 	resp := s.conn.client.Do(req)
-	err := s.buildError(resp)
-	if err != nil && resp.Error() == nil && resp.StatusCode() == 404 && s.ifExists {
-		err = nil
+	err, statusCode := s.buildError(resp)
+	switch statusCode {
+	case 403:
+		err = ErrForbidden
+	case 404:
+		if s.ifExists {
+			err = nil
+		} else {
+			err = ErrNotFound
+		}
 	}
 	return nil, err
 }
@@ -163,6 +168,7 @@ type StmtListDatabases struct {
 }
 
 // Exec implements driver.Stmt.Exec.
+// This function is not implemented, use Query instead.
 func (s *StmtListDatabases) Exec(_ []driver.Value) (driver.Result, error) {
 	return nil, errors.New("this operation is not supported, please use query")
 }
@@ -175,7 +181,7 @@ func (s *StmtListDatabases) Query(_ []driver.Value) (driver.Rows, error) {
 	req = s.conn.addAuthHeader(req, method, "dbs", "")
 
 	resp := s.conn.client.Do(req)
-	err := s.buildError(resp)
+	err, statusCode := s.buildError(resp)
 	var rows driver.Rows
 	if err == nil {
 		body, _ := resp.Body()
@@ -186,6 +192,12 @@ func (s *StmtListDatabases) Query(_ []driver.Value) (driver.Rows, error) {
 			return listDbResult.Databases[i].Id < listDbResult.Databases[j].Id
 		})
 		rows = &RowsListDatabases{result: listDbResult, cursorCount: 0}
+	}
+	switch statusCode {
+	case 403:
+		err = ErrForbidden
+	case 404:
+		err = ErrNotFound
 	}
 	return rows, err
 }

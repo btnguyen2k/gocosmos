@@ -4,9 +4,12 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/btnguyen2k/consu/reddo"
 )
 
 var (
@@ -51,7 +54,7 @@ type StmtInsert struct {
 func (s *StmtInsert) parse() error {
 	s.fields = regexp.MustCompile(`[,\s]+`).Split(s.fieldsStr, -1)
 	s.values = make([]interface{}, 0)
-	s.numInput = 0
+	s.numInput = 1
 	for temp := strings.TrimSpace(s.valuesStr); temp != ""; temp = strings.TrimSpace(temp) {
 		if loc := reValPlaceholder.FindStringIndex(temp); loc != nil && loc[0] == 0 {
 			token := strings.Trim(temp[loc[0]+1:loc[1]], " ,")
@@ -106,15 +109,79 @@ func (s *StmtInsert) parse() error {
 }
 
 func (s *StmtInsert) validate() error {
+	if len(s.fields) != len(s.values) {
+		return fmt.Errorf("number of field (%d) does not match number of input value (%d)", len(s.fields), len(s.values))
+	}
 	return nil
 }
 
 // Exec implements driver.Stmt.Exec.
+// Upon successful call, this function returns (*ResultInsert, nil).
 func (s *StmtInsert) Exec(args []driver.Value) (driver.Result, error) {
-	panic("implement me")
+	method := "POST"
+	url := s.conn.endpoint + "/dbs/" + s.dbName + "/colls/" + s.collName + "/docs"
+	params := make(map[string]interface{})
+	for i := 0; i < len(s.fields); i++ {
+		params[s.fields[i]] = s.values[i]
+	}
+	req := s.conn.buildJsonRequest(method, url, params)
+	req = s.conn.addAuthHeader(req, method, "docs", "dbs/"+s.dbName+"/colls/"+s.collName)
+	pkHeader := []interface{}{args[s.numInput-1]} // expect the last argument is partition key value
+	jsPkHeader, _ := json.Marshal(pkHeader)
+	req.Header.Set("x-ms-documentdb-partitionkey", string(jsPkHeader))
+
+	resp := s.conn.client.Do(req)
+	err, statusCode := s.buildError(resp)
+	result := &ResultInsert{Successful: err == nil, StatusCode: statusCode}
+	if err == nil {
+		result.RUCharge, _ = strconv.ParseFloat(resp.HttpResponse().Header.Get("x-ms-request-charge"), 64)
+		result.SessionToken = resp.HttpResponse().Header.Get("x-ms-session-token")
+		rid, _ := resp.GetValueAsType("_rid", reddo.TypeString)
+		result.InsertId = rid.(string)
+	}
+	switch statusCode {
+	case 403:
+		err = ErrForbidden
+	case 404:
+		err = ErrNotFound
+	case 409:
+		err = ErrConflict
+	}
+	return result, err
 }
 
 // Query implements driver.Stmt.Query.
+// This function is not implemented, use Exec instead.
 func (s *StmtInsert) Query(args []driver.Value) (driver.Rows, error) {
-	panic("implement me")
+	return nil, errors.New("this operation is not supported, please use exec")
 }
+
+// ResultInsert captures the result from INSERT operation.
+type ResultInsert struct {
+	// Successful flags if the operation was successful or not.
+	Successful bool
+	// StatusCode is the HTTP status code returned from CosmosDB.
+	StatusCode int
+	// InsertId holds the "_rid" if the operation was successful.
+	InsertId string
+	// RUCharge holds the number of request units consumed by the operation.
+	RUCharge float64
+	// SessionToken is the string token used with session level consistency.
+	// Clients must save this value and set it for subsequent read requests for session consistency.
+	SessionToken string
+}
+
+// LastInsertId implements driver.Result.LastInsertId.
+func (r *ResultInsert) LastInsertId() (int64, error) {
+	return 0, errors.New("this operation is not supported, please read _rid value from field InsertId")
+}
+
+// LastInsertId implements driver.Result.RowsAffected.
+func (r *ResultInsert) RowsAffected() (int64, error) {
+	if r.Successful {
+		return 1, nil
+	}
+	return 0, nil
+}
+
+/*----------------------------------------------------------------------*/

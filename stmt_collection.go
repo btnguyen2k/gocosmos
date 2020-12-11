@@ -86,21 +86,17 @@ func (s *StmtCreateCollection) validateWithOpts() error {
 	if s.ru > 0 && s.maxru > 0 {
 		return errors.New("only one of RU or MAXRU must be specified")
 	}
-	// if s.dbName == "" {
-	// 	return errors.New("database name is missing")
-	// }
-	// if s.collName == "" {
-	// 	return errors.New("collection name is missing")
-	// }
 	return nil
 }
 
 // Query implements driver.Stmt.Query.
+// This function is not implemented, use Exec instead.
 func (s *StmtCreateCollection) Query(_ []driver.Value) (driver.Rows, error) {
 	return nil, errors.New("this operation is not supported, please use exec")
 }
 
 // Exec implements driver.Stmt.Exec.
+// Upon successful call, this function returns (*ResultCreateCollection, nil).
 func (s *StmtCreateCollection) Exec(_ []driver.Value) (driver.Result, error) {
 	method := "POST"
 	url := s.conn.endpoint + "/dbs/" + s.dbName + "/colls"
@@ -129,14 +125,23 @@ func (s *StmtCreateCollection) Exec(_ []driver.Value) (driver.Result, error) {
 	}
 
 	resp := s.conn.client.Do(req)
-	err := s.buildError(resp)
-	result := &ResultCreateCollection{Successful: err == nil, StatusCode: resp.StatusCode()}
+	err, statusCode := s.buildError(resp)
+	result := &ResultCreateCollection{Successful: err == nil, StatusCode: statusCode}
 	if err == nil {
 		rid, _ := resp.GetValueAsType("_rid", reddo.TypeString)
 		result.InsertId = rid.(string)
 	}
-	if err != nil && resp.StatusCode() == 409 && s.ifNotExists {
-		err = nil
+	switch statusCode {
+	case 403:
+		err = ErrForbidden
+	case 404:
+		err = ErrNotFound
+	case 409:
+		if s.ifNotExists {
+			err = nil
+		} else {
+			err = ErrConflict
+		}
 	}
 	return result, err
 }
@@ -179,11 +184,13 @@ type StmtDropCollection struct {
 }
 
 // Query implements driver.Stmt.Query.
+// This function is not implemented, use Exec instead.
 func (s *StmtDropCollection) Query(_ []driver.Value) (driver.Rows, error) {
 	return nil, errors.New("this operation is not supported, please use exec")
 }
 
 // Exec implements driver.Stmt.Exec.
+// This function always return a nil driver.Result.
 func (s *StmtDropCollection) Exec(_ []driver.Value) (driver.Result, error) {
 	method := "DELETE"
 	url := s.conn.endpoint + "/dbs/" + s.dbName + "/colls/" + s.collName
@@ -191,9 +198,16 @@ func (s *StmtDropCollection) Exec(_ []driver.Value) (driver.Result, error) {
 	req = s.conn.addAuthHeader(req, method, "colls", "dbs/"+s.dbName+"/colls/"+s.collName)
 
 	resp := s.conn.client.Do(req)
-	err := s.buildError(resp)
-	if err != nil && resp.StatusCode() == 404 && s.ifExists {
-		err = nil
+	err, statusCode := s.buildError(resp)
+	switch statusCode {
+	case 403:
+		err = ErrForbidden
+	case 404:
+		if s.ifExists {
+			err = nil
+		} else {
+			err = ErrNotFound
+		}
 	}
 	return nil, err
 }
@@ -217,6 +231,7 @@ type StmtListCollections struct {
 // }
 
 // Exec implements driver.Stmt.Exec.
+// This function is not implemented, use Query instead.
 func (s *StmtListCollections) Exec(_ []driver.Value) (driver.Result, error) {
 	return nil, errors.New("this operation is not supported, please use query")
 }
@@ -229,7 +244,7 @@ func (s *StmtListCollections) Query(_ []driver.Value) (driver.Rows, error) {
 	req = s.conn.addAuthHeader(req, method, "colls", "dbs/"+s.dbName)
 
 	resp := s.conn.client.Do(req)
-	err := s.buildError(resp)
+	err, statusCode := s.buildError(resp)
 	var rows driver.Rows
 	if err == nil {
 		body, _ := resp.Body()
@@ -240,6 +255,12 @@ func (s *StmtListCollections) Query(_ []driver.Value) (driver.Rows, error) {
 			return listCollectionResult.DocumentCollections[i].Id < listCollectionResult.DocumentCollections[j].Id
 		})
 		rows = &RowsListCollections{result: listCollectionResult, cursorCount: 0}
+	}
+	switch statusCode {
+	case 403:
+		err = ErrForbidden
+	case 404:
+		err = ErrNotFound
 	}
 	return rows, err
 }

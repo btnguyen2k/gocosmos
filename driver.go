@@ -17,11 +17,14 @@ func init() {
 }
 
 var (
-	// ErrConflict is returned when the executing operation cause conflict (e.g. duplicated ID).
-	ErrConflict = errors.New("StatusCode=409 Conflict")
+	// ErrForbidden is returned when the operation is not allowed on the target resource.
+	ErrForbidden = errors.New("StatusCode=403 Forbidden")
 
 	// ErrNotFound is returned when target resource can not be found.
-	ErrNotFound = errors.New("StatusCode=404 NOt Found")
+	ErrNotFound = errors.New("StatusCode=404 Not Found")
+
+	// ErrConflict is returned when the executing operation cause conflict (e.g. duplicated id).
+	ErrConflict = errors.New("StatusCode=409 Conflict")
 )
 
 // Driver is Azure CosmosDB driver for database/sql.

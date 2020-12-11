@@ -170,13 +170,14 @@ func (s *Stmt) NumInput() int {
 // 	panic("[Query] implement me")
 // }
 
-func (s *Stmt) buildError(resp *gjrc.GjrcResponse) error {
+func (s *Stmt) buildError(resp *gjrc.GjrcResponse) (error, int) {
 	if resp.Error() != nil {
-		return resp.Error()
+		return resp.Error(), 0
 	}
-	if resp.StatusCode() >= 400 {
+	statusCode := resp.StatusCode()
+	if statusCode >= 400 {
 		body, _ := resp.Body()
-		return fmt.Errorf("error executing Azure CosmosDB command; StatusCode=%d;Body=%s", resp.StatusCode(), body)
+		return fmt.Errorf("error executing Azure CosmosDB command; StatusCode=%d;Body=%s", resp.StatusCode(), body), statusCode
 	}
-	return nil
+	return nil, statusCode
 }
