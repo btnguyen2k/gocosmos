@@ -17,10 +17,6 @@ const (
 )
 
 var (
-	// reA = regexp.MustCompile(`@\d+`)
-	// reC = regexp.MustCompile(`:\d+`)
-	// reD = regexp.MustCompile(`\$\d+`)
-
 	reCreateDb = regexp.MustCompile(`(?i)^CREATE\s+DATABASE` + ifNotExists + `\s+` + field + with + `$`)
 	reDropDb   = regexp.MustCompile(`(?i)^DROP\s+DATABASE` + ifExists + `\s+` + field + `$`)
 	reListDbs  = regexp.MustCompile(`(?i)^LIST\s+DATABASES?$`)
@@ -30,7 +26,7 @@ var (
 	reListColls  = regexp.MustCompile(`(?i)^LIST\s+(COLLECTIONS?|TABLES?)\s+FROM\s+` + field + `$`)
 
 	reInsert = regexp.MustCompile(`(?i)^INSERT\s+INTO\s+` + field + `\.` + field + `\s*\(([^)]*?)\)\s*VALUES\s*\(([^)]*?)\)$`)
-	// reInsert = regexp.MustCompile(`(?i)^INSERT\s+INTO\s+` + field + `\.` + field + `\s*\(([^)]*?)\)\s*VALUES\s*\(([^)]*?)\)$`)
+	reDelete = regexp.MustCompile(`(?i)^DELETE\s+FROM\s+` + field + `\.` + field + `\s*WHERE\s+id\s*=\s*(.*)?$`)
 )
 
 func parseQuery(c *Conn, query string) (driver.Stmt, error) {
@@ -95,11 +91,6 @@ func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 		return stmt, stmt.validateWithOpts()
 	}
 
-	// numInput := 0
-	// for _, regExp := range []*regexp.Regexp{reA, reC, reD} {
-	// 	numInput += len(regExp.FindAllString(query, -1))
-	// }
-
 	if re := reInsert; re.MatchString(query) {
 		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtInsert{
@@ -114,15 +105,21 @@ func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 		}
 		return stmt, stmt.validate()
 	}
+	if re := reDelete; re.MatchString(query) {
+		groups := re.FindAllStringSubmatch(query, -1)
+		stmt := &StmtDelete{
+			Stmt:     &Stmt{query: query, conn: c, numInput: 0},
+			dbName:   strings.TrimSpace(groups[0][1]),
+			collName: strings.TrimSpace(groups[0][2]),
+			id:       strings.TrimSpace(groups[0][3]),
+		}
+		if err := stmt.parse(); err != nil {
+			return nil, err
+		}
+		return stmt, stmt.validate()
+	}
 
 	return nil, fmt.Errorf("invalid query: %s", query)
-
-	// stmt := &Stmt{
-	// 	query:    query,
-	// 	conn:     c,
-	// 	numInput: numInput,
-	// }
-	// return stmt, nil
 }
 
 // Stmt is Azure CosmosDB prepared statement handle.
