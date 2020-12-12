@@ -264,6 +264,8 @@ func Test_parseQuery_Insert(t *testing.T) {
 			t.Fatalf("%s failed: %s", name+"/"+query, err)
 		} else if dbstmt, ok := stmt.(*StmtInsert); !ok {
 			t.Fatalf("%s failed: the parsed stmt must be of type *StmtInsert", name+"/"+query)
+		} else if dbstmt.isUpsert {
+			t.Fatalf("%s failed: is-upsert must be disabled", name+"/"+query)
 		} else if dbstmt.dbName != data.dbName {
 			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
 		} else if dbstmt.collName != data.collName {
@@ -283,6 +285,60 @@ func Test_parseQuery_Insert(t *testing.T) {
 		`INSERT INTO db.table (a) VALUES ("a string")`,    // should be "\"a string\""
 		`INSERT INTO db.table (a) VALUES ("{key:value}")`, // should be "{\"key\:\"value\"}"
 		`INSERT INTO db.table (a,b) VALUES (1,2,3)`,       // number of field and value mismatch
+	}
+	for _, query := range invalidQueries {
+		if _, err := parseQuery(nil, query); err == nil {
+			t.Fatalf("%s failed: query must not be parsed/validated successfuly", name+"/"+query)
+		}
+	}
+}
+
+func Test_parseQuery_Upsert(t *testing.T) {
+	name := "Test_parseQuery_Upsert"
+	type testStruct struct {
+		dbName   string
+		collName string
+		fields   []string
+		values   []interface{}
+	}
+	testData := map[string]testStruct{
+		`UPSERT INTO db1.table1 (a, b, c, d, e, f) VALUES (null, 1.0, true, "\"a string 'with' \\\"quote\\\"\"", "{\"key\":\"value\"}", "[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]")`: {
+			dbName: "db1", collName: "table1", fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{
+				nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`},
+			},
+		},
+		`UPSERT INTO db-2.table_2 (a,b,c) VALUES ($1, :3, @2)`: {
+			dbName: "db-2", collName: "table_2", fields: []string{"a", "b", "c"}, values: []interface{}{
+				placeholder{1}, placeholder{3}, placeholder{2},
+			},
+		},
+	}
+	for query, data := range testData {
+		if stmt, err := parseQuery(nil, query); err != nil {
+			t.Fatalf("%s failed: %s", name+"/"+query, err)
+		} else if dbstmt, ok := stmt.(*StmtInsert); !ok {
+			t.Fatalf("%s failed: the parsed stmt must be of type *StmtInsert", name+"/"+query)
+		} else if !dbstmt.isUpsert {
+			t.Fatalf("%s failed: is-upsert must be enabled", name+"/"+query)
+		} else if dbstmt.dbName != data.dbName {
+			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
+		} else if dbstmt.collName != data.collName {
+			t.Fatalf("%s failed: <collection-name> expected %#v but received %#v", name+"/"+query, data.collName, dbstmt.collName)
+		} else if !reflect.DeepEqual(dbstmt.fields, data.fields) {
+			t.Fatalf("%s failed: <fields> expected %#v but received %#v", name+"/"+query, data.fields, dbstmt.fields)
+		} else if !reflect.DeepEqual(dbstmt.values, data.values) {
+			t.Fatalf("%s failed: <values> expected %#v but received %#v", name+"/"+query, data.values, dbstmt.values)
+		}
+	}
+
+	invalidQueries := []string{
+		`UPSERT INTO db (a,b,c) VALUES (1,2,3)`,           // no collection name
+		`UPSERT INTO db.table (a,b,c)`,                    // no VALUES part
+		`UPSERT INTO db.table VALUES (1,2,3)`,             // no column list
+		`UPSERT INTO db.table (a) VALUES ('a string')`,    // invalid string literature
+		`UPSERT INTO db.table (a) VALUES ("a string")`,    // should be "\"a string\""
+		`UPSERT INTO db.table (a) VALUES ("{key:value}")`, // should be "{\"key\:\"value\"}"
+		`UPSERT INTO db.table (a,b) VALUES (1,2,3)`,       // number of field and value mismatch
 	}
 	for _, query := range invalidQueries {
 		if _, err := parseQuery(nil, query); err == nil {

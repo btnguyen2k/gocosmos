@@ -25,8 +25,9 @@ var (
 	reDropColl   = regexp.MustCompile(`(?i)^DROP\s+(COLLECTION|TABLE)` + ifExists + `\s+` + field + `\.` + field + `$`)
 	reListColls  = regexp.MustCompile(`(?i)^LIST\s+(COLLECTIONS?|TABLES?)\s+FROM\s+` + field + `$`)
 
-	reInsert = regexp.MustCompile(`(?i)^INSERT\s+INTO\s+` + field + `\.` + field + `\s*\(([^)]*?)\)\s*VALUES\s*\(([^)]*?)\)$`)
-	reDelete = regexp.MustCompile(`(?i)^DELETE\s+FROM\s+` + field + `\.` + field + `\s*WHERE\s+id\s*=\s*(.*)?$`)
+	reInsert = regexp.MustCompile(`(?i)^(INSERT|UPSERT)\s+INTO\s+` + field + `\.` + field + `\s*\(([^)]*?)\)\s*VALUES\s*\(([^)]*?)\)$`)
+	// reUpdate = regexp.MustCompile(`(?i)^UPDATE\s+` + field + `\.` + field + `\s+SET\s+(.*)\s+WHERE\s+id\s*=\s*(.*)?$`)
+	reDelete = regexp.MustCompile(`(?i)^DELETE\s+FROM\s+` + field + `\.` + field + `\s+WHERE\s+id\s*=\s*(.*)?$`)
 )
 
 func parseQuery(c *Conn, query string) (driver.Stmt, error) {
@@ -95,16 +96,31 @@ func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtInsert{
 			Stmt:      &Stmt{query: query, conn: c, numInput: 0},
-			dbName:    strings.TrimSpace(groups[0][1]),
-			collName:  strings.TrimSpace(groups[0][2]),
-			fieldsStr: strings.TrimSpace(groups[0][3]),
-			valuesStr: strings.TrimSpace(groups[0][4]),
+			isUpsert:  strings.ToUpper(strings.TrimSpace(groups[0][1])) == "UPSERT",
+			dbName:    strings.TrimSpace(groups[0][2]),
+			collName:  strings.TrimSpace(groups[0][3]),
+			fieldsStr: strings.TrimSpace(groups[0][4]),
+			valuesStr: strings.TrimSpace(groups[0][5]),
 		}
 		if err := stmt.parse(); err != nil {
 			return nil, err
 		}
 		return stmt, stmt.validate()
 	}
+	// if re := reUpdate; re.MatchString(query) {
+	// 	groups := re.FindAllStringSubmatch(query, -1)
+	// 	stmt := &StmtUpdate{
+	// 		Stmt:      &Stmt{query: query, conn: c, numInput: 0},
+	// 		dbName:    strings.TrimSpace(groups[0][1]),
+	// 		collName:  strings.TrimSpace(groups[0][2]),
+	// 		updateStr: strings.TrimSpace(groups[0][3]),
+	// 		idStr:     strings.TrimSpace(groups[0][4]),
+	// 	}
+	// 	if err := stmt.parse(); err != nil {
+	// 		return nil, err
+	// 	}
+	// 	return stmt, stmt.validate()
+	// }
 	if re := reDelete; re.MatchString(query) {
 		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtDelete{
@@ -118,6 +134,31 @@ func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 		}
 		return stmt, stmt.validate()
 	}
+
+	// if strings.ToUpper(query) == "QND" {
+	// 	method := "PUT"
+	// 	url := c.endpoint + "/dbs/dbtemp/colls/tbltemp/docs/1"
+	// 	params := map[string]interface{}{
+	// 		"id":       "1",
+	// 		"username": "user",
+	// 		// "email":    "user@domain1.com",
+	// 		"val_int":  1,
+	// 		"val_bool": true,
+	// 		"val_str":  "a string",
+	// 	}
+	// 	req := c.buildJsonRequest(method, url, params)
+	// 	req = c.addAuthHeader(req, method, "docs", "dbs/dbtemp/colls/tbltemp/docs/1")
+	// 	pkHeader := []interface{}{"user"}
+	// 	jsPkHeader, _ := json.Marshal(pkHeader)
+	// 	req.Header.Set("x-ms-documentdb-partitionkey", string(jsPkHeader))
+	// 	resp := c.client.Do(req)
+	// 	fmt.Println(resp.Error())
+	// 	if resp.Error() == nil {
+	// 		fmt.Println(resp.StatusCode())
+	// 		body, _ := resp.Body()
+	// 		fmt.Println(string(body))
+	// 	}
+	// }
 
 	return nil, fmt.Errorf("invalid query: %s", query)
 }

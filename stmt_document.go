@@ -26,7 +26,7 @@ type placeholder struct {
 
 // StmtInsert implements "INSERT" operation.
 //
-// Syntax: INSERT INTO <db-name>.<collection-name> (<field-list>) VALUES (<value-list>)
+// Syntax: INSERT|UPSERT INTO <db-name>.<collection-name> (<field-list>) VALUES (<value-list>)
 //
 // - values are comma separated.
 // - a value is either:
@@ -41,10 +41,14 @@ type placeholder struct {
 //     - a null value in JSON (include the double quotes): "null"
 //     - a map value in JSON (include the double quotes): "{\"key\":\"value\"}"
 //     - a list value in JSON (include the double quotes): "[1,true,nil,\"string\"]"
+//
+// CosmosDB automatically creates a few extra fields for the insert document.
+// See https://docs.microsoft.com/en-us/azure/cosmos-db/account-databases-containers-items#properties-of-an-item
 type StmtInsert struct {
 	*Stmt
 	dbName    string
 	collName  string
+	isUpsert  bool
 	fieldsStr string
 	valuesStr string
 	fields    []string
@@ -135,9 +139,11 @@ func (s *StmtInsert) Exec(args []driver.Value) (driver.Result, error) {
 	}
 	req := s.conn.buildJsonRequest(method, url, params)
 	req = s.conn.addAuthHeader(req, method, "docs", "dbs/"+s.dbName+"/colls/"+s.collName)
-	pkHeader := []interface{}{args[s.numInput-1]} // expect the last argument is partition key value
-	jsPkHeader, _ := json.Marshal(pkHeader)
+	jsPkHeader, _ := json.Marshal([]interface{}{args[s.numInput-1]}) // expect the last argument is partition key value
 	req.Header.Set("x-ms-documentdb-partitionkey", string(jsPkHeader))
+	if s.isUpsert {
+		req.Header.Set("x-ms-documentdb-is-upsert", "true")
+	}
 
 	resp := s.conn.client.Do(req)
 	err, statusCode := s.buildError(resp)
@@ -197,7 +203,7 @@ func (r *ResultInsert) RowsAffected() (int64, error) {
 
 // StmtDelete implements "DELETE" operation.
 //
-// Syntax: DELETE <db-name>.<collection-name> WHERE id=<id-value>
+// Syntax: DELETE FROM <db-name>.<collection-name> WHERE id=<id-value>
 //
 // - currently DELETE only removes one document specified by id.
 // - <id-value> is treated as a string. Either `WHERE id=abc` or `WHERE id="abc"` is accepted.
@@ -312,3 +318,136 @@ func (r *ResultDelete) RowsAffected() (int64, error) {
 	}
 	return 0, nil
 }
+
+/*----------------------------------------------------------------------*/
+
+// // StmtUpdate implements "UPDATE" operation.
+// //
+// // Syntax: UPDATE <db-name>.<collection-name> SET <field-name>=<value>[,<field-name>=<value>]*, WHERE id=<id-value>
+// //
+// // - currently UPDATE only updates one document specified by id.
+// // - <id-value> is treated as a string. Either `WHERE id=abc` or `WHERE id="abc"` is accepted.
+// // - <value> is either:
+// //   - a placeholder (e.g. :1, @2 or $3)
+// //   - a null
+// //   - a number
+// //   - a boolean (true/false)
+// //   - a string (inside double quotes) that must be a valid JSON, e.g.
+// //     - a string value in JSON (include the double quotes): "\"a string\""
+// //     - a number value in JSON (include the double quotes): "123"
+// //     - a boolean value in JSON (include the double quotes): "true"
+// //     - a null value in JSON (include the double quotes): "null"
+// //     - a map value in JSON (include the double quotes): "{\"key\":\"value\"}"
+// //     - a list value in JSON (include the double quotes): "[1,true,nil,\"string\"]"
+// type StmtUpdate struct {
+// 	*Stmt
+// 	dbName    string
+// 	collName  string
+// 	updateStr string
+// 	idStr     string
+// 	id        interface{}
+// }
+//
+// func (s *StmtUpdate) parse() error {
+// 	s.numInput = 1
+// 	hasPrefix := strings.HasPrefix(s.idStr, `"`)
+// 	hasSuffix := strings.HasSuffix(s.idStr, `"`)
+// 	if hasPrefix != hasSuffix {
+// 		return fmt.Errorf("invalid id literate: %s", s.idStr)
+// 	}
+// 	if hasPrefix && hasSuffix {
+// 		s.idStr = strings.TrimSpace(s.idStr[1 : len(s.idStr)-1])
+// 	} else if loc := reValPlaceholder.FindStringIndex(s.idStr); loc != nil {
+// 		if loc[0] == 0 && loc[1] == len(s.idStr) {
+// 			index, err := strconv.Atoi(s.idStr[loc[0]+1:])
+// 			if err != nil || index < 1 {
+// 				return fmt.Errorf("invalid id placeholder literate: %s", s.idStr)
+// 			}
+// 			s.id = placeholder{index}
+// 			s.numInput++
+// 		} else {
+// 			return fmt.Errorf("invalid id literate: %s", s.idStr)
+// 		}
+// 	}
+// 	return nil
+// }
+//
+// func (s *StmtDelete) validate() error {
+// 	if s.idStr == "" {
+// 		return errors.New("id value is missing")
+// 	}
+// 	return nil
+// }
+//
+// // Exec implements driver.Stmt.Exec.
+// // This function always return nil driver.Result.
+// func (s *StmtDelete) Exec(args []driver.Value) (driver.Result, error) {
+// 	method := "DELETE"
+// 	id := s.idStr
+// 	if s.id != nil {
+// 		ph := s.id.(placeholder)
+// 		if ph.index <= 0 || ph.index >= len(args) {
+// 			return nil, fmt.Errorf("invalid value index %d", ph.index)
+// 		}
+// 		id = fmt.Sprintf("%s", args[ph.index-1])
+// 	}
+// 	url := s.conn.endpoint + "/dbs/" + s.dbName + "/colls/" + s.collName + "/docs/" + id
+// 	req := s.conn.buildJsonRequest(method, url, nil)
+// 	req = s.conn.addAuthHeader(req, method, "docs", "dbs/"+s.dbName+"/colls/"+s.collName+"/docs/"+id)
+// 	pkHeader := []interface{}{args[s.numInput-1]} // expect the last argument is partition key value
+// 	jsPkHeader, _ := json.Marshal(pkHeader)
+// 	req.Header.Set("x-ms-documentdb-partitionkey", string(jsPkHeader))
+//
+// 	resp := s.conn.client.Do(req)
+// 	err, statusCode := s.buildError(resp)
+// 	result := &ResultDelete{Successful: err == nil, StatusCode: statusCode}
+// 	if err == nil {
+// 		result.RUCharge, _ = strconv.ParseFloat(resp.HttpResponse().Header.Get("x-ms-request-charge"), 64)
+// 		result.SessionToken = resp.HttpResponse().Header.Get("x-ms-session-token")
+// 	}
+// 	switch statusCode {
+// 	case 403:
+// 		err = ErrForbidden
+// 	case 404:
+// 		// consider "document not found" as successful operation
+// 		// but database/collection not found is not!
+// 		if strings.Index(err.Error(), "ResourceType: Document") >= 0 {
+// 			err = nil
+// 		} else {
+// 			err = ErrNotFound
+// 		}
+// 	}
+// 	return result, err
+// }
+//
+// // Query implements driver.Stmt.Query.
+// // This function is not implemented, use Exec instead.
+// func (s *StmtDelete) Query(args []driver.Value) (driver.Rows, error) {
+// 	return nil, errors.New("this operation is not supported, please use exec")
+// }
+//
+// // ResultDelete captures the result from DELETE operation.
+// type ResultDelete struct {
+// 	// Successful flags if the operation was successful or not.
+// 	Successful bool
+// 	// StatusCode is the HTTP status code returned from CosmosDB.
+// 	StatusCode int
+// 	// RUCharge holds the number of request units consumed by the operation.
+// 	RUCharge float64
+// 	// SessionToken is the string token used with session level consistency.
+// 	// Clients must save this value and set it for subsequent read requests for session consistency.
+// 	SessionToken string
+// }
+//
+// // LastInsertId implements driver.Result.LastInsertId.
+// func (r *ResultDelete) LastInsertId() (int64, error) {
+// 	return 0, errors.New("this operation is not supported")
+// }
+//
+// // RowsAffected implements driver.Result.RowsAffected.
+// func (r *ResultDelete) RowsAffected() (int64, error) {
+// 	if r.Successful && r.StatusCode < 400 {
+// 		return 1, nil
+// 	}
+// 	return 0, nil
+// }

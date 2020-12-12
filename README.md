@@ -13,6 +13,7 @@ Features:
   - [x] LIST TABLES/COLLECTIONS
 - Items/Documents:
   - [x] INSERT query
+  - [x] UPSERT query
   - [ ] SELECT query
   - [ ] UPDATE query
   - [x] DELETE query
