@@ -22,10 +22,11 @@ var (
 
 // Conn is Azure CosmosDB connection handle.
 type Conn struct {
-	client   *gjrc.Gjrc
-	endpoint string            // Azure CosmosDB endpoint
-	authKey  []byte            // Account key to authenticate
-	params   map[string]string // other parameters
+	restClient *RestClient // Azure CosmosDB REST API client.
+	client     *gjrc.Gjrc
+	endpoint   string            // Azure CosmosDB endpoint
+	authKey    []byte            // Account key to authenticate
+	params     map[string]string // other parameters
 }
 
 func (c *Conn) buildJsonRequest(method, url string, params interface{}) *http.Request {

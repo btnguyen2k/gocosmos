@@ -2,14 +2,10 @@ package go_cosmos
 
 import (
 	"database/sql/driver"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"sort"
 	"strconv"
-
-	"github.com/btnguyen2k/consu/reddo"
 )
 
 // StmtCreateDatabase implements "CREATE DATABASE" operation.
@@ -62,25 +58,14 @@ func (s *StmtCreateDatabase) Query(_ []driver.Value) (driver.Rows, error) {
 // Exec implements driver.Stmt.Exec.
 // Upon successful call, this function return (*ResultCreateDatabase, nil)
 func (s *StmtCreateDatabase) Exec(_ []driver.Value) (driver.Result, error) {
-	method := "POST"
-	url := s.conn.endpoint + "/dbs"
-	req := s.conn.buildJsonRequest(method, url, map[string]interface{}{"id": s.dbName})
-	req = s.conn.addAuthHeader(req, method, "dbs", "")
-	if s.ru > 0 {
-		req.Header.Set("x-ms-offer-throughput", strconv.Itoa(s.ru))
+	restResult := s.conn.restClient.CreateDatabase(DatabaseSpec{Id: s.dbName, Ru: s.ru, MaxRu: s.maxru})
+	result := &ResultCreateDatabase{
+		Successful: restResult.Error() == nil,
+		StatusCode: restResult.StatusCode,
+		InsertId:   restResult.Rid,
 	}
-	if s.maxru > 0 {
-		req.Header.Set("x-ms-cosmos-offer-autopilot-settings", fmt.Sprintf(`{"maxThroughput":%d}`, s.maxru))
-	}
-
-	resp := s.conn.client.Do(req)
-	err, statusCode := s.buildError(resp)
-	result := &ResultCreateDatabase{Successful: err == nil, StatusCode: statusCode}
-	if err == nil {
-		rid, _ := resp.GetValueAsType("_rid", reddo.TypeString)
-		result.InsertId = rid.(string)
-	}
-	switch statusCode {
+	err := restResult.Error()
+	switch restResult.StatusCode {
 	case 403:
 		err = ErrForbidden
 	case 409:
@@ -138,14 +123,9 @@ func (s *StmtDropDatabase) Query(_ []driver.Value) (driver.Rows, error) {
 // Exec implements driver.Stmt.Exec.
 // This function always return a nil driver.Result.
 func (s *StmtDropDatabase) Exec(_ []driver.Value) (driver.Result, error) {
-	method := "DELETE"
-	url := s.conn.endpoint + "/dbs/" + s.dbName
-	req := s.conn.buildJsonRequest(method, url, nil)
-	req = s.conn.addAuthHeader(req, method, "dbs", "dbs/"+s.dbName)
-
-	resp := s.conn.client.Do(req)
-	err, statusCode := s.buildError(resp)
-	switch statusCode {
+	restResult := s.conn.restClient.DeleteDatabase(s.dbName)
+	err := restResult.Error()
+	switch restResult.StatusCode {
 	case 403:
 		err = ErrForbidden
 	case 404:
@@ -175,50 +155,27 @@ func (s *StmtListDatabases) Exec(_ []driver.Value) (driver.Result, error) {
 
 // Query implements driver.Stmt.Query.
 func (s *StmtListDatabases) Query(_ []driver.Value) (driver.Rows, error) {
-	method := "GET"
-	url := s.conn.endpoint + "/dbs"
-	req := s.conn.buildJsonRequest(method, url, nil)
-	req = s.conn.addAuthHeader(req, method, "dbs", "")
-
-	resp := s.conn.client.Do(req)
-	err, statusCode := s.buildError(resp)
+	restResult := s.conn.restClient.ListDatabases()
+	err := restResult.Error()
 	var rows driver.Rows
 	if err == nil {
-		body, _ := resp.Body()
-		var listDbResult listDbResult
-		err = json.Unmarshal(body, &listDbResult)
-		sort.Slice(listDbResult.Databases, func(i, j int) bool {
-			// sort databases by id
-			return listDbResult.Databases[i].Id < listDbResult.Databases[j].Id
-		})
-		rows = &RowsListDatabases{result: listDbResult, cursorCount: 0}
+		rows = &RowsListDatabases{
+			count:       int(restResult.Count),
+			databases:   restResult.Databases,
+			cursorCount: 0,
+		}
 	}
-	switch statusCode {
+	switch restResult.StatusCode {
 	case 403:
 		err = ErrForbidden
 	}
 	return rows, err
 }
 
-type dbInfo struct {
-	Id    string `json:"id"`
-	Rid   string `json:"_rid"`
-	Ts    int    `json:"_ts"`
-	Self  string `json:"_self"`
-	Etag  string `json:"_etag"`
-	Colls string `json:"_colls"`
-	Users string `json:"_users"`
-}
-
-type listDbResult struct {
-	Rid       string   `json:"_rid"`
-	Databases []dbInfo `json:"Databases"`
-	Count     int      `json:"_count"`
-}
-
 // RowsListDatabases captures the result from LIST DATABASES operation.
 type RowsListDatabases struct {
-	result      listDbResult
+	count       int
+	databases   []DbInfo
 	cursorCount int
 }
 
@@ -234,10 +191,10 @@ func (r *RowsListDatabases) Close() error {
 
 // Next implements driver.Rows.Next.
 func (r *RowsListDatabases) Next(dest []driver.Value) error {
-	if r.cursorCount >= len(r.result.Databases) {
+	if r.cursorCount >= len(r.databases) {
 		return io.EOF
 	}
-	rowData := r.result.Databases[r.cursorCount]
+	rowData := r.databases[r.cursorCount]
 	r.cursorCount++
 	dest[0] = rowData.Id
 	dest[1] = rowData.Rid
