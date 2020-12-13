@@ -109,6 +109,12 @@ func (c *RestClient) buildRestReponse(resp *gjrc.GjrcResponse) RestReponse {
 				result.RespHeader[k] = v[0]
 			}
 		}
+		if v, err := strconv.ParseFloat(result.RespHeader["x-ms-request-charge"], 64); err != nil {
+			result.RequestCharge = v
+		} else {
+			result.RequestCharge = -1
+		}
+		result.SessionToken = result.RespHeader["x-ms-session-token"]
 		if result.StatusCode >= 400 {
 			result.ApiErr = fmt.Errorf("error executing Azure CosmosDB command; StatusCode=%d;Body=%s", result.StatusCode, result.RespBody)
 		}
@@ -200,7 +206,7 @@ func (c *RestClient) ListDatabases() *RespListDb {
 	return result
 }
 
-// CollectionSpec specifies a CosmosDB database specifications for creation.
+// CollectionSpec specifies a CosmosDB collection specifications for creation.
 type CollectionSpec struct {
 	DbName, CollName string
 	Ru, MaxRu        int
@@ -331,6 +337,40 @@ func (c *RestClient) ListCollections(dbName string) *RespListColl {
 	return result
 }
 
+// DocumentSpec specifies a CosmosDB document specifications for creation.
+type DocumentSpec struct {
+	DbName, CollName   string
+	IsUpsert           bool
+	IndexingDirective  string // accepted value "", "Include" or "Exclude"
+	PartitionKeyValues []interface{}
+	DocumentData       map[string]interface{}
+}
+
+// CreateDocument invokes CosmosDB API to create a new document.
+//
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/create-a-document
+func (c *RestClient) CreateDocument(spec DocumentSpec) *RespCreateDoc {
+	method := "POST"
+	url := c.endpoint + "/dbs/" + spec.DbName + "/colls/" + spec.CollName + "/docs"
+	req := c.buildJsonRequest(method, url, spec.DocumentData)
+	req = c.addAuthHeader(req, method, "docs", "dbs/"+spec.DbName+"/colls/"+spec.CollName)
+	if spec.IsUpsert {
+		req.Header.Set("x-ms-documentdb-is-upsert", "true")
+	}
+	if spec.IndexingDirective != "" {
+		req.Header.Set("x-ms-indexing-directive", spec.IndexingDirective)
+	}
+	jsPkValues, _ := json.Marshal(spec.PartitionKeyValues)
+	req.Header.Set("x-ms-documentdb-partitionkey", string(jsPkValues))
+
+	resp := c.client.Do(req)
+	result := &RespCreateDoc{RestReponse: c.buildRestReponse(resp)}
+	if result.CallErr == nil {
+		result.CallErr = json.Unmarshal(result.RespBody, &(result.DocInfo))
+	}
+	return result
+}
+
 /*----------------------------------------------------------------------*/
 
 // RestReponse captures the response from REST API call.
@@ -345,6 +385,10 @@ type RestReponse struct {
 	RespBody []byte
 	// RespHeader captures the header response from the REST call.
 	RespHeader map[string]string
+	// RequestCharge is number of request units consumed by the operation
+	RequestCharge float64
+	// SessionToken is used with session level consistency. Clients must save this value and set it for subsequent read requests for session consistency.
+	SessionToken string
 }
 
 // Error returns CallErr if not nil, ApiErr otherwise.
@@ -436,4 +480,24 @@ type RespListColl struct {
 	RestReponse `json:"-"`
 	Count       int64      `json:"_count"` // number of collections returned from the list operation
 	Collections []CollInfo `json:"DocumentCollections"`
+}
+
+// DocInfo captures info of a CosmosDB document.
+type DocInfo map[string]interface{}
+
+// RespCreateDoc captures the response from CreateDocument call.
+type RespCreateDoc struct {
+	RestReponse
+	DocInfo
+}
+
+// RespGetDoc captures the response from GetDocument call.
+type RespGetDoc struct {
+	RestReponse
+	DocInfo
+}
+
+// RespDeleteDoc captures the response from DeleteDocument call.
+type RespDeleteDoc struct {
+	RestReponse
 }

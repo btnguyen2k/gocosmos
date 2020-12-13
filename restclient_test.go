@@ -336,3 +336,146 @@ func TestRestClient_ListCollection(t *testing.T) {
 }
 
 /*----------------------------------------------------------------------*/
+
+func TestRestClient_CreateDocument(t *testing.T) {
+	name := "TestRestClient_CreateDocument"
+	client := _newRestClient(t, name)
+
+	dbname := "mydb"
+	collname := "mytable"
+	client.DeleteDatabase(dbname)
+	client.CreateDatabase(DatabaseSpec{Id: dbname})
+	client.CreateCollection(CollectionSpec{
+		DbName:           dbname,
+		CollName:         collname,
+		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/username"}, "kind": "Hash"},
+		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
+	})
+
+	if result := client.CreateDocument(DocumentSpec{
+		DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"},
+		DocumentData: map[string]interface{}{"id": "1", "username": "user", "email": "user@domain.com", "grade": 1, "active": true},
+	}); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if result.DocInfo["id"] != "1" || result.DocInfo["username"] != "user" || result.DocInfo["email"] != "user@domain.com" ||
+		result.DocInfo["grade"].(float64) != 1.0 || result.DocInfo["active"] != true || result.DocInfo["_rid"] == "" ||
+		result.DocInfo["_self"] == "" || result.DocInfo["_ts"].(float64) == 0.0 || result.DocInfo["_etag"] == "" || result.DocInfo["_attachments"] == "" {
+		t.Fatalf("%s failed: invalid dbinfo returned %#v", name, result.DocInfo)
+	}
+
+	if result := client.CreateDocument(DocumentSpec{
+		DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"},
+		DocumentData: map[string]interface{}{"id": "1", "username": "user", "email": "user@domain1.com", "grade": 2, "active": false},
+	}); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 409 {
+		// duplicated id
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 409, result.StatusCode)
+	}
+
+	if result := client.CreateDocument(DocumentSpec{
+		DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"},
+		DocumentData: map[string]interface{}{"id": "2", "username": "user", "email": "user@domain.com", "grade": 3, "active": true},
+	}); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 409 {
+		// duplicated unique index
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 409, result.StatusCode)
+	}
+
+	if result := client.CreateDocument(DocumentSpec{
+		DbName: dbname, CollName: "table_not_found", PartitionKeyValues: []interface{}{"user"},
+		DocumentData: map[string]interface{}{"id": "1", "username": "user", "email": "user@domain.com", "grade": 1, "active": true},
+	}); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+
+	client.DeleteDatabase("db_not_found")
+	if result := client.CreateDocument(DocumentSpec{
+		DbName: "db_not_found", CollName: collname, PartitionKeyValues: []interface{}{"user"},
+		DocumentData: map[string]interface{}{"id": "1", "username": "user", "email": "user@domain.com", "grade": 1, "active": true},
+	}); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+}
+
+func TestRestClient_UpsertDocument(t *testing.T) {
+	name := "TestRestClient_UpsertDocument"
+	client := _newRestClient(t, name)
+
+	dbname := "mydb"
+	collname := "mytable"
+	client.DeleteDatabase(dbname)
+	client.CreateDatabase(DatabaseSpec{Id: dbname})
+	client.CreateCollection(CollectionSpec{
+		DbName:           dbname,
+		CollName:         collname,
+		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/username"}, "kind": "Hash"},
+		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
+	})
+
+	if result := client.CreateDocument(DocumentSpec{
+		DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user1"}, IsUpsert: true,
+		DocumentData: map[string]interface{}{"id": "1", "username": "user1", "email": "user1@domain.com", "grade": 1, "active": true},
+	}); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if result.DocInfo["id"] != "1" || result.DocInfo["username"] != "user1" || result.DocInfo["email"] != "user1@domain.com" ||
+		result.DocInfo["grade"].(float64) != 1.0 || result.DocInfo["active"] != true || result.DocInfo["_rid"] == "" ||
+		result.DocInfo["_self"] == "" || result.DocInfo["_ts"].(float64) == 0.0 || result.DocInfo["_etag"] == "" || result.DocInfo["_attachments"] == "" {
+		t.Fatalf("%s failed: invalid dbinfo returned %#v", name, result.DocInfo)
+	}
+	if result := client.CreateDocument(DocumentSpec{
+		DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user2"}, IsUpsert: true,
+		DocumentData: map[string]interface{}{"id": "2", "username": "user2", "email": "user2@domain.com", "grade": 2, "active": false},
+	}); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if result.DocInfo["id"] != "2" || result.DocInfo["username"] != "user2" || result.DocInfo["email"] != "user2@domain.com" ||
+		result.DocInfo["grade"].(float64) != 2.0 || result.DocInfo["active"] != false || result.DocInfo["_rid"] == "" ||
+		result.DocInfo["_self"] == "" || result.DocInfo["_ts"].(float64) == 0.0 || result.DocInfo["_etag"] == "" || result.DocInfo["_attachments"] == "" {
+		t.Fatalf("%s failed: invalid dbinfo returned %#v", name, result.DocInfo)
+	}
+
+	if result := client.CreateDocument(DocumentSpec{
+		DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user1"}, IsUpsert: true,
+		DocumentData: map[string]interface{}{"id": "1", "username": "user1", "email": "user1@domain1.com", "grade": 2, "active": false, "data": "value"},
+	}); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if result.DocInfo["id"] != "1" || result.DocInfo["username"] != "user1" || result.DocInfo["email"] != "user1@domain1.com" ||
+		result.DocInfo["grade"].(float64) != 2.0 || result.DocInfo["active"] != false || result.DocInfo["data"] != "value" || result.DocInfo["_rid"] == "" ||
+		result.DocInfo["_self"] == "" || result.DocInfo["_ts"].(float64) == 0.0 || result.DocInfo["_etag"] == "" || result.DocInfo["_attachments"] == "" {
+		t.Fatalf("%s failed: invalid dbinfo returned %#v", name, result.DocInfo)
+	}
+
+	if result := client.CreateDocument(DocumentSpec{
+		DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user1"}, IsUpsert: true,
+		DocumentData: map[string]interface{}{"id": "3", "username": "user1", "email": "user1@domain1.com", "grade": 2, "active": false, "data": "value"},
+	}); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 409 {
+		// duplicated unique key
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 409, result.StatusCode)
+	}
+
+	if result := client.CreateDocument(DocumentSpec{
+		DbName: dbname, CollName: "table_not_found", PartitionKeyValues: []interface{}{"user"}, IsUpsert: true,
+		DocumentData: map[string]interface{}{"id": "1", "username": "user", "email": "user@domain.com", "grade": 1, "active": true},
+	}); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+
+	client.DeleteDatabase("db_not_found")
+	if result := client.CreateDocument(DocumentSpec{
+		DbName: "db_not_found", CollName: collname, PartitionKeyValues: []interface{}{"user"}, IsUpsert: true,
+		DocumentData: map[string]interface{}{"id": "1", "username": "user", "email": "user@domain.com", "grade": 1, "active": true},
+	}); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+}
