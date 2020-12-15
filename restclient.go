@@ -371,6 +371,29 @@ func (c *RestClient) CreateDocument(spec DocumentSpec) *RespCreateDoc {
 	return result
 }
 
+// ReplaceDocument invokes CosmosDB API to replace an existing document.
+//
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/replace-a-document
+func (c *RestClient) ReplaceDocument(matchEtag string, spec DocumentSpec) *RespReplaceDoc {
+	id, _ := spec.DocumentData["id"].(string)
+	method := "PUT"
+	url := c.endpoint + "/dbs/" + spec.DbName + "/colls/" + spec.CollName + "/docs/" + id
+	req := c.buildJsonRequest(method, url, spec.DocumentData)
+	req = c.addAuthHeader(req, method, "docs", "dbs/"+spec.DbName+"/colls/"+spec.CollName+"/docs/"+id)
+	if matchEtag != "" {
+		req.Header.Set("If-Match", matchEtag)
+	}
+	jsPkValues, _ := json.Marshal(spec.PartitionKeyValues)
+	req.Header.Set("x-ms-documentdb-partitionkey", string(jsPkValues))
+
+	resp := c.client.Do(req)
+	result := &RespReplaceDoc{RestReponse: c.buildRestReponse(resp)}
+	if result.CallErr == nil {
+		result.CallErr = json.Unmarshal(result.RespBody, &(result.DocInfo))
+	}
+	return result
+}
+
 /*----------------------------------------------------------------------*/
 
 // RestReponse captures the response from REST API call.
@@ -487,6 +510,12 @@ type DocInfo map[string]interface{}
 
 // RespCreateDoc captures the response from CreateDocument call.
 type RespCreateDoc struct {
+	RestReponse
+	DocInfo
+}
+
+// RespReplaceDoc captures the response from ReplaceDocument call.
+type RespReplaceDoc struct {
 	RestReponse
 	DocInfo
 }
