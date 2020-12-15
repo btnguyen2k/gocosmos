@@ -394,10 +394,11 @@ func (c *RestClient) ReplaceDocument(matchEtag string, spec DocumentSpec) *RespR
 	return result
 }
 
-// GetDocReq specifies a request to retrieve a document.
-type GetDocReq struct {
+// DocReq specifies a document request.
+type DocReq struct {
 	DbName, CollName, DocId string
 	PartitionKeyValues      []interface{}
+	MatchEtag               string // if not empty, add "If-Match" header to request
 	NotMatchEtag            string // if not empty, add "If-None-Match" header to request
 	ConsistencyLevel        string // accepted values: "", "Strong", "Bounded", "Session" or "Eventual"
 	SessionToken            string // string token used with session level consistency
@@ -406,7 +407,7 @@ type GetDocReq struct {
 // GetDocument invokes CosmosDB API to get an existing document.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/get-a-document
-func (c *RestClient) GetDocument(r GetDocReq) *RespGetDoc {
+func (c *RestClient) GetDocument(r DocReq) *RespGetDoc {
 	method := "GET"
 	url := c.endpoint + "/dbs/" + r.DbName + "/colls/" + r.CollName + "/docs/" + r.DocId
 	req := c.buildJsonRequest(method, url, nil)
@@ -428,6 +429,25 @@ func (c *RestClient) GetDocument(r GetDocReq) *RespGetDoc {
 	if result.CallErr == nil && result.StatusCode != 304 {
 		result.CallErr = json.Unmarshal(result.RespBody, &(result.DocInfo))
 	}
+	return result
+}
+
+// DeleteDocument invokes CosmosDB API to delete an existing document.
+//
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/delete-a-document
+func (c *RestClient) DeleteDocument(r DocReq) *RespDeleteDoc {
+	method := "DELETE"
+	url := c.endpoint + "/dbs/" + r.DbName + "/colls/" + r.CollName + "/docs/" + r.DocId
+	req := c.buildJsonRequest(method, url, nil)
+	req = c.addAuthHeader(req, method, "docs", "dbs/"+r.DbName+"/colls/"+r.CollName+"/docs/"+r.DocId)
+	jsPkValues, _ := json.Marshal(r.PartitionKeyValues)
+	req.Header.Set("x-ms-documentdb-partitionkey", string(jsPkValues))
+	if r.MatchEtag != "" {
+		req.Header.Set("If-Match", r.MatchEtag)
+	}
+
+	resp := c.client.Do(req)
+	result := &RespDeleteDoc{RestReponse: c.buildRestReponse(resp)}
 	return result
 }
 
