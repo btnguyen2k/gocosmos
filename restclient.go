@@ -394,6 +394,43 @@ func (c *RestClient) ReplaceDocument(matchEtag string, spec DocumentSpec) *RespR
 	return result
 }
 
+// GetDocReq specifies a request to retrieve a document.
+type GetDocReq struct {
+	DbName, CollName, DocId string
+	PartitionKeyValues      []interface{}
+	NotMatchEtag            string // if not empty, add "If-None-Match" header to request
+	ConsistencyLevel        string // accepted values: "", "Strong", "Bounded", "Session" or "Eventual"
+	SessionToken            string // string token used with session level consistency
+}
+
+// GetDocument invokes CosmosDB API to get an existing document.
+//
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/get-a-document
+func (c *RestClient) GetDocument(r GetDocReq) *RespGetDoc {
+	method := "GET"
+	url := c.endpoint + "/dbs/" + r.DbName + "/colls/" + r.CollName + "/docs/" + r.DocId
+	req := c.buildJsonRequest(method, url, nil)
+	req = c.addAuthHeader(req, method, "docs", "dbs/"+r.DbName+"/colls/"+r.CollName+"/docs/"+r.DocId)
+	jsPkValues, _ := json.Marshal(r.PartitionKeyValues)
+	req.Header.Set("x-ms-documentdb-partitionkey", string(jsPkValues))
+	if r.NotMatchEtag != "" {
+		req.Header.Set("If-None-Match", r.NotMatchEtag)
+	}
+	if r.ConsistencyLevel != "" {
+		req.Header.Set("x-ms-consistency-level", r.ConsistencyLevel)
+	}
+	if r.SessionToken != "" {
+		req.Header.Set("x-ms-session-token", r.SessionToken)
+	}
+
+	resp := c.client.Do(req)
+	result := &RespGetDoc{RestReponse: c.buildRestReponse(resp)}
+	if result.CallErr == nil && result.StatusCode != 304 {
+		result.CallErr = json.Unmarshal(result.RespBody, &(result.DocInfo))
+	}
+	return result
+}
+
 /*----------------------------------------------------------------------*/
 
 // RestReponse captures the response from REST API call.

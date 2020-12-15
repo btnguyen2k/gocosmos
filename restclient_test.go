@@ -567,3 +567,68 @@ func TestRestClient_ReplaceDocument(t *testing.T) {
 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
 	}
 }
+
+func TestRestClient_GetDocument(t *testing.T) {
+	name := "TestRestClient_GetDocument"
+	client := _newRestClient(t, name)
+
+	dbname := "mydb"
+	collname := "mytable"
+	client.DeleteDatabase(dbname)
+	client.CreateDatabase(DatabaseSpec{Id: dbname})
+	client.CreateCollection(CollectionSpec{
+		DbName:           dbname,
+		CollName:         collname,
+		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/username"}, "kind": "Hash"},
+		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
+	})
+
+	var etag string
+	docInfo := map[string]interface{}{"id": "1", "username": "user", "email": "user1@domain.com", "grade": 1.0, "active": true}
+	if result := client.CreateDocument(DocumentSpec{DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"}, DocumentData: docInfo}); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else {
+		etag = result.DocInfo["_etag"].(string)
+	}
+
+	if result := client.GetDocument(GetDocReq{DbName: dbname, CollName: collname, DocId: "1", PartitionKeyValues: []interface{}{"user"}}); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if result.DocInfo["id"] != docInfo["id"] || result.DocInfo["username"] != docInfo["username"] || result.DocInfo["email"] != docInfo["email"] ||
+		result.DocInfo["grade"] != docInfo["grade"] || result.DocInfo["active"] != docInfo["active"] || result.DocInfo["_rid"] == "" ||
+		result.DocInfo["_self"] == "" || result.DocInfo["_ts"].(float64) == 0.0 || result.DocInfo["_etag"] == "" || result.DocInfo["_attachments"] == "" {
+		t.Fatalf("%s failed: invalid dbinfo returned %#v", name, result.DocInfo)
+	}
+
+	if result := client.GetDocument(GetDocReq{NotMatchEtag: etag + "dummy", DbName: dbname, CollName: collname, DocId: "1", PartitionKeyValues: []interface{}{"user"}}); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if result.DocInfo["id"] != docInfo["id"] || result.DocInfo["username"] != docInfo["username"] || result.DocInfo["email"] != docInfo["email"] ||
+		result.DocInfo["grade"] != docInfo["grade"] || result.DocInfo["active"] != docInfo["active"] || result.DocInfo["_rid"] == "" ||
+		result.DocInfo["_self"] == "" || result.DocInfo["_ts"].(float64) == 0.0 || result.DocInfo["_etag"] == "" || result.DocInfo["_attachments"] == "" {
+		t.Fatalf("%s failed: invalid dbinfo returned %#v", name, result.DocInfo)
+	}
+
+	if result := client.GetDocument(GetDocReq{NotMatchEtag: etag, DbName: dbname, CollName: collname, DocId: "1", PartitionKeyValues: []interface{}{"user"}}); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 304 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 304, result.StatusCode)
+	}
+
+	if result := client.GetDocument(GetDocReq{DbName: dbname, CollName: collname, DocId: "0", PartitionKeyValues: []interface{}{"user"}}); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+
+	if result := client.GetDocument(GetDocReq{DbName: dbname, CollName: "tbl_not_found", DocId: "1", PartitionKeyValues: []interface{}{"user"}}); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+
+	client.DeleteDatabase("db_not_found")
+	if result := client.GetDocument(GetDocReq{DbName: "db_not_found", CollName: collname, DocId: "1", PartitionKeyValues: []interface{}{"user"}}); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+}
