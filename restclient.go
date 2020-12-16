@@ -81,7 +81,7 @@ func (c *RestClient) buildJsonRequest(method, url string, params interface{}) *h
 	}
 	req, _ := http.NewRequest(method, url, r)
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-ms-version", c.apiVersion)
+	req.Header.Set("X-Ms-Version", c.apiVersion)
 	return req
 }
 
@@ -94,7 +94,7 @@ func (c *RestClient) addAuthHeader(req *http.Request, method, resType, resId str
 	authHeader := "type=master&ver=1.0&sig=" + signature
 	authHeader = url.QueryEscape(authHeader)
 	req.Header.Set("Authorization", authHeader)
-	req.Header.Set("x-ms-date", now.Format(time.RFC1123))
+	req.Header.Set("X-Ms-Date", now.Format(time.RFC1123))
 	return req
 }
 
@@ -107,14 +107,15 @@ func (c *RestClient) buildRestReponse(resp *gjrc.GjrcResponse) RestReponse {
 		for k, v := range resp.HttpResponse().Header {
 			if len(v) > 0 {
 				result.RespHeader[k] = v[0]
+				result.RespHeader[strings.ToUpper(k)] = v[0]
 			}
 		}
-		if v, err := strconv.ParseFloat(result.RespHeader["x-ms-request-charge"], 64); err != nil {
+		if v, err := strconv.ParseFloat(result.RespHeader["X-MS-REQUEST-CHARGE"], 64); err == nil {
 			result.RequestCharge = v
 		} else {
 			result.RequestCharge = -1
 		}
-		result.SessionToken = result.RespHeader["x-ms-session-token"]
+		result.SessionToken = result.RespHeader["X-MS-SESSION-TOKEN"]
 		if result.StatusCode >= 400 {
 			result.ApiErr = fmt.Errorf("error executing Azure CosmosDB command; StatusCode=%d;Body=%s", result.StatusCode, result.RespBody)
 		}
@@ -138,10 +139,10 @@ func (c *RestClient) CreateDatabase(spec DatabaseSpec) *RespCreateDb {
 	req := c.buildJsonRequest(method, url, map[string]interface{}{"id": spec.Id})
 	req = c.addAuthHeader(req, method, "dbs", "")
 	if spec.Ru > 0 {
-		req.Header.Set("x-ms-offer-throughput", strconv.Itoa(spec.Ru))
+		req.Header.Set("X-Ms-Offer-Throughput", strconv.Itoa(spec.Ru))
 	}
 	if spec.MaxRu > 0 {
-		req.Header.Set("x-ms-cosmos-offer-autopilot-settings", fmt.Sprintf(`{"maxThroughput":%d}`, spec.MaxRu))
+		req.Header.Set("X-Ms-Cosmos-Offer-Autopilot-Settings", fmt.Sprintf(`{"maxThroughput":%d}`, spec.MaxRu))
 	}
 
 	resp := c.client.Do(req)
@@ -235,10 +236,10 @@ func (c *RestClient) CreateCollection(spec CollectionSpec) *RespCreateColl {
 	req := c.buildJsonRequest(method, url, params)
 	req = c.addAuthHeader(req, method, "colls", "dbs/"+spec.DbName)
 	if spec.Ru > 0 {
-		req.Header.Set("x-ms-offer-throughput", strconv.Itoa(spec.Ru))
+		req.Header.Set("X-Ms-Offer-Throughput", strconv.Itoa(spec.Ru))
 	}
 	if spec.MaxRu > 0 {
-		req.Header.Set("x-ms-cosmos-offer-autopilot-settings", fmt.Sprintf(`{"maxThroughput":%d}`, spec.MaxRu))
+		req.Header.Set("X-Ms-Cosmos-Offer-Autopilot-Settings", fmt.Sprintf(`{"maxThroughput":%d}`, spec.MaxRu))
 	}
 
 	resp := c.client.Do(req)
@@ -269,10 +270,10 @@ func (c *RestClient) ReplaceCollection(spec CollectionSpec) *RespReplaceColl {
 	req := c.buildJsonRequest(method, url, params)
 	req = c.addAuthHeader(req, method, "colls", "dbs/"+spec.DbName+"/colls/"+spec.CollName)
 	if spec.Ru > 0 {
-		req.Header.Set("x-ms-offer-throughput", strconv.Itoa(spec.Ru))
+		req.Header.Set("X-Ms-Offer-Throughput", strconv.Itoa(spec.Ru))
 	}
 	if spec.MaxRu > 0 {
-		req.Header.Set("x-ms-cosmos-offer-autopilot-settings", fmt.Sprintf(`{"maxThroughput":%d}`, spec.MaxRu))
+		req.Header.Set("X-Ms-Cosmos-Offer-Autopilot-Settings", fmt.Sprintf(`{"maxThroughput":%d}`, spec.MaxRu))
 	}
 
 	resp := c.client.Do(req)
@@ -355,13 +356,13 @@ func (c *RestClient) CreateDocument(spec DocumentSpec) *RespCreateDoc {
 	req := c.buildJsonRequest(method, url, spec.DocumentData)
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+spec.DbName+"/colls/"+spec.CollName)
 	if spec.IsUpsert {
-		req.Header.Set("x-ms-documentdb-is-upsert", "true")
+		req.Header.Set("X-Ms-Documentdb-Is-Upsert", "true")
 	}
 	if spec.IndexingDirective != "" {
 		req.Header.Set("x-ms-indexing-directive", spec.IndexingDirective)
 	}
 	jsPkValues, _ := json.Marshal(spec.PartitionKeyValues)
-	req.Header.Set("x-ms-documentdb-partitionkey", string(jsPkValues))
+	req.Header.Set("X-Ms-Documentdb-PartitionKey", string(jsPkValues))
 
 	resp := c.client.Do(req)
 	result := &RespCreateDoc{RestReponse: c.buildRestReponse(resp)}
@@ -384,7 +385,7 @@ func (c *RestClient) ReplaceDocument(matchEtag string, spec DocumentSpec) *RespR
 		req.Header.Set("If-Match", matchEtag)
 	}
 	jsPkValues, _ := json.Marshal(spec.PartitionKeyValues)
-	req.Header.Set("x-ms-documentdb-partitionkey", string(jsPkValues))
+	req.Header.Set("X-Ms-Documentdb-PartitionKey", string(jsPkValues))
 
 	resp := c.client.Do(req)
 	result := &RespReplaceDoc{RestReponse: c.buildRestReponse(resp)}
@@ -413,15 +414,15 @@ func (c *RestClient) GetDocument(r DocReq) *RespGetDoc {
 	req := c.buildJsonRequest(method, url, nil)
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+r.DbName+"/colls/"+r.CollName+"/docs/"+r.DocId)
 	jsPkValues, _ := json.Marshal(r.PartitionKeyValues)
-	req.Header.Set("x-ms-documentdb-partitionkey", string(jsPkValues))
+	req.Header.Set("X-Ms-Documentdb-PartitionKey", string(jsPkValues))
 	if r.NotMatchEtag != "" {
 		req.Header.Set("If-None-Match", r.NotMatchEtag)
 	}
 	if r.ConsistencyLevel != "" {
-		req.Header.Set("x-ms-consistency-level", r.ConsistencyLevel)
+		req.Header.Set("X-Ms-Consistency-Level", r.ConsistencyLevel)
 	}
 	if r.SessionToken != "" {
-		req.Header.Set("x-ms-session-token", r.SessionToken)
+		req.Header.Set("X-Ms-Session-Token", r.SessionToken)
 	}
 
 	resp := c.client.Do(req)
@@ -441,13 +442,57 @@ func (c *RestClient) DeleteDocument(r DocReq) *RespDeleteDoc {
 	req := c.buildJsonRequest(method, url, nil)
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+r.DbName+"/colls/"+r.CollName+"/docs/"+r.DocId)
 	jsPkValues, _ := json.Marshal(r.PartitionKeyValues)
-	req.Header.Set("x-ms-documentdb-partitionkey", string(jsPkValues))
+	req.Header.Set("X-Ms-Documentdb-PartitionKey", string(jsPkValues))
 	if r.MatchEtag != "" {
 		req.Header.Set("If-Match", r.MatchEtag)
 	}
 
 	resp := c.client.Do(req)
 	result := &RespDeleteDoc{RestReponse: c.buildRestReponse(resp)}
+	return result
+}
+
+// QueryReq specifies a query request to query for documents.
+type QueryReq struct {
+	DbName, CollName      string
+	Query                 string
+	Params                []interface{}
+	MaxItemCount          int
+	ContinuationToken     string
+	CrossPartitionEnabled bool
+	ConsistencyLevel      string // accepted values: "", "Strong", "Bounded", "Session" or "Eventual"
+	SessionToken          string // string token used with session level consistency
+}
+
+func (c *RestClient) QueryDocuments(query QueryReq) *RespQueryDocs {
+	method := "POST"
+	url := c.endpoint + "/dbs/" + query.DbName + "/colls/" + query.CollName + "/docs"
+	req := c.buildJsonRequest(method, url, map[string]interface{}{"query": query.Query, "parameters": query.Params})
+	req = c.addAuthHeader(req, method, "docs", "dbs/"+query.DbName+"/colls/"+query.CollName)
+	req.Header.Set("Content-Type", "application/query+json")
+	req.Header.Set("X-Ms-Documentdb-Isquery", "true")
+	if query.MaxItemCount > 0 {
+		req.Header.Set("X-Ms-Max-Item-Count", strconv.Itoa(query.MaxItemCount))
+	}
+	if query.ContinuationToken != "" {
+		req.Header.Set("X-Ms-Continuation", query.ContinuationToken)
+	}
+	if query.CrossPartitionEnabled {
+		req.Header.Set("X-Ms-Documentdb-Query-EnableCrossPartition", "true")
+	}
+	if query.ConsistencyLevel != "" {
+		req.Header.Set("X-Ms-Consistency-Level", query.ConsistencyLevel)
+	}
+	if query.SessionToken != "" {
+		req.Header.Set("X-Ms-Session-Token", query.SessionToken)
+	}
+
+	resp := c.client.Do(req)
+	result := &RespQueryDocs{RestReponse: c.buildRestReponse(resp)}
+	if result.CallErr == nil {
+		result.ContinuationToken = result.RespHeader["X-MS-CONTINUATION"]
+		result.CallErr = json.Unmarshal(result.RespBody, &result)
+	}
 	return result
 }
 
@@ -586,4 +631,12 @@ type RespGetDoc struct {
 // RespDeleteDoc captures the response from DeleteDocument call.
 type RespDeleteDoc struct {
 	RestReponse
+}
+
+// RespQueryDocs captures the response from QueryDocuments call.
+type RespQueryDocs struct {
+	RestReponse       `json:"-"`
+	Count             int64     `json:"_count"` // number of documents returned from the operation
+	Documents         []DocInfo `json:"Documents"`
+	ContinuationToken string    `json:"-"`
 }
