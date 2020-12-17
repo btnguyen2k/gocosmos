@@ -880,7 +880,7 @@ func TestRestClient_ListDocuments(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		id := rand.Intn(100)
 		removed[id] = true
-		result := client.DeleteDocument(DocReq{DbName: dbname, CollName: collname, DocId: fmt.Sprintf("%02d", rand.Intn(100)), PartitionKeyValues: []interface{}{"user"}})
+		result := client.DeleteDocument(DocReq{DbName: dbname, CollName: collname, DocId: fmt.Sprintf("%02d", id), PartitionKeyValues: []interface{}{"user"}})
 		if result.Error() != nil && result.Error() != ErrNotFound {
 			t.Fatalf("%s failed: %s", name, result.Error())
 		}
