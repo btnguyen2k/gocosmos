@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
-
-	"github.com/btnguyen2k/consu/gjrc"
 )
 
 const (
@@ -185,26 +183,4 @@ func (s *Stmt) Close() error {
 // NumInput implements driver.Stmt.NumInput.
 func (s *Stmt) NumInput() int {
 	return s.numInput
-}
-
-// // Exec implements driver.Stmt.Exec.
-// func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
-// 	panic("[Exec] implement me")
-// }
-//
-// // Query implements driver.Stmt.Query.
-// func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
-// 	panic("[Query] implement me")
-// }
-
-func (s *Stmt) buildError(resp *gjrc.GjrcResponse) (error, int) {
-	if resp.Error() != nil {
-		return resp.Error(), 0
-	}
-	statusCode := resp.StatusCode()
-	if statusCode >= 400 {
-		body, _ := resp.Body()
-		return fmt.Errorf("error executing Azure CosmosDB command; StatusCode=%d;Body=%s", resp.StatusCode(), body), statusCode
-	}
-	return nil, statusCode
 }

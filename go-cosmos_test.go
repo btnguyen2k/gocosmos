@@ -738,7 +738,7 @@ func Test_Query_Select(t *testing.T) {
 
 	db.Exec("DROP DATABASE db_not_exists")
 	db.Exec("DROP DATABASE dbtemp")
-	db.Exec("CREATE DATABASE dbtemp")
+	db.Exec("CREATE DATABASE dbtemp WITH maxru=10000")
 	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
 
 	for i := 0; i < 100; i++ {
@@ -834,7 +834,7 @@ func Test_Query_SelectPlaceholder(t *testing.T) {
 
 	db.Exec("DROP DATABASE db_not_exists")
 	db.Exec("DROP DATABASE dbtemp")
-	db.Exec("CREATE DATABASE dbtemp")
+	db.Exec("CREATE DATABASE dbtemp WITH maxru=10000")
 	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
 
 	for i := 0; i < 100; i++ {
