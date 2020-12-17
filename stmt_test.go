@@ -451,6 +451,7 @@ func Test_parseQuery_Select(t *testing.T) {
 		`SELECT * FROM db.table`,                   // database and collection must be specified by WITH database=<dbname> and WITH collection=<collname>
 		`SELECT * FROM c WITH db=dbname`,           // no collection
 		`SELECT * FROM c WITH collection=collname`, // no database
+		`SELECT * FROM c WITH db=dbname WITH collection=collname WITH cross_partition=false`, // the only valid value for cross_partition is true
 	}
 	for _, query := range invalidQueries {
 		if _, err := parseQuery(nil, query); err == nil {

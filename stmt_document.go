@@ -345,7 +345,11 @@ func (s *StmtSelect) parse(withOptsStr string) error {
 	} else if v, ok := s.withOpts["TABLE"]; ok {
 		s.collName = strings.TrimSpace(v)
 	}
-	if _, ok := s.withOpts["CROSS_PARTITION"]; ok && !s.isCrossPartition {
+	if v, ok := s.withOpts["CROSS_PARTITION"]; ok && !s.isCrossPartition {
+		vbool, err := strconv.ParseBool(v)
+		if err != nil || !vbool {
+			return errors.New("cannot parse query (the only accepted value for cross_partition is true), invalid token at: " + v)
+		}
 		s.isCrossPartition = true
 	}
 
