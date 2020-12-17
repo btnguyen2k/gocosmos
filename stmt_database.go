@@ -191,7 +191,7 @@ func (r *RowsListDatabases) Close() error {
 
 // Next implements driver.Rows.Next.
 func (r *RowsListDatabases) Next(dest []driver.Value) error {
-	if r.cursorCount >= len(r.databases) {
+	if r.cursorCount >= r.count {
 		return io.EOF
 	}
 	rowData := r.databases[r.cursorCount]

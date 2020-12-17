@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -303,6 +305,171 @@ func (r *ResultDelete) RowsAffected() (int64, error) {
 		return 1, nil
 	}
 	return 0, nil
+}
+
+// StmtSelect implements "SELECT" operation.
+//
+// The "SELECT" query follows CosmosDB's SQL grammar (https://docs.microsoft.com/en-us/azure/cosmos-db/sql-query-getting-started)
+// with a few extensions:
+// - Syntax: SELECT [CROSS PARTITION] ... WITH database|db=<db-name> WITH collection|table=<collection/table-name> [WITH cross_partition=true]
+// - (extension) If the collection is partitioned, specify CROSS PARTITION to allow execution across multiple partitions.
+//   This clause is not required if query is to be executed on a single partition.
+//   Cross-partition execution can also be enabled using WITH cross_partition=true.
+// - (extension) Use WITH database=<db-name> (or WITH db=<db-name>) to specify the database on which the query is to be executed.
+// - (extension) Use WITH collection=<coll-name> (or WITH table=<coll-name>) to specify the collection/table on which the query is to be executed.
+// - (extension) Use placeholder syntax @i, $i or :i (where i denotes the i-th parameter, the first parameter is 1)
+type StmtSelect struct {
+	*Stmt
+	isCrossPartition bool
+	dbName           string
+	collName         string
+	selectQuery      string
+	placeholders     map[int]string
+	// fieldsStr        string
+	// valuesStr        string
+	// fields           []string
+	// values           []interface{}
+}
+
+func (s *StmtSelect) parse(withOptsStr string) error {
+	if err := s.Stmt.parseWithOpts(withOptsStr); err != nil {
+		return err
+	}
+	if v, ok := s.withOpts["DATABASE"]; ok {
+		s.dbName = strings.TrimSpace(v)
+	} else if v, ok := s.withOpts["DB"]; ok {
+		s.dbName = strings.TrimSpace(v)
+	}
+	if v, ok := s.withOpts["COLLECTION"]; ok {
+		s.collName = strings.TrimSpace(v)
+	} else if v, ok := s.withOpts["TABLE"]; ok {
+		s.collName = strings.TrimSpace(v)
+	}
+	if _, ok := s.withOpts["CROSS_PARTITION"]; ok && !s.isCrossPartition {
+		s.isCrossPartition = true
+	}
+
+	matches := reValPlaceholder.FindAllStringSubmatch(s.selectQuery, -1)
+	s.numInput = len(matches)
+	s.placeholders = make(map[int]string)
+	for _, match := range matches {
+		if v, err := strconv.Atoi(match[1]); err == nil {
+			key := "@_" + match[1]
+			s.placeholders[v] = key
+			if strings.HasSuffix(match[0], " ") {
+				key += " "
+			}
+			s.selectQuery = strings.ReplaceAll(s.selectQuery, match[0], key)
+		} else {
+			return errors.New("cannot parse query, invalid token at: " + match[0])
+		}
+	}
+
+	return nil
+}
+
+func (s *StmtSelect) validate() error {
+	if s.dbName == "" || s.collName == "" {
+		return errors.New("database or collection is not specified")
+	}
+	return nil
+}
+
+// Query implements driver.Stmt.Query.
+// Upon successful call, this function returns (*ResultSelect, nil).
+func (s *StmtSelect) Query(args []driver.Value) (driver.Rows, error) {
+	params := make([]interface{}, 0)
+	for i, arg := range args {
+		if v, ok := s.placeholders[i+1]; !ok {
+			return nil, fmt.Errorf("there is placeholder number %d", i+1)
+		} else {
+			params = append(params, map[string]interface{}{"name": fmt.Sprintf("%s", v), "value": arg})
+		}
+	}
+	query := QueryReq{
+		DbName:                s.dbName,
+		CollName:              s.collName,
+		Query:                 s.selectQuery,
+		Params:                params,
+		CrossPartitionEnabled: s.isCrossPartition,
+	}
+	documents := make([]DocInfo, 0)
+	var restResult *RespQueryDocs
+	for restResult = s.conn.restClient.QueryDocuments(query); restResult.Error() == nil; {
+		documents = append(documents, restResult.Documents...)
+		if restResult.ContinuationToken == "" {
+			break
+		}
+		query.ContinuationToken = restResult.ContinuationToken
+		restResult = s.conn.restClient.QueryDocuments(query)
+	}
+	err := restResult.Error()
+	var rows driver.Rows
+	if err == nil {
+		rows = &ResultSelect{
+			count:       int(restResult.Count),
+			documents:   documents,
+			cursorCount: 0,
+			columnList:  make([]string, 0),
+		}
+		if len(documents) > 0 {
+			doc := documents[0]
+			columnList := make([]string, len(doc))
+			i := 0
+			for colName := range doc {
+				columnList[i] = colName
+				i++
+			}
+			sort.Strings(columnList)
+			rows.(*ResultSelect).columnList = columnList
+		}
+	}
+	switch restResult.StatusCode {
+	case 403:
+		err = ErrForbidden
+	case 404:
+		err = ErrNotFound
+	case 409:
+		err = ErrConflict
+	}
+	return rows, err
+}
+
+// Exec implements driver.Stmt.Exec.
+// This function is not implemented, use Query instead.
+func (s *StmtSelect) Exec(args []driver.Value) (driver.Result, error) {
+	return nil, errors.New("this operation is not supported, please use query")
+}
+
+// ResultSelect captures the result from SELECT operation.
+type ResultSelect struct {
+	count       int
+	documents   []DocInfo
+	cursorCount int
+	columnList  []string
+}
+
+// Columns implements driver.Rows.Columns.
+func (r *ResultSelect) Columns() []string {
+	return r.columnList
+}
+
+// Close implements driver.Rows.Close.
+func (r *ResultSelect) Close() error {
+	return nil
+}
+
+// Next implements driver.Rows.Next.
+func (r *ResultSelect) Next(dest []driver.Value) error {
+	if r.cursorCount >= r.count {
+		return io.EOF
+	}
+	rowData := r.documents[r.cursorCount]
+	r.cursorCount++
+	for i, colName := range r.columnList {
+		dest[i] = rowData[colName]
+	}
+	return nil
 }
 
 /*----------------------------------------------------------------------*/

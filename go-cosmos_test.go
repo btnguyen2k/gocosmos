@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -719,5 +720,198 @@ func Test_Exec_Delete(t *testing.T) {
 
 	if _, err := db.Exec(`DELETE FROM db_not_exists.table WHERE id=1`, "user"); err != ErrNotFound {
 		t.Fatalf("%s failed: expected ErrNotFound but received %#v", name, err)
+	}
+}
+
+func Test_Exec_Select(t *testing.T) {
+	name := "Test_Exec_Select"
+	db := _openDb(t, name)
+	_, err := db.Exec("SELECT * FROM c WITH db=db WITH collection=table")
+	if err == nil || strings.Index(err.Error(), "not supported") < 0 {
+		t.Fatalf("%s failed: expected 'not support' error, but received %#v", name, err)
+	}
+}
+
+func Test_Query_Select(t *testing.T) {
+	name := "Test_Query_Select"
+	db := _openDb(t, name)
+
+	db.Exec("DROP DATABASE db_not_exists")
+	db.Exec("DROP DATABASE dbtemp")
+	db.Exec("CREATE DATABASE dbtemp")
+	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
+
+	for i := 0; i < 100; i++ {
+		id := fmt.Sprintf("%02d", i)
+		username := "user" + strconv.Itoa(i%4)
+		db.Exec("INSERT INTO dbtemp.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4)", id, username, "user"+id+"@domain.com", i, username)
+	}
+
+	if dbRows, err := db.Query(`SELECT * FROM c WHERE c.username="user0" AND c.id>"30" ORDER BY c.id WITH database=dbtemp WITH collection=tbltemp`); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	} else {
+		colTypes, err := dbRows.ColumnTypes()
+		if err != nil {
+			t.Fatalf("%s failed: %s", name, err)
+		}
+		numCols := len(colTypes)
+		rows := make(map[string]map[string]interface{})
+		for dbRows.Next() {
+			vals := make([]interface{}, numCols)
+			scanVals := make([]interface{}, numCols)
+			for i := 0; i < numCols; i++ {
+				scanVals[i] = &vals[i]
+			}
+			if err := dbRows.Scan(scanVals...); err == nil {
+				row := make(map[string]interface{})
+				for i, v := range colTypes {
+					row[v.Name()] = vals[i]
+				}
+				id := fmt.Sprintf("%s", row["id"])
+				rows[id] = row
+			} else if err != sql.ErrNoRows {
+				t.Fatalf("%s failed: %s", name, err)
+			}
+		}
+		if len(rows) != 17 {
+			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 17, len(rows))
+		}
+		for k, _ := range rows {
+			if k <= "30" {
+				t.Fatalf("%s failed: document #%s should not be returned", name, k)
+			}
+		}
+	}
+
+	if dbRows, err := db.Query(`SELECT CROSS PARTITION * FROM c WHERE c.username>"user1" AND c.id>"53" WITH database=dbtemp WITH collection=tbltemp`); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	} else {
+		colTypes, err := dbRows.ColumnTypes()
+		if err != nil {
+			t.Fatalf("%s failed: %s", name, err)
+		}
+		numCols := len(colTypes)
+		rows := make(map[string]map[string]interface{})
+		for dbRows.Next() {
+			vals := make([]interface{}, numCols)
+			scanVals := make([]interface{}, numCols)
+			for i := 0; i < numCols; i++ {
+				scanVals[i] = &vals[i]
+			}
+			if err := dbRows.Scan(scanVals...); err == nil {
+				row := make(map[string]interface{})
+				for i, v := range colTypes {
+					row[v.Name()] = vals[i]
+				}
+				id := fmt.Sprintf("%s", row["id"])
+				rows[id] = row
+			} else if err != sql.ErrNoRows {
+				t.Fatalf("%s failed: %s", name, err)
+			}
+		}
+		if len(rows) != 24 {
+			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 24, len(rows))
+		}
+		for k, _ := range rows {
+			if k <= "53" {
+				t.Fatalf("%s failed: document #%s should not be returned", name, k)
+			}
+		}
+	}
+
+	if _, err := db.Query(`SELECT * FROM c WITH db=dbtemp WITH collection=tbl_not_found`); err != ErrNotFound {
+		t.Fatalf("%s failed: expected ErrNotFound but received %#v", name, err)
+	}
+
+	if _, err := db.Query(`SELECT * FROM c WITH db=db_not_found WITH collection=tbltemp`); err != ErrNotFound {
+		t.Fatalf("%s failed: expected ErrNotFound but received %#v", name, err)
+	}
+}
+
+func Test_Query_SelectPlaceholder(t *testing.T) {
+	name := "Test_Query_SelectPlaceholder"
+	db := _openDb(t, name)
+
+	db.Exec("DROP DATABASE db_not_exists")
+	db.Exec("DROP DATABASE dbtemp")
+	db.Exec("CREATE DATABASE dbtemp")
+	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
+
+	for i := 0; i < 100; i++ {
+		id := fmt.Sprintf("%02d", i)
+		username := "user" + strconv.Itoa(i%4)
+		db.Exec("INSERT INTO dbtemp.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4)", id, username, "user"+id+"@domain.com", i, username)
+	}
+
+	if dbRows, err := db.Query(`SELECT * FROM c WHERE c.username=$2 AND c.id>:1 ORDER BY c.id WITH database=dbtemp WITH collection=tbltemp`, "30", "user0"); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	} else {
+		colTypes, err := dbRows.ColumnTypes()
+		if err != nil {
+			t.Fatalf("%s failed: %s", name, err)
+		}
+		numCols := len(colTypes)
+		rows := make(map[string]map[string]interface{})
+		for dbRows.Next() {
+			vals := make([]interface{}, numCols)
+			scanVals := make([]interface{}, numCols)
+			for i := 0; i < numCols; i++ {
+				scanVals[i] = &vals[i]
+			}
+			if err := dbRows.Scan(scanVals...); err == nil {
+				row := make(map[string]interface{})
+				for i, v := range colTypes {
+					row[v.Name()] = vals[i]
+				}
+				id := fmt.Sprintf("%s", row["id"])
+				rows[id] = row
+			} else if err != sql.ErrNoRows {
+				t.Fatalf("%s failed: %s", name, err)
+			}
+		}
+		if len(rows) != 17 {
+			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 17, len(rows))
+		}
+		for k, _ := range rows {
+			if k <= "30" {
+				t.Fatalf("%s failed: document #%s should not be returned", name, k)
+			}
+		}
+	}
+
+	if dbRows, err := db.Query(`SELECT CROSS PARTITION * FROM c WHERE c.username>@1 AND c.grade>:2 WITH database=dbtemp WITH collection=tbltemp`, "user1", 53); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	} else {
+		colTypes, err := dbRows.ColumnTypes()
+		if err != nil {
+			t.Fatalf("%s failed: %s", name, err)
+		}
+		numCols := len(colTypes)
+		rows := make(map[string]map[string]interface{})
+		for dbRows.Next() {
+			vals := make([]interface{}, numCols)
+			scanVals := make([]interface{}, numCols)
+			for i := 0; i < numCols; i++ {
+				scanVals[i] = &vals[i]
+			}
+			if err := dbRows.Scan(scanVals...); err == nil {
+				row := make(map[string]interface{})
+				for i, v := range colTypes {
+					row[v.Name()] = vals[i]
+				}
+				id := fmt.Sprintf("%s", row["id"])
+				rows[id] = row
+			} else if err != sql.ErrNoRows {
+				t.Fatalf("%s failed: %s", name, err)
+			}
+		}
+		if len(rows) != 24 {
+			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 24, len(rows))
+		}
+		for k, _ := range rows {
+			if k <= "53" {
+				t.Fatalf("%s failed: document #%s should not be returned", name, k)
+			}
+		}
 	}
 }

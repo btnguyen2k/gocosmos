@@ -28,6 +28,7 @@ var (
 	reInsert = regexp.MustCompile(`(?i)^(INSERT|UPSERT)\s+INTO\s+` + field + `\.` + field + `\s*\(([^)]*?)\)\s*VALUES\s*\(([^)]*?)\)$`)
 	// reUpdate = regexp.MustCompile(`(?i)^UPDATE\s+` + field + `\.` + field + `\s+SET\s+(.*)\s+WHERE\s+id\s*=\s*(.*)?$`)
 	reDelete = regexp.MustCompile(`(?i)^DELETE\s+FROM\s+` + field + `\.` + field + `\s+WHERE\s+id\s*=\s*(.*)?$`)
+	reSelect = regexp.MustCompile(`(?i)^SELECT\s+(CROSS\s+PARTITION\s+)?.*?` + with + `$`)
 )
 
 func parseQuery(c *Conn, query string) (driver.Stmt, error) {
@@ -107,20 +108,6 @@ func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 		}
 		return stmt, stmt.validate()
 	}
-	// if re := reUpdate; re.MatchString(query) {
-	// 	groups := re.FindAllStringSubmatch(query, -1)
-	// 	stmt := &StmtUpdate{
-	// 		Stmt:      &Stmt{query: query, conn: c, numInput: 0},
-	// 		dbName:    strings.TrimSpace(groups[0][1]),
-	// 		collName:  strings.TrimSpace(groups[0][2]),
-	// 		updateStr: strings.TrimSpace(groups[0][3]),
-	// 		idStr:     strings.TrimSpace(groups[0][4]),
-	// 	}
-	// 	if err := stmt.parse(); err != nil {
-	// 		return nil, err
-	// 	}
-	// 	return stmt, stmt.validate()
-	// }
 	if re := reDelete; re.MatchString(query) {
 		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtDelete{
@@ -134,30 +121,31 @@ func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 		}
 		return stmt, stmt.validate()
 	}
-
-	// if strings.ToUpper(query) == "QND" {
-	// 	method := "PUT"
-	// 	url := c.endpoint + "/dbs/dbtemp/colls/tbltemp/docs/1"
-	// 	params := map[string]interface{}{
-	// 		"id":       "1",
-	// 		"username": "user",
-	// 		// "email":    "user@domain1.com",
-	// 		"val_int":  1,
-	// 		"val_bool": true,
-	// 		"val_str":  "a string",
+	if re := reSelect; re.MatchString(query) {
+		groups := re.FindAllStringSubmatch(query, -1)
+		stmt := &StmtSelect{
+			Stmt:             &Stmt{query: query, conn: c, numInput: 0},
+			isCrossPartition: strings.TrimSpace(groups[0][1]) != "",
+			selectQuery:      strings.ReplaceAll(strings.ReplaceAll(query, groups[0][1], ""), groups[0][2], ""),
+		}
+		if err := stmt.parse(groups[0][2]); err != nil {
+			return nil, err
+		}
+		return stmt, stmt.validate()
+	}
+	// if re := reUpdate; re.MatchString(query) {
+	// 	groups := re.FindAllStringSubmatch(query, -1)
+	// 	stmt := &StmtUpdate{
+	// 		Stmt:      &Stmt{query: query, conn: c, numInput: 0},
+	// 		dbName:    strings.TrimSpace(groups[0][1]),
+	// 		collName:  strings.TrimSpace(groups[0][2]),
+	// 		updateStr: strings.TrimSpace(groups[0][3]),
+	// 		idStr:     strings.TrimSpace(groups[0][4]),
 	// 	}
-	// 	req := c.buildJsonRequest(method, url, params)
-	// 	req = c.addAuthHeader(req, method, "docs", "dbs/dbtemp/colls/tbltemp/docs/1")
-	// 	pkHeader := []interface{}{"user"}
-	// 	jsPkHeader, _ := json.Marshal(pkHeader)
-	// 	req.Header.Set("x-ms-documentdb-partitionkey", string(jsPkHeader))
-	// 	resp := c.client.Do(req)
-	// 	fmt.Println(resp.Error())
-	// 	if resp.Error() == nil {
-	// 		fmt.Println(resp.StatusCode())
-	// 		body, _ := resp.Body()
-	// 		fmt.Println(string(body))
+	// 	if err := stmt.parse(); err != nil {
+	// 		return nil, err
 	// 	}
+	// 	return stmt, stmt.validate()
 	// }
 
 	return nil, fmt.Errorf("invalid query: %s", query)
@@ -189,7 +177,7 @@ func (s *Stmt) validateWithOpts() error {
 	return nil
 }
 
-// NumInput implements driver.Stmt.Close.
+// Close implements driver.Stmt.Close.
 func (s *Stmt) Close() error {
 	return nil
 }

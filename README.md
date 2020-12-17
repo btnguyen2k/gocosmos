@@ -15,6 +15,6 @@ Features:
 - Items/Documents:
   - [x] INSERT query
   - [x] UPSERT query
-  - [ ] SELECT query
+  - [x] SELECT query
   - [ ] UPDATE query
   - [x] DELETE query

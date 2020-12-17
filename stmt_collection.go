@@ -264,7 +264,7 @@ func (r *RowsListCollections) Close() error {
 
 // Next implements driver.Rows.Next.
 func (r *RowsListCollections) Next(dest []driver.Value) error {
-	if r.cursorCount >= len(r.collections) {
+	if r.cursorCount >= r.count {
 		return io.EOF
 	}
 	rowData := r.collections[r.cursorCount]
