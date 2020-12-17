@@ -2,10 +2,12 @@ package go_cosmos
 
 import (
 	"fmt"
+	"math/rand"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestNewRestClient(t *testing.T) {
@@ -827,6 +829,150 @@ func TestRestClient_QueryDocumentsCrossPartition(t *testing.T) {
 	query.DbName = "db_not_found"
 	query.CollName = collname
 	if result := client.QueryDocuments(query); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+}
+
+func TestRestClient_ListDocuments(t *testing.T) {
+	name := "TestRestClient_ListDocuments"
+	client := _newRestClient(t, name)
+
+	dbname := "mydb"
+	collname := "mytable"
+	client.DeleteDatabase(dbname)
+	client.CreateDatabase(DatabaseSpec{Id: dbname, MaxRu: 10000})
+	client.CreateCollection(CollectionSpec{
+		DbName:           dbname,
+		CollName:         collname,
+		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/username"}, "kind": "Hash"},
+		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
+	})
+	totalRu := 0.0
+	for i := 0; i < 100; i++ {
+		docInfo := map[string]interface{}{"id": fmt.Sprintf("%02d", i), "username": "user", "email": "user" + strconv.Itoa(i) + "@domain.com", "grade": i, "active": i%10 == 0}
+		if result := client.CreateDocument(DocumentSpec{DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"}, DocumentData: docInfo}); result.Error() != nil {
+			t.Fatalf("%s failed: %s", name, result.Error())
+		} else {
+			totalRu += result.RequestCharge
+		}
+	}
+	fmt.Printf("%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
+
+	rand.Seed(time.Now().UnixNano())
+	removed := make(map[int]bool)
+	for i := 0; i < 5; i++ {
+		id := rand.Intn(100)
+		removed[id] = true
+		client.DeleteDocument(DocReq{DbName: dbname, CollName: collname, DocId: fmt.Sprintf("%02d", rand.Intn(100)), PartitionKeyValues: []interface{}{"user"}})
+	}
+
+	req := ListDocsReq{DbName: dbname, CollName: collname, MaxItemCount: 10}
+	var result *RespListDocs
+	documents := make([]DocInfo, 0)
+	totalRu = 0.0
+	for result = client.ListDocuments(req); result.Error() == nil; {
+		totalRu += result.RequestCharge
+		documents = append(documents, result.Documents...)
+		if result.ContinuationToken == "" {
+			break
+		}
+		req.ContinuationToken = result.ContinuationToken
+		result = client.ListDocuments(req)
+	}
+	fmt.Printf("%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
+	if result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	}
+	if len(documents) != 100-len(removed) {
+		t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 100-len(removed), len(documents))
+	}
+
+	req.DbName = dbname
+	req.CollName = "table_not_found"
+	if result := client.ListDocuments(req); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+
+	client.DeleteDatabase("db_not_found")
+	req.DbName = "db_not_found"
+	req.CollName = collname
+	if result := client.ListDocuments(req); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+}
+
+func TestRestClient_ListDocumentsCrossPartition(t *testing.T) {
+	name := "TestRestClient_ListDocumentsCrossPartition"
+	client := _newRestClient(t, name)
+
+	dbname := "mydb"
+	collname := "mytable"
+	client.DeleteDatabase(dbname)
+	client.CreateDatabase(DatabaseSpec{Id: dbname, MaxRu: 10000})
+	client.CreateCollection(CollectionSpec{
+		DbName:           dbname,
+		CollName:         collname,
+		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/username"}, "kind": "Hash"},
+		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
+	})
+	totalRu := 0.0
+	for i := 0; i < 100; i++ {
+		docInfo := map[string]interface{}{"id": fmt.Sprintf("%02d", i), "username": "user" + strconv.Itoa(i%4), "email": "user" + strconv.Itoa(i) + "@domain.com", "grade": i, "active": i%10 == 0}
+		if result := client.CreateDocument(DocumentSpec{DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user" + strconv.Itoa(i%4)}, DocumentData: docInfo}); result.Error() != nil {
+			t.Fatalf("%s failed: %s", name, result.Error())
+		} else {
+			totalRu += result.RequestCharge
+		}
+	}
+	fmt.Printf("%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
+
+	rand.Seed(time.Now().UnixNano())
+	removed := make(map[int]bool)
+	for i := 0; i < 5; i++ {
+		id := rand.Intn(100)
+		removed[id] = true
+		client.DeleteDocument(DocReq{DbName: dbname, CollName: collname, DocId: fmt.Sprintf("%02d", id), PartitionKeyValues: []interface{}{"user" + strconv.Itoa(id%4)}})
+	}
+
+	req := ListDocsReq{DbName: dbname, CollName: collname, MaxItemCount: 10}
+	var result *RespListDocs
+	documents := make([]DocInfo, 0)
+	totalRu = 0.0
+	for result = client.ListDocuments(req); result.Error() == nil; {
+		totalRu += result.RequestCharge
+		documents = append(documents, result.Documents...)
+		if result.ContinuationToken == "" {
+			break
+		}
+		req.ContinuationToken = result.ContinuationToken
+		result = client.ListDocuments(req)
+	}
+	fmt.Printf("%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
+	if result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	}
+	if len(documents) != 100-len(removed) {
+		t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 100-len(removed), len(documents))
+	}
+
+	req.DbName = dbname
+	req.CollName = "table_not_found"
+	if result := client.ListDocuments(req); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+
+	client.DeleteDatabase("db_not_found")
+	req.DbName = "db_not_found"
+	req.CollName = collname
+	if result := client.ListDocuments(req); result.CallErr != nil {
 		t.Fatalf("%s failed: %s", name, result.CallErr)
 	} else if result.StatusCode != 404 {
 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)

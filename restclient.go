@@ -464,6 +464,9 @@ type QueryReq struct {
 	SessionToken          string // string token used with session level consistency
 }
 
+// QueryDocuments invokes CosmosDB API to query a collection for documents.
+//
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/query-documents
 func (c *RestClient) QueryDocuments(query QueryReq) *RespQueryDocs {
 	method := "POST"
 	url := c.endpoint + "/dbs/" + query.DbName + "/colls/" + query.CollName + "/docs"
@@ -491,6 +494,54 @@ func (c *RestClient) QueryDocuments(query QueryReq) *RespQueryDocs {
 	result := &RespQueryDocs{RestReponse: c.buildRestReponse(resp)}
 	if result.CallErr == nil {
 		result.ContinuationToken = result.RespHeader["X-MS-CONTINUATION"]
+		result.CallErr = json.Unmarshal(result.RespBody, &result)
+	}
+	return result
+}
+
+// QueryReq specifies a list documents request.
+type ListDocsReq struct {
+	DbName, CollName    string
+	MaxItemCount        int
+	ContinuationToken   string
+	ConsistencyLevel    string // accepted values: "", "Strong", "Bounded", "Session" or "Eventual"
+	SessionToken        string // string token used with session level consistency
+	NotMatchEtag        string
+	PartitionKeyRangeId string
+}
+
+// ListDocuments invokes CosmosDB API to query read-feed for documents.
+//
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/list-documents
+func (c *RestClient) ListDocuments(r ListDocsReq) *RespListDocs {
+	method := "GET"
+	url := c.endpoint + "/dbs/" + r.DbName + "/colls/" + r.CollName + "/docs"
+	req := c.buildJsonRequest(method, url, nil)
+	req = c.addAuthHeader(req, method, "docs", "dbs/"+r.DbName+"/colls/"+r.CollName)
+	if r.MaxItemCount > 0 {
+		req.Header.Set("X-Ms-Max-Item-Count", strconv.Itoa(r.MaxItemCount))
+	}
+	if r.ContinuationToken != "" {
+		req.Header.Set("X-Ms-Continuation", r.ContinuationToken)
+	}
+	if r.ConsistencyLevel != "" {
+		req.Header.Set("X-Ms-Consistency-Level", r.ConsistencyLevel)
+	}
+	if r.SessionToken != "" {
+		req.Header.Set("X-Ms-Session-Token", r.SessionToken)
+	}
+	if r.NotMatchEtag != "" {
+		req.Header.Set("If-None-Match", r.NotMatchEtag)
+	}
+	if r.PartitionKeyRangeId != "" {
+		req.Header.Set("X-Ms-Documentdb-PartitionKeyRangeId", r.PartitionKeyRangeId)
+	}
+
+	resp := c.client.Do(req)
+	result := &RespListDocs{RestReponse: c.buildRestReponse(resp)}
+	if result.CallErr == nil {
+		result.ContinuationToken = result.RespHeader["X-MS-CONTINUATION"]
+		result.Etag = result.RespHeader["ETAG"]
 		result.CallErr = json.Unmarshal(result.RespBody, &result)
 	}
 	return result
@@ -639,4 +690,13 @@ type RespQueryDocs struct {
 	Count             int64     `json:"_count"` // number of documents returned from the operation
 	Documents         []DocInfo `json:"Documents"`
 	ContinuationToken string    `json:"-"`
+}
+
+// RespListDocs captures the response from ListDocuments call.
+type RespListDocs struct {
+	RestReponse       `json:"-"`
+	Count             int64     `json:"_count"` // number of documents returned from the operation
+	Documents         []DocInfo `json:"Documents"`
+	ContinuationToken string    `json:"-"`
+	Etag              string    `json:"-"` // logical sequence number (LSN) of last document returned in the response
 }
