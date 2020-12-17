@@ -61,8 +61,8 @@ func (s *StmtCreateDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 	restResult := s.conn.restClient.CreateDatabase(DatabaseSpec{Id: s.dbName, Ru: s.ru, MaxRu: s.maxru})
 	result := &ResultCreateDatabase{
 		Successful: restResult.Error() == nil,
-		StatusCode: restResult.StatusCode,
-		InsertId:   restResult.Rid,
+		// StatusCode: restResult.StatusCode,
+		InsertId: restResult.Rid,
 	}
 	err := restResult.Error()
 	switch restResult.StatusCode {
@@ -82,15 +82,15 @@ func (s *StmtCreateDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 type ResultCreateDatabase struct {
 	// Successful flags if the operation was successful or not.
 	Successful bool
-	// StatusCode is the HTTP status code returned from CosmosDB.
-	StatusCode int
+	// // StatusCode is the HTTP status code returned from CosmosDB.
+	// StatusCode int
 	// InsertId holds the "_rid" if the operation was successful.
 	InsertId string
 }
 
 // LastInsertId implements driver.Result.LastInsertId.
 func (r *ResultCreateDatabase) LastInsertId() (int64, error) {
-	return 0, errors.New("this operation is not supported, please read _rid value from field InsertId")
+	return 0, fmt.Errorf("this operation is not supported. {LastInsertId:%s}", r.InsertId)
 }
 
 // RowsAffected implements driver.Result.RowsAffected.

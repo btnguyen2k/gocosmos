@@ -2,15 +2,11 @@ package go_cosmos
 
 import (
 	"database/sql/driver"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"regexp"
-	"sort"
 	"strconv"
-
-	"github.com/btnguyen2k/consu/reddo"
 )
 
 // StmtCreateCollection implements "CREATE COLLECTION" operation.
@@ -98,40 +94,32 @@ func (s *StmtCreateCollection) Query(_ []driver.Value) (driver.Rows, error) {
 // Exec implements driver.Stmt.Exec.
 // Upon successful call, this function returns (*ResultCreateCollection, nil).
 func (s *StmtCreateCollection) Exec(_ []driver.Value) (driver.Result, error) {
-	method := "POST"
-	url := s.conn.endpoint + "/dbs/" + s.dbName + "/colls"
-	partitionKeyInfo := map[string]interface{}{
-		"paths": []string{s.pk},
-		"kind":  "Hash",
-	}
+	spec := CollectionSpec{DbName: s.dbName, CollName: s.collName, Ru: s.ru, MaxRu: s.maxru,
+		PartitionKeyInfo: map[string]interface{}{
+			"paths": []string{s.pk},
+			"kind":  "Hash",
+		}}
 	if s.isLargePk {
-		partitionKeyInfo["Version"] = 2
+		spec.PartitionKeyInfo["Version"] = 2
 	}
-	params := map[string]interface{}{"id": s.collName, "partitionKey": partitionKeyInfo}
 	if len(s.uk) > 0 {
 		uniqueKeys := make([]interface{}, 0)
 		for _, uk := range s.uk {
 			uniqueKeys = append(uniqueKeys, map[string][]string{"paths": uk})
 		}
-		params["uniqueKeyPolicy"] = map[string]interface{}{"uniqueKeys": uniqueKeys}
-	}
-	req := s.conn.buildJsonRequest(method, url, params)
-	req = s.conn.addAuthHeader(req, method, "colls", "dbs/"+s.dbName)
-	if s.ru > 0 {
-		req.Header.Set("x-ms-offer-throughput", strconv.Itoa(s.ru))
-	}
-	if s.maxru > 0 {
-		req.Header.Set("x-ms-cosmos-offer-autopilot-settings", fmt.Sprintf(`{"maxThroughput":%d}`, s.maxru))
+		spec.UniqueKeyPolicy = map[string]interface{}{"uniqueKeys": uniqueKeys}
 	}
 
-	resp := s.conn.client.Do(req)
-	err, statusCode := s.buildError(resp)
-	result := &ResultCreateCollection{Successful: err == nil, StatusCode: statusCode}
-	if err == nil {
-		rid, _ := resp.GetValueAsType("_rid", reddo.TypeString)
-		result.InsertId = rid.(string)
+	restResult := s.conn.restClient.CreateCollection(spec)
+	result := &ResultCreateCollection{
+		Successful: restResult.Error() == nil,
+		// StatusCode:   restResult.StatusCode,
+		InsertId: restResult.Rid,
+		// RUCharge:     restResult.RequestCharge,
+		// SessionToken: restResult.SessionToken,
 	}
-	switch statusCode {
+	err := restResult.Error()
+	switch restResult.StatusCode {
 	case 403:
 		err = ErrForbidden
 	case 404:
@@ -150,15 +138,20 @@ func (s *StmtCreateCollection) Exec(_ []driver.Value) (driver.Result, error) {
 type ResultCreateCollection struct {
 	// Successful flags if the operation was successful or not.
 	Successful bool
-	// StatusCode is the HTTP status code returned from CosmosDB.
-	StatusCode int
+	// // StatusCode is the HTTP status code returned from CosmosDB.
+	// StatusCode int
 	// InsertId holds the "_rid" if the operation was successful.
 	InsertId string
+	// // RUCharge holds the number of request units consumed by the operation.
+	// RUCharge float64
+	// // SessionToken is the string token used with session level consistency.
+	// // Clients must save this value and set it for subsequent read requests for session consistency.
+	// SessionToken string
 }
 
 // LastInsertId implements driver.Result.LastInsertId.
 func (r *ResultCreateCollection) LastInsertId() (int64, error) {
-	return 0, errors.New("this operation is not supported, please read _rid value from field InsertId")
+	return 0, fmt.Errorf("this operation is not supported. {LastInsertId:%s}", r.InsertId)
 }
 
 // RowsAffected implements driver.Result.RowsAffected.
@@ -192,14 +185,9 @@ func (s *StmtDropCollection) Query(_ []driver.Value) (driver.Rows, error) {
 // Exec implements driver.Stmt.Exec.
 // This function always return a nil driver.Result.
 func (s *StmtDropCollection) Exec(_ []driver.Value) (driver.Result, error) {
-	method := "DELETE"
-	url := s.conn.endpoint + "/dbs/" + s.dbName + "/colls/" + s.collName
-	req := s.conn.buildJsonRequest(method, url, nil)
-	req = s.conn.addAuthHeader(req, method, "colls", "dbs/"+s.dbName+"/colls/"+s.collName)
-
-	resp := s.conn.client.Do(req)
-	err, statusCode := s.buildError(resp)
-	switch statusCode {
+	restResult := s.conn.restClient.DeleteCollection(s.dbName, s.collName)
+	err := restResult.Error()
+	switch restResult.StatusCode {
 	case 403:
 		err = ErrForbidden
 	case 404:
@@ -238,25 +226,17 @@ func (s *StmtListCollections) Exec(_ []driver.Value) (driver.Result, error) {
 
 // Query implements driver.Stmt.Query.
 func (s *StmtListCollections) Query(_ []driver.Value) (driver.Rows, error) {
-	method := "GET"
-	url := s.conn.endpoint + "/dbs/" + s.dbName + "/colls"
-	req := s.conn.buildJsonRequest(method, url, nil)
-	req = s.conn.addAuthHeader(req, method, "colls", "dbs/"+s.dbName)
-
-	resp := s.conn.client.Do(req)
-	err, statusCode := s.buildError(resp)
+	restResult := s.conn.restClient.ListCollections(s.dbName)
+	err := restResult.Error()
 	var rows driver.Rows
 	if err == nil {
-		body, _ := resp.Body()
-		var listCollectionResult listCollectionResult
-		err = json.Unmarshal(body, &listCollectionResult)
-		sort.Slice(listCollectionResult.DocumentCollections, func(i, j int) bool {
-			// sort databases by id
-			return listCollectionResult.DocumentCollections[i].Id < listCollectionResult.DocumentCollections[j].Id
-		})
-		rows = &RowsListCollections{result: listCollectionResult, cursorCount: 0}
+		rows = &RowsListCollections{
+			count:       int(restResult.Count),
+			collections: restResult.Collections,
+			cursorCount: 0,
+		}
 	}
-	switch statusCode {
+	switch restResult.StatusCode {
 	case 403:
 		err = ErrForbidden
 	case 404:
@@ -265,29 +245,10 @@ func (s *StmtListCollections) Query(_ []driver.Value) (driver.Rows, error) {
 	return rows, err
 }
 
-type collectionInfo struct {
-	Id             string      `json:"id"`
-	IndexingPolicy interface{} `json:"indexingPolicy"`
-	Rid            string      `json:"_rid"`
-	Ts             int         `json:"_ts"`
-	Self           string      `json:"_self"`
-	Etag           string      `json:"_etag"`
-	Docs           string      `json:"_docs"`
-	Sprocs         string      `json:"_sprocs"`
-	Triggers       string      `json:"_triggers"`
-	Udfs           string      `json:"_udfs"`
-	Conflicts      string      `json:"_conflicts"`
-}
-
-type listCollectionResult struct {
-	Rid                 string           `json:"_rid"`
-	DocumentCollections []collectionInfo `json:"DocumentCollections"`
-	Count               int              `json:"_count"`
-}
-
 // RowsListCollections captures the result from LIST COLLECTIONS operation.
 type RowsListCollections struct {
-	result      listCollectionResult
+	count       int
+	collections []CollInfo
 	cursorCount int
 }
 
@@ -303,10 +264,10 @@ func (r *RowsListCollections) Close() error {
 
 // Next implements driver.Rows.Next.
 func (r *RowsListCollections) Next(dest []driver.Value) error {
-	if r.cursorCount >= len(r.result.DocumentCollections) {
+	if r.cursorCount >= len(r.collections) {
 		return io.EOF
 	}
-	rowData := r.result.DocumentCollections[r.cursorCount]
+	rowData := r.collections[r.cursorCount]
 	r.cursorCount++
 	dest[0] = rowData.Id
 	dest[1] = rowData.IndexingPolicy

@@ -44,12 +44,12 @@ func Test_parseQuery_CreateDatabase(t *testing.T) {
 		ru, maxru   int
 	}
 	testData := map[string]testStruct{
-		"CREATE DATABASE db1":                                 {dbName: "db1", ifNotExists: false, ru: 0, maxru: 0},
-		"create database db-2 WITH ru=100":                    {dbName: "db-2", ifNotExists: false, ru: 100, maxru: 0},
-		"CREATE DATABASE db_3 with maxru=100":                 {dbName: "db_3", ifNotExists: false, ru: 0, maxru: 100},
-		"CREATE DATABASE IF NOT EXISTS db-4-0":                {dbName: "db-4-0", ifNotExists: true, ru: 0, maxru: 0},
-		"create database IF NOT EXISTS db-5_0 with ru=100":    {dbName: "db-5_0", ifNotExists: true, ru: 100, maxru: 0},
-		"CREATE DATABASE if not exists db_6-0 WITH maxru=100": {dbName: "db_6-0", ifNotExists: true, ru: 0, maxru: 100},
+		"CREATE DATABASE db1":                                  {dbName: "db1", ifNotExists: false, ru: 0, maxru: 0},
+		"create database\ndb-2\r\nWITH ru=100":                 {dbName: "db-2", ifNotExists: false, ru: 100, maxru: 0},
+		"CREATE\nDATABASE\r\ndb_3\nwith\r\nmaxru=100":          {dbName: "db_3", ifNotExists: false, ru: 0, maxru: 100},
+		"CREATE DATABASE\r\nIF NOT EXISTS\ndb-4-0":             {dbName: "db-4-0", ifNotExists: true, ru: 0, maxru: 0},
+		"create\ndatabase IF NOT EXISTS db-5_0 with\r\nru=100": {dbName: "db-5_0", ifNotExists: true, ru: 100, maxru: 0},
+		"CREATE DATABASE if not exists db_6-0 WITH maxru=100":  {dbName: "db_6-0", ifNotExists: true, ru: 0, maxru: 100},
 	}
 	for query, data := range testData {
 		if stmt, err := parseQuery(nil, query); err != nil {
@@ -88,10 +88,10 @@ func Test_parseQuery_DropDatabase(t *testing.T) {
 		ifExists bool
 	}
 	testData := map[string]testStruct{
-		"DROP DATABASE db1":              {dbName: "db1", ifExists: false},
-		"DROP database db-2":             {dbName: "db-2", ifExists: false},
-		"drop database IF EXISTS db_3":   {dbName: "db_3", ifExists: true},
-		"Drop Database If Exists db-4_0": {dbName: "db-4_0", ifExists: true},
+		"DROP DATABASE db1":                {dbName: "db1", ifExists: false},
+		"DROP\ndatabase\r\ndb-2":           {dbName: "db-2", ifExists: false},
+		"drop database\r\nIF\nEXISTS db_3": {dbName: "db_3", ifExists: true},
+		"Drop Database If Exists db-4_0":   {dbName: "db-4_0", ifExists: true},
 	}
 
 	for query, data := range testData {
@@ -109,7 +109,7 @@ func Test_parseQuery_DropDatabase(t *testing.T) {
 
 func Test_parseQuery_ListDatabases(t *testing.T) {
 	name := "Test_parseQuery_ListDatabases"
-	testData := []string{"LIST DATABASES", "list database"}
+	testData := []string{"LIST\nDATABASES", "list\r\n database"}
 
 	for _, query := range testData {
 		if stmt, err := parseQuery(nil, query); err != nil {
@@ -135,8 +135,8 @@ func Test_parseQuery_CreateCollection(t *testing.T) {
 	}
 	testData := map[string]testStruct{
 		"CREATE COLLECTION db1.table1 WITH pk=/id":                                                  {dbName: "db1", collName: "table1", ifNotExists: false, ru: 0, maxru: 0, pk: "/id", isLargePk: false, uk: nil},
-		"create table db-2.table_2 WITH PK=/email WITH ru=100":                                      {dbName: "db-2", collName: "table_2", ifNotExists: false, ru: 100, maxru: 0, pk: "/email", isLargePk: false, uk: nil},
-		"CREATE collection IF NOT EXISTS db_3.table-3 with largePK=/id WITH maxru=100":              {dbName: "db_3", collName: "table-3", ifNotExists: true, ru: 0, maxru: 100, pk: "/id", isLargePk: true, uk: nil},
+		"create\ntable\r\ndb-2.table_2 WITH\r\nPK=/email WITH\nru=100":                              {dbName: "db-2", collName: "table_2", ifNotExists: false, ru: 100, maxru: 0, pk: "/email", isLargePk: false, uk: nil},
+		"CREATE collection\nIF\nNOT\t\nEXISTS\r\n\tdb_3.table-3 with largePK=/id WITH\tmaxru=100":   {dbName: "db_3", collName: "table-3", ifNotExists: true, ru: 0, maxru: 100, pk: "/id", isLargePk: true, uk: nil},
 		"create TABLE if not exists db-0_1.table_0-1 WITH LARGEpk=/a/b/c with uk=/a:/b,/c/d;/e/f/g": {dbName: "db-0_1", collName: "table_0-1", ifNotExists: true, ru: 0, maxru: 0, pk: "/a/b/c", isLargePk: false, uk: [][]string{{"/a"}, {"/b", "/c/d"}, {"/e/f/g"}}},
 	}
 	for query, data := range testData {
@@ -188,10 +188,10 @@ func Test_parseQuery_DropCollection(t *testing.T) {
 		ifExists bool
 	}
 	testData := map[string]testStruct{
-		"DROP COLLECTION db1.table1":             {dbName: "db1", collName: "table1", ifExists: false},
-		"DROP table db-2.table_2":                {dbName: "db-2", collName: "table_2", ifExists: false},
-		"drop collection IF EXISTS db_3.table-3": {dbName: "db_3", collName: "table-3", ifExists: true},
-		"Drop Table If Exists db-4_0.table_4-0":  {dbName: "db-4_0", collName: "table_4-0", ifExists: true},
+		"DROP COLLECTION db1.table1":               {dbName: "db1", collName: "table1", ifExists: false},
+		"DROP\t\ntable\r\n\tdb-2.table_2":          {dbName: "db-2", collName: "table_2", ifExists: false},
+		"drop collection\nIF EXISTS\tdb_3.table-3": {dbName: "db_3", collName: "table-3", ifExists: true},
+		"Drop Table If Exists db-4_0.table_4-0":    {dbName: "db-4_0", collName: "table_4-0", ifExists: true},
 	}
 
 	for query, data := range testData {
@@ -222,10 +222,10 @@ func Test_parseQuery_DropCollection(t *testing.T) {
 func Test_parseQuery_ListCollections(t *testing.T) {
 	name := "Test_parseQuery_ListCollections"
 	testData := map[string]string{
-		"LIST COLLECTIONS from db1": "db1",
-		"list collection FROM db-2": "db-2",
-		"LIST tables FROM db_3":     "db_3",
-		"list TABLE from db-4_0":    "db-4_0",
+		"LIST COLLECTIONS from db1":        "db1",
+		"list\n\tcollection FROM\r\n db-2": "db-2",
+		"LIST tables\r\n\tFROM\tdb_3":      "db_3",
+		"list TABLE from db-4_0":           "db-4_0",
 	}
 
 	for query, data := range testData {
@@ -248,12 +248,19 @@ func Test_parseQuery_Insert(t *testing.T) {
 		values   []interface{}
 	}
 	testData := map[string]testStruct{
-		`INSERT INTO db1.table1 (a, b, c, d, e, f) VALUES (null, 1.0, true, "\"a string 'with' \\\"quote\\\"\"", "{\"key\":\"value\"}", "[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]")`: {
+		`INSERT INTO
+db1.table1 (a, b, c, d, e, 
+f) VALUES
+	(null, 1.0, 
+true, "\"a string 'with' \\\"quote\\\"\"", "{\"key\":\"value\"}", "[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]")`: {
 			dbName: "db1", collName: "table1", fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{
 				nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`},
 			},
 		},
-		`INSERT INTO db-2.table_2 (a,b,c) VALUES ($1, :3, @2)`: {
+		`INSERT 
+INTO db-2.table_2 (
+a,b,c) VALUES (
+$1, :3, @2)`: {
 			dbName: "db-2", collName: "table_2", fields: []string{"a", "b", "c"}, values: []interface{}{
 				placeholder{1}, placeholder{3}, placeholder{2},
 			},
@@ -302,12 +309,20 @@ func Test_parseQuery_Upsert(t *testing.T) {
 		values   []interface{}
 	}
 	testData := map[string]testStruct{
-		`UPSERT INTO db1.table1 (a, b, c, d, e, f) VALUES (null, 1.0, true, "\"a string 'with' \\\"quote\\\"\"", "{\"key\":\"value\"}", "[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]")`: {
+		`UPSERT INTO 
+db1.table1 (a, 
+b, c, d, e,
+f) VALUES
+	(null, 1.0, true,
+  "\"a string 'with' \\\"quote\\\"\"", "{\"key\":\"value\"}", "[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]")`: {
 			dbName: "db1", collName: "table1", fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{
 				nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`},
 			},
 		},
-		`UPSERT INTO db-2.table_2 (a,b,c) VALUES ($1, :3, @2)`: {
+		`UPSERT 
+INTO db-2.table_2 (
+a,b,c) VALUES ($1,
+	:3, @2)`: {
 			dbName: "db-2", collName: "table_2", fields: []string{"a", "b", "c"}, values: []interface{}{
 				placeholder{1}, placeholder{3}, placeholder{2},
 			},
@@ -356,9 +371,16 @@ func Test_parseQuery_Delete(t *testing.T) {
 		id       interface{}
 	}
 	testData := map[string]testStruct{
-		`DELETE FROM db1.table1 WHERE id=abc`:      {dbName: "db1", collName: "table1", idStr: "abc", id: nil},
-		`DELETE FROM db-2.table_2 WHERE id="def"`:  {dbName: "db-2", collName: "table_2", idStr: "def", id: nil},
-		`DELETE FROM db_3-0.table-3_0 WHERE id=@2`: {dbName: "db_3-0", collName: "table-3_0", idStr: "@2", id: placeholder{2}},
+		`DELETE FROM 
+db1.table1 WHERE 
+	id=abc`: {dbName: "db1", collName: "table1", idStr: "abc", id: nil},
+		`
+	DELETE 
+FROM db-2.table_2
+	WHERE     id="def"`: {dbName: "db-2", collName: "table_2", idStr: "def", id: nil},
+		`DELETE FROM 
+db_3-0.table-3_0 WHERE 
+	id=@2`: {dbName: "db_3-0", collName: "table-3_0", idStr: "@2", id: placeholder{2}},
 	}
 	for query, data := range testData {
 		if stmt, err := parseQuery(nil, query); err != nil {

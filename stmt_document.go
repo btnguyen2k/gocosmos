@@ -8,8 +8,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	"github.com/btnguyen2k/consu/reddo"
 )
 
 var (
@@ -122,9 +120,13 @@ func (s *StmtInsert) validate() error {
 // Exec implements driver.Stmt.Exec.
 // Upon successful call, this function returns (*ResultInsert, nil).
 func (s *StmtInsert) Exec(args []driver.Value) (driver.Result, error) {
-	method := "POST"
-	url := s.conn.endpoint + "/dbs/" + s.dbName + "/colls/" + s.collName + "/docs"
-	params := make(map[string]interface{})
+	spec := DocumentSpec{
+		DbName:             s.dbName,
+		CollName:           s.collName,
+		IsUpsert:           s.isUpsert,
+		PartitionKeyValues: []interface{}{args[s.numInput-1]}, // expect the last argument is partition key value
+		DocumentData:       make(map[string]interface{}),
+	}
 	for i := 0; i < len(s.fields); i++ {
 		switch s.values[i].(type) {
 		case placeholder:
@@ -132,29 +134,23 @@ func (s *StmtInsert) Exec(args []driver.Value) (driver.Result, error) {
 			if ph.index <= 0 || ph.index >= len(args) {
 				return nil, fmt.Errorf("invalid value index %d", ph.index)
 			}
-			params[s.fields[i]] = args[ph.index-1]
+			spec.DocumentData[s.fields[i]] = args[ph.index-1]
 		default:
-			params[s.fields[i]] = s.values[i]
+			spec.DocumentData[s.fields[i]] = s.values[i]
 		}
 	}
-	req := s.conn.buildJsonRequest(method, url, params)
-	req = s.conn.addAuthHeader(req, method, "docs", "dbs/"+s.dbName+"/colls/"+s.collName)
-	jsPkHeader, _ := json.Marshal([]interface{}{args[s.numInput-1]}) // expect the last argument is partition key value
-	req.Header.Set("x-ms-documentdb-partitionkey", string(jsPkHeader))
-	if s.isUpsert {
-		req.Header.Set("x-ms-documentdb-is-upsert", "true")
+	restResult := s.conn.restClient.CreateDocument(spec)
+	result := &ResultInsert{
+		Successful: restResult.Error() == nil,
+		// StatusCode:   restResult.StatusCode,
+		// SessionToken: restResult.SessionToken,
+		// RUCharge:     restResult.RequestCharge,
 	}
-
-	resp := s.conn.client.Do(req)
-	err, statusCode := s.buildError(resp)
-	result := &ResultInsert{Successful: err == nil, StatusCode: statusCode}
-	if err == nil {
-		result.RUCharge, _ = strconv.ParseFloat(resp.HttpResponse().Header.Get("x-ms-request-charge"), 64)
-		result.SessionToken = resp.HttpResponse().Header.Get("x-ms-session-token")
-		rid, _ := resp.GetValueAsType("_rid", reddo.TypeString)
-		result.InsertId = rid.(string)
+	if restResult.DocInfo != nil {
+		result.InsertId, _ = restResult.DocInfo["_rid"].(string)
 	}
-	switch statusCode {
+	err := restResult.Error()
+	switch restResult.StatusCode {
 	case 403:
 		err = ErrForbidden
 	case 404:
@@ -175,20 +171,20 @@ func (s *StmtInsert) Query(args []driver.Value) (driver.Rows, error) {
 type ResultInsert struct {
 	// Successful flags if the operation was successful or not.
 	Successful bool
-	// StatusCode is the HTTP status code returned from CosmosDB.
-	StatusCode int
+	// // StatusCode is the HTTP status code returned from CosmosDB.
+	// StatusCode int
 	// InsertId holds the "_rid" if the operation was successful.
 	InsertId string
-	// RUCharge holds the number of request units consumed by the operation.
-	RUCharge float64
-	// SessionToken is the string token used with session level consistency.
-	// Clients must save this value and set it for subsequent read requests for session consistency.
-	SessionToken string
+	// // RUCharge holds the number of request units consumed by the operation.
+	// RUCharge float64
+	// // SessionToken is the string token used with session level consistency.
+	// // Clients must save this value and set it for subsequent read requests for session consistency.
+	// SessionToken string
 }
 
 // LastInsertId implements driver.Result.LastInsertId.
 func (r *ResultInsert) LastInsertId() (int64, error) {
-	return 0, errors.New("this operation is not supported, please read _rid value from field InsertId")
+	return 0, fmt.Errorf("this operation is not supported. {LastInsertId:%s}", r.InsertId)
 }
 
 // RowsAffected implements driver.Result.RowsAffected.
@@ -249,7 +245,6 @@ func (s *StmtDelete) validate() error {
 // Exec implements driver.Stmt.Exec.
 // This function always return nil driver.Result.
 func (s *StmtDelete) Exec(args []driver.Value) (driver.Result, error) {
-	method := "DELETE"
 	id := s.idStr
 	if s.id != nil {
 		ph := s.id.(placeholder)
@@ -258,21 +253,12 @@ func (s *StmtDelete) Exec(args []driver.Value) (driver.Result, error) {
 		}
 		id = fmt.Sprintf("%s", args[ph.index-1])
 	}
-	url := s.conn.endpoint + "/dbs/" + s.dbName + "/colls/" + s.collName + "/docs/" + id
-	req := s.conn.buildJsonRequest(method, url, nil)
-	req = s.conn.addAuthHeader(req, method, "docs", "dbs/"+s.dbName+"/colls/"+s.collName+"/docs/"+id)
-	pkHeader := []interface{}{args[s.numInput-1]} // expect the last argument is partition key value
-	jsPkHeader, _ := json.Marshal(pkHeader)
-	req.Header.Set("x-ms-documentdb-partitionkey", string(jsPkHeader))
-
-	resp := s.conn.client.Do(req)
-	err, statusCode := s.buildError(resp)
-	result := &ResultDelete{Successful: err == nil, StatusCode: statusCode}
-	if err == nil {
-		result.RUCharge, _ = strconv.ParseFloat(resp.HttpResponse().Header.Get("x-ms-request-charge"), 64)
-		result.SessionToken = resp.HttpResponse().Header.Get("x-ms-session-token")
-	}
-	switch statusCode {
+	restClient := s.conn.restClient.DeleteDocument(DocReq{DbName: s.dbName, CollName: s.collName, DocId: id,
+		PartitionKeyValues: []interface{}{args[s.numInput-1]}, // expect the last argument is partition key value
+	})
+	err := restClient.Error()
+	result := &ResultDelete{Successful: err == nil, StatusCode: restClient.StatusCode}
+	switch restClient.StatusCode {
 	case 403:
 		err = ErrForbidden
 	case 404:
@@ -299,11 +285,11 @@ type ResultDelete struct {
 	Successful bool
 	// StatusCode is the HTTP status code returned from CosmosDB.
 	StatusCode int
-	// RUCharge holds the number of request units consumed by the operation.
-	RUCharge float64
-	// SessionToken is the string token used with session level consistency.
-	// Clients must save this value and set it for subsequent read requests for session consistency.
-	SessionToken string
+	// // RUCharge holds the number of request units consumed by the operation.
+	// RUCharge float64
+	// // SessionToken is the string token used with session level consistency.
+	// // Clients must save this value and set it for subsequent read requests for session consistency.
+	// SessionToken string
 }
 
 // LastInsertId implements driver.Result.LastInsertId.

@@ -850,6 +850,13 @@ func TestRestClient_ListDocuments(t *testing.T) {
 		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
 	})
 	totalRu := 0.0
+
+	// if result := client.GetCollection(dbname, collname); result.Error() != nil {
+	// 	t.Fatalf("%s failed: %s", name, result.Error())
+	// } else {
+	// 	fmt.Println("\tCollection etag:", result.Etag, result.Ts)
+	// }
+
 	for i := 0; i < 100; i++ {
 		docInfo := map[string]interface{}{"id": fmt.Sprintf("%02d", i), "username": "user", "email": "user" + strconv.Itoa(i) + "@domain.com", "grade": i, "active": i%10 == 0}
 		if result := client.CreateDocument(DocumentSpec{DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"}, DocumentData: docInfo}); result.Error() != nil {
@@ -858,7 +865,15 @@ func TestRestClient_ListDocuments(t *testing.T) {
 			totalRu += result.RequestCharge
 		}
 	}
-	fmt.Printf("%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
+	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
+
+	// var collEtag string
+	// if result := client.GetCollection(dbname, collname); result.Error() != nil {
+	// 	t.Fatalf("%s failed: %s", name, result.Error())
+	// } else {
+	// 	collEtag = result.Etag
+	// 	fmt.Println("\tCollection etag:", result.Etag, result.Ts)
+	// }
 
 	rand.Seed(time.Now().UnixNano())
 	removed := make(map[int]bool)
@@ -866,7 +881,24 @@ func TestRestClient_ListDocuments(t *testing.T) {
 		id := rand.Intn(100)
 		removed[id] = true
 		client.DeleteDocument(DocReq{DbName: dbname, CollName: collname, DocId: fmt.Sprintf("%02d", rand.Intn(100)), PartitionKeyValues: []interface{}{"user"}})
+
+		id = rand.Intn(100)
+		if !removed[id] {
+			doc := DocumentSpec{
+				DbName:             dbname,
+				CollName:           collname,
+				IsUpsert:           true,
+				PartitionKeyValues: []interface{}{"user"},
+				DocumentData:       map[string]interface{}{"id": fmt.Sprintf("%02d", id), "username": "user", "email": "user" + strconv.Itoa(id) + "@domain.com", "grade": id, "active": i%10 == 0, "extra": time.Now()},
+			}
+			client.ReplaceDocument("", doc)
+		}
 	}
+	// if result := client.GetCollection(dbname, collname); result.Error() != nil {
+	// 	t.Fatalf("%s failed: %s", name, result.Error())
+	// } else {
+	// 	fmt.Println("\tCollection etag:", result.Etag, result.Ts)
+	// }
 
 	req := ListDocsReq{DbName: dbname, CollName: collname, MaxItemCount: 10}
 	var result *RespListDocs
@@ -881,7 +913,7 @@ func TestRestClient_ListDocuments(t *testing.T) {
 		req.ContinuationToken = result.ContinuationToken
 		result = client.ListDocuments(req)
 	}
-	fmt.Printf("%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
+	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
 	if result.Error() != nil {
 		t.Fatalf("%s failed: %s", name, result.Error())
 	}
@@ -930,7 +962,7 @@ func TestRestClient_ListDocumentsCrossPartition(t *testing.T) {
 			totalRu += result.RequestCharge
 		}
 	}
-	fmt.Printf("%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
+	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
 
 	rand.Seed(time.Now().UnixNano())
 	removed := make(map[int]bool)
@@ -938,6 +970,18 @@ func TestRestClient_ListDocumentsCrossPartition(t *testing.T) {
 		id := rand.Intn(100)
 		removed[id] = true
 		client.DeleteDocument(DocReq{DbName: dbname, CollName: collname, DocId: fmt.Sprintf("%02d", id), PartitionKeyValues: []interface{}{"user" + strconv.Itoa(id%4)}})
+
+		id = rand.Intn(100)
+		if !removed[id] {
+			doc := DocumentSpec{
+				DbName:             dbname,
+				CollName:           collname,
+				IsUpsert:           true,
+				PartitionKeyValues: []interface{}{"user" + strconv.Itoa(id%4)},
+				DocumentData:       map[string]interface{}{"id": fmt.Sprintf("%02d", id), "username": "user" + strconv.Itoa(id%4), "email": "user" + strconv.Itoa(id) + "@domain.com", "grade": id, "active": i%10 == 0, "extra": time.Now()},
+			}
+			client.ReplaceDocument("", doc)
+		}
 	}
 
 	req := ListDocsReq{DbName: dbname, CollName: collname, MaxItemCount: 10}
@@ -953,7 +997,7 @@ func TestRestClient_ListDocumentsCrossPartition(t *testing.T) {
 		req.ContinuationToken = result.ContinuationToken
 		result = client.ListDocuments(req)
 	}
-	fmt.Printf("%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
+	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
 	if result.Error() != nil {
 		t.Fatalf("%s failed: %s", name, result.Error())
 	}
