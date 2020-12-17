@@ -9,6 +9,7 @@ Features:
   - [x] LIST DATABASES
 - Tables/Collections
   - [x] CREATE TABLE/COLLECTION
+  - [ ] ALTER TABLE/COLLECTION
   - [x] DROP TABLE/COLLECTION
   - [x] LIST TABLES/COLLECTIONS
 - Items/Documents:

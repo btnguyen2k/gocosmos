@@ -175,7 +175,7 @@ func Test_Exec_DropDatabase(t *testing.T) {
 
 	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
 
-	// first drop should be succesful
+	// first drop should be successful
 	_, err := db.Exec("DROP DATABASE dbtemp")
 	if err != nil {
 		t.Fatalf("%s failed: %s", name, err)
@@ -333,6 +333,7 @@ func Test_Exec_DropCollection(t *testing.T) {
 	name := "Test_Exec_DropCollection"
 	db := _openDb(t, name)
 
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
 	db.Exec("CREATE COLLECTION IF NOT EXISTS dbtemp.tbltemp WITH pk=/id")
 
 	// first drop should be successful
@@ -432,16 +433,16 @@ func Test_Exec_Insert(t *testing.T) {
 	db := _openDb(t, name)
 
 	if _, err := db.Exec("DROP DATABASE IF EXISTS db_not_exists"); err != nil {
-		t.Fatalf("%s failed: %s", name, "DROP DATABASE IF EXISTS db_not_exists")
+		t.Fatalf("%s failed: %s", name, err)
 	}
 	if _, err := db.Exec("DROP DATABASE IF EXISTS dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, "DROP DATABASE IF EXISTS dbtemp")
+		t.Fatalf("%s failed: %s", name, err)
 	}
 	if _, err := db.Exec("CREATE DATABASE dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, "CREATE DATABASE dbtemp")
+		t.Fatalf("%s failed: %s", name, err)
 	}
 	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
-		t.Fatalf("%s failed: %s", name, "CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
+		t.Fatalf("%s failed: %s", name, err)
 	}
 
 	if result, err := db.Exec(`INSERT INTO dbtemp.tbltemp (id, username, email, grade, actived) VALUES ("\"1\"", "\"user\"", "\"user@domain1.com\"", 7, true)`, "user"); err != nil {
@@ -479,16 +480,16 @@ func Test_Exec_InsertPlaceholder(t *testing.T) {
 	db := _openDb(t, name)
 
 	if _, err := db.Exec("DROP DATABASE IF EXISTS db_not_exists"); err != nil {
-		t.Fatalf("%s failed: %s", name, "DROP DATABASE IF EXISTS db_not_exists")
+		t.Fatalf("%s failed: %s", name, err)
 	}
 	if _, err := db.Exec("DROP DATABASE IF EXISTS dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, "DROP DATABASE IF EXISTS dbtemp")
+		t.Fatalf("%s failed: %s", name, err)
 	}
 	if _, err := db.Exec("CREATE DATABASE dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, "CREATE DATABASE dbtemp")
+		t.Fatalf("%s failed: %s", name, err)
 	}
 	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
-		t.Fatalf("%s failed: %s", name, "CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
+		t.Fatalf("%s failed: %s", name, err)
 	}
 
 	if result, err := db.Exec(`INSERT INTO dbtemp.tbltemp (id, username, email, grade, actived, data) VALUES (:1, $2, @3, @4, $5, :6)`,
@@ -529,16 +530,16 @@ func Test_Exec_Upsert(t *testing.T) {
 	db := _openDb(t, name)
 
 	if _, err := db.Exec("DROP DATABASE IF EXISTS db_not_exists"); err != nil {
-		t.Fatalf("%s failed: %s", name, "DROP DATABASE IF EXISTS db_not_exists")
+		t.Fatalf("%s failed: %s", name, err)
 	}
 	if _, err := db.Exec("DROP DATABASE IF EXISTS dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, "DROP DATABASE IF EXISTS dbtemp")
+		t.Fatalf("%s failed: %s", name, err)
 	}
 	if _, err := db.Exec("CREATE DATABASE dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, "CREATE DATABASE dbtemp")
+		t.Fatalf("%s failed: %s", name, err)
 	}
 	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
-		t.Fatalf("%s failed: %s", name, "CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
+		t.Fatalf("%s failed: %s", name, err)
 	}
 
 	if result, err := db.Exec(`UPSERT INTO dbtemp.tbltemp (id, username, email, grade, actived) VALUES ("\"1\"", "\"user1\"", "\"user1@domain.com\"", 7, true)`, "user1"); err != nil {
@@ -591,16 +592,16 @@ func Test_Exec_UpsertPlaceholder(t *testing.T) {
 	db := _openDb(t, name)
 
 	if _, err := db.Exec("DROP DATABASE IF EXISTS db_not_exists"); err != nil {
-		t.Fatalf("%s failed: %s", name, "DROP DATABASE IF EXISTS db_not_exists")
+		t.Fatalf("%s failed: %s", name, err)
 	}
 	if _, err := db.Exec("DROP DATABASE IF EXISTS dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, "DROP DATABASE IF EXISTS dbtemp")
+		t.Fatalf("%s failed: %s", name, err)
 	}
 	if _, err := db.Exec("CREATE DATABASE dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, "CREATE DATABASE dbtemp")
+		t.Fatalf("%s failed: %s", name, err)
 	}
 	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
-		t.Fatalf("%s failed: %s", name, "CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
+		t.Fatalf("%s failed: %s", name, err)
 	}
 
 	if result, err := db.Exec(`UPSERT INTO dbtemp.tbltemp (id, username, email, grade, actived, data) VALUES (:1, $2, @3, @4, $5, :6)`,
@@ -720,25 +721,3 @@ func Test_Exec_Delete(t *testing.T) {
 		t.Fatalf("%s failed: expected ErrNotFound but received %#v", name, err)
 	}
 }
-
-// func Test_Exec_Qnd(t *testing.T) {
-// 	name := "Test_Exec_Qnd"
-// 	db := _openDb(t, name)
-//
-// 	db.Exec("DROP DATABASE db_not_exists")
-// 	db.Exec("DROP DATABASE dbtemp")
-// 	db.Exec("CREATE DATABASE dbtemp")
-// 	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
-// 	db.Exec(`INSERT INTO dbtemp.tbltemp (id,username,email,vint,vbool,vstr) VALUES (:1,@2,$3,$4,@5,:6)`,
-// 		"1", "user", "user@domain1.com", 1, true, "str 1", "user")
-// 	db.Exec(`INSERT INTO dbtemp.tbltemp (id,username,email,vint,vbool,vstr) VALUES (:1,@2,$3,$4,@5,:6)`,
-// 		"2", "user", "user@domain2.com", 2, false, "str 2", "user")
-// 	db.Exec(`INSERT INTO dbtemp.tbltemp (id,username,email,vint,vbool,vstr) VALUES (:1,@2,$3,$4,@5,:6)`,
-// 		"3", "user", "user@domain3.com", 3, true, "str 3", "user")
-// 	db.Exec(`INSERT INTO dbtemp.tbltemp (id,username,email,vint,vbool,vstr) VALUES (:1,@2,$3,$4,@5,:6)`,
-// 		"4", "user", "user@domain4.com", 4, false, "str 4", "user")
-// 	db.Exec(`INSERT INTO dbtemp.tbltemp (id,username,email,vint,vbool,vstr) VALUES (:1,@2,$3,$4,@5,:6)`,
-// 		"5", "user", "user@domain5.com", 5, true, "str 5", "user")
-//
-// 	db.Exec(`qnd`)
-// }

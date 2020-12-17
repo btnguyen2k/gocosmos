@@ -724,7 +724,7 @@ func TestRestClient_QueryDocuments(t *testing.T) {
 			totalRu += result.RequestCharge
 		}
 	}
-	fmt.Printf("%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
+	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
 
 	query := QueryReq{DbName: dbname, CollName: collname, MaxItemCount: 10,
 		Query:  "SELECT * FROM c WHERE c.id>=@id AND c.username='user'",
@@ -742,7 +742,7 @@ func TestRestClient_QueryDocuments(t *testing.T) {
 		query.ContinuationToken = result.ContinuationToken
 		result = client.QueryDocuments(query)
 	}
-	fmt.Printf("%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
+	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
 	if result.Error() != nil {
 		t.Fatalf("%s failed: %s", name, result.Error())
 	}
@@ -791,7 +791,7 @@ func TestRestClient_QueryDocumentsCrossPartition(t *testing.T) {
 			totalRu += result.RequestCharge
 		}
 	}
-	fmt.Printf("%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
+	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
 
 	query := QueryReq{DbName: dbname, CollName: collname, MaxItemCount: 10, CrossPartitionEnabled: true,
 		Query:  "SELECT * FROM c WHERE c.id>=@id",
@@ -809,7 +809,7 @@ func TestRestClient_QueryDocumentsCrossPartition(t *testing.T) {
 		query.ContinuationToken = result.ContinuationToken
 		result = client.QueryDocuments(query)
 	}
-	fmt.Printf("%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
+	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
 	if result.Error() != nil {
 		t.Fatalf("%s failed: %s", name, result.Error())
 	}
@@ -880,7 +880,10 @@ func TestRestClient_ListDocuments(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		id := rand.Intn(100)
 		removed[id] = true
-		client.DeleteDocument(DocReq{DbName: dbname, CollName: collname, DocId: fmt.Sprintf("%02d", rand.Intn(100)), PartitionKeyValues: []interface{}{"user"}})
+		result := client.DeleteDocument(DocReq{DbName: dbname, CollName: collname, DocId: fmt.Sprintf("%02d", rand.Intn(100)), PartitionKeyValues: []interface{}{"user"}})
+		if result.Error() != nil && result.Error() != ErrNotFound {
+			t.Fatalf("%s failed: %s", name, result.Error())
+		}
 
 		id = rand.Intn(100)
 		if !removed[id] {
@@ -918,6 +921,7 @@ func TestRestClient_ListDocuments(t *testing.T) {
 		t.Fatalf("%s failed: %s", name, result.Error())
 	}
 	if len(documents) != 100-len(removed) {
+		fmt.Printf("Removed: %#v\n", removed)
 		t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 100-len(removed), len(documents))
 	}
 
@@ -969,7 +973,10 @@ func TestRestClient_ListDocumentsCrossPartition(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		id := rand.Intn(100)
 		removed[id] = true
-		client.DeleteDocument(DocReq{DbName: dbname, CollName: collname, DocId: fmt.Sprintf("%02d", id), PartitionKeyValues: []interface{}{"user" + strconv.Itoa(id%4)}})
+		result := client.DeleteDocument(DocReq{DbName: dbname, CollName: collname, DocId: fmt.Sprintf("%02d", id), PartitionKeyValues: []interface{}{"user" + strconv.Itoa(id%4)}})
+		if result.Error() != nil && result.Error() != ErrNotFound {
+			t.Fatalf("%s failed: %s", name, result.Error())
+		}
 
 		id = rand.Intn(100)
 		if !removed[id] {
@@ -1002,6 +1009,7 @@ func TestRestClient_ListDocumentsCrossPartition(t *testing.T) {
 		t.Fatalf("%s failed: %s", name, result.Error())
 	}
 	if len(documents) != 100-len(removed) {
+		fmt.Printf("Removed: %#v\n", removed)
 		t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 100-len(removed), len(documents))
 	}
 
