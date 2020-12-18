@@ -424,12 +424,14 @@ func Test_parseQuery_Select(t *testing.T) {
 		selectQuery      string
 	}
 	testData := map[string]testStruct{
-		"SELECT * FROM c WITH database=db WITH collection=tbl": {
+		`SELECT * FROM c WITH database=db WITH collection=tbl`: {
 			dbName: "db", collName: "tbl", isCrossPartition: false, selectQuery: `SELECT * FROM c`},
-		"SELECT CROSS PARTITION * FROM c WHERE id=\"1\" WITH db=db-1 WITH table=tbl_1": {
+		`SELECT CROSS PARTITION * FROM c WHERE id="1" WITH db=db-1 WITH table=tbl_1`: {
 			dbName: "db-1", collName: "tbl_1", isCrossPartition: true, selectQuery: `SELECT * FROM c WHERE id="1"`},
-		"SELECT id,username,email FROM c WHERE username!=@1 AND (id>:2 OR email=$3) WITH CROSS_PARTITION=true WITH database=db WITH table=tbl": {
+		`SELECT id,username,email FROM c WHERE username!=@1 AND (id>:2 OR email=$3) WITH CROSS_PARTITION=true WITH database=db WITH table=tbl`: {
 			dbName: "db", collName: "tbl", isCrossPartition: true, selectQuery: `SELECT id,username,email FROM c WHERE username!=@_1 AND (id>@_2 OR email=@_3)`},
+		`SELECT a,b,c FROM user u WHERE u.id="1" WITH db=dbtemp`: {
+			dbName: "dbtemp", collName: "user", isCrossPartition: false, selectQuery: `SELECT a,b,c FROM user u WHERE u.id="1"`},
 	}
 	for query, data := range testData {
 		if stmt, err := parseQuery(nil, query); err != nil {
@@ -449,7 +451,7 @@ func Test_parseQuery_Select(t *testing.T) {
 
 	invalidQueries := []string{
 		`SELECT * FROM db.table`,                   // database and collection must be specified by WITH database=<dbname> and WITH collection=<collname>
-		`SELECT * FROM c WITH db=dbname`,           // no collection
+		`SELECT * WITH db=dbname`,                  // no collection
 		`SELECT * FROM c WITH collection=collname`, // no database
 		`SELECT * FROM c WITH db=dbname WITH collection=collname WITH cross_partition=false`, // the only valid value for cross_partition is true
 	}

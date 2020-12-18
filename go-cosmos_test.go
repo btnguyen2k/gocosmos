@@ -783,7 +783,7 @@ func Test_Query_Select(t *testing.T) {
 		}
 	}
 
-	if dbRows, err := db.Query(`SELECT CROSS PARTITION * FROM c WHERE c.username>"user1" AND c.id>"53" WITH database=dbtemp WITH collection=tbltemp`); err != nil {
+	if dbRows, err := db.Query(`SELECT CROSS PARTITION * FROM tbltemp c WHERE c.username>"user1" AND c.id>"53" WITH database=dbtemp`); err != nil {
 		t.Fatalf("%s failed: %s", name, err)
 	} else {
 		colTypes, err := dbRows.ColumnTypes()
@@ -879,7 +879,7 @@ func Test_Query_SelectPlaceholder(t *testing.T) {
 		}
 	}
 
-	if dbRows, err := db.Query(`SELECT CROSS PARTITION * FROM c WHERE c.username>@1 AND c.grade>:2 WITH database=dbtemp WITH collection=tbltemp`, "user1", 53); err != nil {
+	if dbRows, err := db.Query(`SELECT CROSS PARTITION * FROM tbltemp WHERE tbltemp.username>@1 AND tbltemp.grade>:2 WITH database=dbtemp`, "user1", 53); err != nil {
 		t.Fatalf("%s failed: %s", name, err)
 	} else {
 		colTypes, err := dbRows.ColumnTypes()

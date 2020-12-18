@@ -311,12 +311,13 @@ func (r *ResultDelete) RowsAffected() (int64, error) {
 //
 // The "SELECT" query follows CosmosDB's SQL grammar (https://docs.microsoft.com/en-us/azure/cosmos-db/sql-query-getting-started)
 // with a few extensions:
-// - Syntax: SELECT [CROSS PARTITION] ... WITH database|db=<db-name> WITH collection|table=<collection/table-name> [WITH cross_partition=true]
+// - Syntax: SELECT [CROSS PARTITION] ... FROM <collection/table-name> ... WITH database|db=<db-name> [WITH collection|table=<collection/table-name>] [WITH cross_partition=true]
 // - (extension) If the collection is partitioned, specify CROSS PARTITION to allow execution across multiple partitions.
 //   This clause is not required if query is to be executed on a single partition.
 //   Cross-partition execution can also be enabled using WITH cross_partition=true.
 // - (extension) Use WITH database=<db-name> (or WITH db=<db-name>) to specify the database on which the query is to be executed.
 // - (extension) Use WITH collection=<coll-name> (or WITH table=<coll-name>) to specify the collection/table on which the query is to be executed.
+//   If not specified, collection/table name is extracted from the "FROM <collection/table-name>" clause.
 // - (extension) Use placeholder syntax @i, $i or :i (where i denotes the i-th parameter, the first parameter is 1)
 type StmtSelect struct {
 	*Stmt
@@ -325,10 +326,6 @@ type StmtSelect struct {
 	collName         string
 	selectQuery      string
 	placeholders     map[int]string
-	// fieldsStr        string
-	// valuesStr        string
-	// fields           []string
-	// values           []interface{}
 }
 
 func (s *StmtSelect) parse(withOptsStr string) error {

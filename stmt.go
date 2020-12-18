@@ -26,7 +26,7 @@ var (
 	reInsert = regexp.MustCompile(`(?i)^(INSERT|UPSERT)\s+INTO\s+` + field + `\.` + field + `\s*\(([^)]*?)\)\s*VALUES\s*\(([^)]*?)\)$`)
 	// reUpdate = regexp.MustCompile(`(?i)^UPDATE\s+` + field + `\.` + field + `\s+SET\s+(.*)\s+WHERE\s+id\s*=\s*(.*)?$`)
 	reDelete = regexp.MustCompile(`(?i)^DELETE\s+FROM\s+` + field + `\.` + field + `\s+WHERE\s+id\s*=\s*(.*)?$`)
-	reSelect = regexp.MustCompile(`(?i)^SELECT\s+(CROSS\s+PARTITION\s+)?.*?` + with + `$`)
+	reSelect = regexp.MustCompile(`(?i)^SELECT\s+(CROSS\s+PARTITION\s+)?.*?\s+FROM\s+` + field + `.*?` + with + `$`)
 )
 
 func parseQuery(c *Conn, query string) (driver.Stmt, error) {
@@ -124,9 +124,10 @@ func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 		stmt := &StmtSelect{
 			Stmt:             &Stmt{query: query, conn: c, numInput: 0},
 			isCrossPartition: strings.TrimSpace(groups[0][1]) != "",
-			selectQuery:      strings.ReplaceAll(strings.ReplaceAll(query, groups[0][1], ""), groups[0][2], ""),
+			collName:         strings.TrimSpace(groups[0][2]),
+			selectQuery:      strings.ReplaceAll(strings.ReplaceAll(query, groups[0][1], ""), groups[0][3], ""),
 		}
-		if err := stmt.parse(groups[0][2]); err != nil {
+		if err := stmt.parse(groups[0][3]); err != nil {
 			return nil, err
 		}
 		return stmt, stmt.validate()
