@@ -1,4 +1,4 @@
-package go_cosmos
+package gocosmos
 
 import (
 	"database/sql/driver"

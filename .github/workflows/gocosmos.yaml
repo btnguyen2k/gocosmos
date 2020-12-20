@@ -1,4 +1,4 @@
-name: Go-Cosmos
+name: gocosmos
 
 on:
   push:

@@ -1,9 +1,9 @@
-# go-cosmos
+# gocosmos
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/btnguyen2k/go-cosmos)](https://goreportcard.com/report/github.com/btnguyen2k/go-cosmos)
-[![PkgGoDev](https://pkg.go.dev/badge/github.com/btnguyen2k/go-cosmos)](https://pkg.go.dev/github.com/btnguyen2k/go-cosmos)
-[![Actions Status](https://github.com/btnguyen2k/go-cosmos/workflows/Go-Cosmos/badge.svg)](https://github.com/btnguyen2k/go-cosmos/actions)
-[![codecov](https://codecov.io/gh/btnguyen2k/go-cosmos/branch/main/graph/badge.svg?token=pYdHuxbIiI)](https://codecov.io/gh/btnguyen2k/go-cosmos)
+[![Go Report Card](https://goreportcard.com/badge/github.com/btnguyen2k/gocosmos)](https://goreportcard.com/report/github.com/btnguyen2k/gocosmos)
+[![PkgGoDev](https://pkg.go.dev/badge/github.com/btnguyen2k/gocosmos)](https://pkg.go.dev/github.com/btnguyen2k/gocosmos)
+[![Actions Status](https://github.com/btnguyen2k/gocosmos/workflows/gocosmos/badge.svg)](https://github.com/btnguyen2k/gocosmos/actions)
+[![codecov](https://codecov.io/gh/btnguyen2k/gocosmos/branch/main/graph/badge.svg?token=pYdHuxbIiI)](https://codecov.io/gh/btnguyen2k/gocosmos)
 
 Go driver for Azure CosmosDB SQL API
 

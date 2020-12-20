@@ -1,4 +1,4 @@
-module github.com/btnguyen2k/go-cosmos
+module github.com/btnguyen2k/gocosmos
 
 go 1.13
 
