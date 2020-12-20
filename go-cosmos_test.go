@@ -776,7 +776,7 @@ func Test_Query_Select(t *testing.T) {
 		if len(rows) != 17 {
 			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 17, len(rows))
 		}
-		for k, _ := range rows {
+		for k := range rows {
 			if k <= "30" {
 				t.Fatalf("%s failed: document #%s should not be returned", name, k)
 			}
@@ -812,7 +812,7 @@ func Test_Query_Select(t *testing.T) {
 		if len(rows) != 24 {
 			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 24, len(rows))
 		}
-		for k, _ := range rows {
+		for k := range rows {
 			if k <= "53" {
 				t.Fatalf("%s failed: document #%s should not be returned", name, k)
 			}
@@ -872,7 +872,7 @@ func Test_Query_SelectPlaceholder(t *testing.T) {
 		if len(rows) != 17 {
 			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 17, len(rows))
 		}
-		for k, _ := range rows {
+		for k := range rows {
 			if k <= "30" {
 				t.Fatalf("%s failed: document #%s should not be returned", name, k)
 			}
@@ -908,7 +908,7 @@ func Test_Query_SelectPlaceholder(t *testing.T) {
 		if len(rows) != 24 {
 			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 24, len(rows))
 		}
-		for k, _ := range rows {
+		for k := range rows {
 			if k <= "53" {
 				t.Fatalf("%s failed: document #%s should not be returned", name, k)
 			}
