@@ -24,6 +24,19 @@ func Test_OpenDatabase(t *testing.T) {
 	}
 }
 
+func Test_Transaction(t *testing.T) {
+	name := "Test_OpenDatabase"
+	driver := "gocosmos"
+	dsn := "dummy"
+	db, err := sql.Open(driver, dsn)
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+	if tx, err := db.BeginTx(nil, nil); tx != nil || err == nil {
+		t.Fatalf("%s failed: transaction is not supported yet", name)
+	}
+}
+
 func TestDriver_invalidConnectionString(t *testing.T) {
 	name := "TestDriver_invalidConnectionString"
 	driver := "gocosmos"
