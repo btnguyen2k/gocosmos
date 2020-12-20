@@ -120,7 +120,7 @@ func TestRestClient_ListDatabases(t *testing.T) {
 	client := _newRestClient(t, name)
 
 	dbnames := map[string]int{"db1": 1, "db3": 1, "db5": 1, "db4": 1, "db2": 1}
-	for dbname, _ := range dbnames {
+	for dbname := range dbnames {
 		client.CreateDatabase(DatabaseSpec{Id: dbname, Ru: 400, MaxRu: 0})
 	}
 	if result := client.ListDatabases(); result.Error() != nil {
@@ -311,7 +311,7 @@ func TestRestClient_ListCollection(t *testing.T) {
 	client.DeleteDatabase(dbname)
 	client.CreateDatabase(DatabaseSpec{Id: dbname})
 	collnames := map[string]int{"table1": 1, "table3": 1, "table5": 1, "table4": 1, "table2": 1}
-	for collname, _ := range collnames {
+	for collname := range collnames {
 		client.CreateCollection(CollectionSpec{
 			DbName:           dbname,
 			CollName:         collname,
@@ -560,8 +560,6 @@ func TestRestClient_ReplaceDocument(t *testing.T) {
 		result.DocInfo["grade"] != docInfo["grade"] || result.DocInfo["active"] != docInfo["active"] || result.DocInfo["_rid"] == "" ||
 		result.DocInfo["_self"] == "" || result.DocInfo["_ts"].(float64) == 0.0 || result.DocInfo["_etag"] == "" || result.DocInfo["_attachments"] == "" {
 		t.Fatalf("%s failed: invalid dbinfo returned %#v", name, result.DocInfo)
-	} else {
-		etag = result.DocInfo["_etag"].(string)
 	}
 
 	// document not found
