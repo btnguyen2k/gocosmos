@@ -560,8 +560,6 @@ func TestRestClient_ReplaceDocument(t *testing.T) {
 		result.DocInfo["grade"] != docInfo["grade"] || result.DocInfo["active"] != docInfo["active"] || result.DocInfo["_rid"] == "" ||
 		result.DocInfo["_self"] == "" || result.DocInfo["_ts"].(float64) == 0.0 || result.DocInfo["_etag"] == "" || result.DocInfo["_attachments"] == "" {
 		t.Fatalf("%s failed: invalid dbinfo returned %#v", name, result.DocInfo)
-	} else {
-		etag = result.DocInfo["_etag"].(string)
 	}
 
 	// document not found
