@@ -387,11 +387,11 @@ func (s *StmtSelect) validate() error {
 func (s *StmtSelect) Query(args []driver.Value) (driver.Rows, error) {
 	params := make([]interface{}, 0)
 	for i, arg := range args {
-		if v, ok := s.placeholders[i+1]; !ok {
+		v, ok := s.placeholders[i+1]
+		if !ok {
 			return nil, fmt.Errorf("there is placeholder number %d", i+1)
-		} else {
-			params = append(params, map[string]interface{}{"name": fmt.Sprintf("%s", v), "value": arg})
 		}
+		params = append(params, map[string]interface{}{"name": fmt.Sprintf("%s", v), "value": arg})
 	}
 	query := QueryReq{
 		DbName:                s.dbName,

@@ -2,6 +2,7 @@ package gocosmos
 
 import (
 	"database/sql/driver"
+	"errors"
 	"time"
 )
 
@@ -17,7 +18,7 @@ type Conn struct {
 	params     map[string]string // other parameters
 }
 
-// Close implements driver.Conn.Prepare.
+// Prepare implements driver.Conn.Prepare.
 func (c *Conn) Prepare(query string) (driver.Stmt, error) {
 	return parseQuery(c, query)
 }
@@ -27,9 +28,9 @@ func (c *Conn) Close() error {
 	return nil
 }
 
-// Close implements driver.Conn.Begin.
+// Begin implements driver.Conn.Begin.
 func (c *Conn) Begin() (driver.Tx, error) {
-	panic("implement me")
+	return nil, errors.New("transaction is not supported")
 }
 
 // CheckNamedValue implements driver.NamedValueChecker.CheckNamedValue.

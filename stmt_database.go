@@ -26,18 +26,18 @@ func (s *StmtCreateDatabase) parseWithOpts(withOptsStr string) error {
 		return err
 	}
 	if _, ok := s.withOpts["RU"]; ok {
-		if ru, err := strconv.ParseInt(s.withOpts["RU"], 10, 64); err != nil || ru < 0 {
+		ru, err := strconv.ParseInt(s.withOpts["RU"], 10, 64)
+		if err != nil || ru < 0 {
 			return fmt.Errorf("invalid RU value: %s", s.withOpts["RU"])
-		} else {
-			s.ru = int(ru)
 		}
+		s.ru = int(ru)
 	}
 	if _, ok := s.withOpts["MAXRU"]; ok {
-		if maxru, err := strconv.ParseInt(s.withOpts["MAXRU"], 10, 64); err != nil || maxru < 0 {
+		maxru, err := strconv.ParseInt(s.withOpts["MAXRU"], 10, 64)
+		if err != nil || maxru < 0 {
 			return fmt.Errorf("invalid MAXRU value: %s", s.withOpts["MAXRU"])
-		} else {
-			s.maxru = int(maxru)
 		}
+		s.maxru = int(maxru)
 	}
 	return nil
 }

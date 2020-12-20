@@ -501,7 +501,7 @@ func (c *RestClient) QueryDocuments(query QueryReq) *RespQueryDocs {
 	return result
 }
 
-// QueryReq specifies a list documents request.
+// ListDocsReq specifies a list documents request.
 type ListDocsReq struct {
 	DbName, CollName    string
 	MaxItemCount        int
