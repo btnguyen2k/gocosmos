@@ -16,5 +16,5 @@ Features:
   - [x] INSERT query
   - [x] UPSERT query
   - [x] SELECT query
-  - [ ] UPDATE query
+  - [x] UPDATE query
   - [x] DELETE query

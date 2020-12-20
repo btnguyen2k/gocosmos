@@ -15,18 +15,18 @@ const (
 )
 
 var (
-	reCreateDb = regexp.MustCompile(`(?i)^CREATE\s+DATABASE` + ifNotExists + `\s+` + field + with + `$`)
-	reDropDb   = regexp.MustCompile(`(?i)^DROP\s+DATABASE` + ifExists + `\s+` + field + `$`)
-	reListDbs  = regexp.MustCompile(`(?i)^LIST\s+DATABASES?$`)
+	reCreateDb = regexp.MustCompile(`(?is)^CREATE\s+DATABASE` + ifNotExists + `\s+` + field + with + `$`)
+	reDropDb   = regexp.MustCompile(`(?is)^DROP\s+DATABASE` + ifExists + `\s+` + field + `$`)
+	reListDbs  = regexp.MustCompile(`(?is)^LIST\s+DATABASES?$`)
 
-	reCreateColl = regexp.MustCompile(`(?i)^CREATE\s+(COLLECTION|TABLE)` + ifNotExists + `\s+` + field + `\.` + field + with + `$`)
-	reDropColl   = regexp.MustCompile(`(?i)^DROP\s+(COLLECTION|TABLE)` + ifExists + `\s+` + field + `\.` + field + `$`)
-	reListColls  = regexp.MustCompile(`(?i)^LIST\s+(COLLECTIONS?|TABLES?)\s+FROM\s+` + field + `$`)
+	reCreateColl = regexp.MustCompile(`(?is)^CREATE\s+(COLLECTION|TABLE)` + ifNotExists + `\s+` + field + `\.` + field + with + `$`)
+	reDropColl   = regexp.MustCompile(`(?is)^DROP\s+(COLLECTION|TABLE)` + ifExists + `\s+` + field + `\.` + field + `$`)
+	reListColls  = regexp.MustCompile(`(?is)^LIST\s+(COLLECTIONS?|TABLES?)\s+FROM\s+` + field + `$`)
 
-	reInsert = regexp.MustCompile(`(?i)^(INSERT|UPSERT)\s+INTO\s+` + field + `\.` + field + `\s*\(([^)]*?)\)\s*VALUES\s*\(([^)]*?)\)$`)
-	// reUpdate = regexp.MustCompile(`(?i)^UPDATE\s+` + field + `\.` + field + `\s+SET\s+(.*)\s+WHERE\s+id\s*=\s*(.*)?$`)
-	reDelete = regexp.MustCompile(`(?i)^DELETE\s+FROM\s+` + field + `\.` + field + `\s+WHERE\s+id\s*=\s*(.*)?$`)
-	reSelect = regexp.MustCompile(`(?i)^SELECT\s+(CROSS\s+PARTITION\s+)?.*?\s+FROM\s+` + field + `.*?` + with + `$`)
+	reInsert = regexp.MustCompile(`(?is)^(INSERT|UPSERT)\s+INTO\s+` + field + `\.` + field + `\s*\(([^)]*?)\)\s*VALUES\s*\(([^)]*?)\)$`)
+	reSelect = regexp.MustCompile(`(?is)^SELECT\s+(CROSS\s+PARTITION\s+)?.*?\s+FROM\s+` + field + `.*?` + with + `$`)
+	reUpdate = regexp.MustCompile(`(?is)^UPDATE\s+` + field + `\.` + field + `\s+SET\s+(.*)\s+WHERE\s+id\s*=\s*(.*)$`)
+	reDelete = regexp.MustCompile(`(?is)^DELETE\s+FROM\s+` + field + `\.` + field + `\s+WHERE\s+id\s*=\s*(.*)$`)
 )
 
 func parseQuery(c *Conn, query string) (driver.Stmt, error) {
@@ -106,19 +106,6 @@ func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 		}
 		return stmt, stmt.validate()
 	}
-	if re := reDelete; re.MatchString(query) {
-		groups := re.FindAllStringSubmatch(query, -1)
-		stmt := &StmtDelete{
-			Stmt:     &Stmt{query: query, conn: c, numInput: 0},
-			dbName:   strings.TrimSpace(groups[0][1]),
-			collName: strings.TrimSpace(groups[0][2]),
-			idStr:    strings.TrimSpace(groups[0][3]),
-		}
-		if err := stmt.parse(); err != nil {
-			return nil, err
-		}
-		return stmt, stmt.validate()
-	}
 	if re := reSelect; re.MatchString(query) {
 		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtSelect{
@@ -132,20 +119,33 @@ func parseQuery(c *Conn, query string) (driver.Stmt, error) {
 		}
 		return stmt, stmt.validate()
 	}
-	// if re := reUpdate; re.MatchString(query) {
-	// 	groups := re.FindAllStringSubmatch(query, -1)
-	// 	stmt := &StmtUpdate{
-	// 		Stmt:      &Stmt{query: query, conn: c, numInput: 0},
-	// 		dbName:    strings.TrimSpace(groups[0][1]),
-	// 		collName:  strings.TrimSpace(groups[0][2]),
-	// 		updateStr: strings.TrimSpace(groups[0][3]),
-	// 		idStr:     strings.TrimSpace(groups[0][4]),
-	// 	}
-	// 	if err := stmt.parse(); err != nil {
-	// 		return nil, err
-	// 	}
-	// 	return stmt, stmt.validate()
-	// }
+	if re := reUpdate; re.MatchString(query) {
+		groups := re.FindAllStringSubmatch(query, -1)
+		stmt := &StmtUpdate{
+			Stmt:      &Stmt{query: query, conn: c, numInput: 0},
+			dbName:    strings.TrimSpace(groups[0][1]),
+			collName:  strings.TrimSpace(groups[0][2]),
+			updateStr: strings.TrimSpace(groups[0][3]),
+			idStr:     strings.TrimSpace(groups[0][4]),
+		}
+		if err := stmt.parse(); err != nil {
+			return nil, err
+		}
+		return stmt, stmt.validate()
+	}
+	if re := reDelete; re.MatchString(query) {
+		groups := re.FindAllStringSubmatch(query, -1)
+		stmt := &StmtDelete{
+			Stmt:     &Stmt{query: query, conn: c, numInput: 0},
+			dbName:   strings.TrimSpace(groups[0][1]),
+			collName: strings.TrimSpace(groups[0][2]),
+			idStr:    strings.TrimSpace(groups[0][3]),
+		}
+		if err := stmt.parse(); err != nil {
+			return nil, err
+		}
+		return stmt, stmt.validate()
+	}
 
 	return nil, fmt.Errorf("invalid query: %s", query)
 }

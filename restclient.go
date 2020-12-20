@@ -10,12 +10,14 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"reflect"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/btnguyen2k/consu/gjrc"
+	"github.com/btnguyen2k/consu/reddo"
 )
 
 // NewRestClient constructs a new RestClient instance from the supplied connection string.
@@ -660,6 +662,74 @@ type RespListColl struct {
 
 // DocInfo captures info of a CosmosDB document.
 type DocInfo map[string]interface{}
+
+// RemoveSystemAttrs returns a clone of the document with all system attributes removed.
+func (d DocInfo) RemoveSystemAttrs() DocInfo {
+	clone := DocInfo{}
+	for k, v := range d {
+		if !strings.HasPrefix(k, "_") {
+			clone[k] = v
+		}
+	}
+	return clone
+}
+
+// GetAttrAsType returns a document attribute converting to a specific type.
+// Note: if typ is nil, the attribute value is returned as-is (i.e. without converting).
+func (d DocInfo) GetAttrAsType(attrName string, typ reflect.Type) (interface{}, error) {
+	v, ok := d[attrName]
+	if ok && v != nil {
+		return reddo.Convert(v, typ)
+	}
+	return nil, nil
+}
+
+// Id returns the value of document's "id" attribute.
+func (d DocInfo) Id() string {
+	v := d.GetAttrAsTypeUnsafe("id", reddo.TypeString)
+	if v != nil {
+		return v.(string)
+	}
+	return ""
+}
+
+// Rid returns the value of document's "_rid" attribute.
+func (d DocInfo) Rid() string {
+	v := d.GetAttrAsTypeUnsafe("_rid", reddo.TypeString)
+	if v != nil {
+		return v.(string)
+	}
+	return ""
+}
+
+// Etag returns the value of document's "_etag" attribute.
+func (d DocInfo) Etag() string {
+	v := d.GetAttrAsTypeUnsafe("_etag", reddo.TypeString)
+	if v != nil {
+		return v.(string)
+	}
+	return ""
+}
+
+// Ts returns the value of document's "_ts" attribute.
+func (d DocInfo) Ts() int64 {
+	v := d.GetAttrAsTypeUnsafe("_ts", reddo.TypeInt)
+	if v != nil {
+		return v.(int64)
+	}
+	return 0
+}
+
+// TsAsTime returns the value of document's "_ts" attribute as a time.Time.
+func (d DocInfo) TsAsTime() time.Time {
+	return time.Unix(d.Ts(), 0)
+}
+
+// GetAttrAsTypeUnsafe is similar to GetAttrAsType except that it does not check for error.
+func (d DocInfo) GetAttrAsTypeUnsafe(attrName string, typ reflect.Type) interface{} {
+	v, _ := d.GetAttrAsType(attrName, typ)
+	return v
+}
 
 // RespCreateDoc captures the response from CreateDocument call.
 type RespCreateDoc struct {

@@ -461,3 +461,65 @@ func Test_parseQuery_Select(t *testing.T) {
 		}
 	}
 }
+
+func Test_parseQuery_Update(t *testing.T) {
+	name := "Test_parseQuery_Update"
+	type testStruct struct {
+		dbName   string
+		collName string
+		idStr    string
+		id       interface{}
+		fields   []string
+		values   []interface{}
+	}
+	testData := map[string]testStruct{
+		`UPDATE db1.table1 
+SET a=null, b=
+	1.0, c=true, 
+  d="\"a string 'with' \\\"quote\\\"\"", e="{\"key\":\"value\"}"
+,f="[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]" WHERE
+	id=abc`: {
+			dbName: "db1", collName: "table1", fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{
+				nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`},
+			}, idStr: "abc", id: nil},
+		`UPDATE db-1.table_1 
+SET a=$1, b=
+	$2, c=:3 WHERE
+	id=@4`: {
+			dbName: "db-1", collName: "table_1", fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}},
+			idStr: "@4", id: placeholder{4}},
+	}
+	for query, data := range testData {
+		if stmt, err := parseQuery(nil, query); err != nil {
+			t.Fatalf("%s failed: %s", name+"/"+query, err)
+		} else if dbstmt, ok := stmt.(*StmtUpdate); !ok {
+			t.Fatalf("%s failed: the parsed stmt must be of type *StmtUpdate", name+"/"+query)
+		} else if dbstmt.dbName != data.dbName {
+			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
+		} else if dbstmt.collName != data.collName {
+			t.Fatalf("%s failed: <collection-name> expected %#v but received %#v", name+"/"+query, data.collName, dbstmt.collName)
+		} else if dbstmt.idStr != data.idStr {
+			t.Fatalf("%s failed: <id-str> expected %#v but received %#v", name+"/"+query, data.idStr, dbstmt.idStr)
+		} else if dbstmt.id != data.id {
+			t.Fatalf("%s failed: <id> expected %#v but received %#v", name+"/"+query, data.id, dbstmt.id)
+		} else if !reflect.DeepEqual(dbstmt.fields, data.fields) {
+			t.Fatalf("%s failed: <fields> expected %#v but received %#v", name+"/"+query, data.fields, dbstmt.fields)
+		} else if !reflect.DeepEqual(dbstmt.values, data.values) {
+			t.Fatalf("%s failed: <values> expected %#v but received %#v", name+"/"+query, data.values, dbstmt.values)
+		}
+	}
+
+	invalidQueries := []string{
+		`UPDATE db SET a=1,b=2,c=3 WHERE id=4`,             // no collection name
+		`UPDATE db.table SET a=1,b=2,c=3 WHERE username=4`, // only WHERE id... is accepted
+		`UPDATE db.table SET a=1,b=2,c=3`,                  // no WHERE clause
+		`UPDATE db.table WHERE id=1`,                       // no SET clause
+		`UPDATE db.table SET      WHERE id=1`,              // SET clause is empty
+		`UPDATE db.table SET a="{key:value}" WHERE id=1`,   // should be "{\"key\:\"value\"}"
+	}
+	for _, query := range invalidQueries {
+		if _, err := parseQuery(nil, query); err == nil {
+			t.Fatalf("%s failed: query must not be parsed/validated successfuly", name+"/"+query)
+		}
+	}
+}

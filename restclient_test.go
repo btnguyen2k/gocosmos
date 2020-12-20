@@ -367,26 +367,27 @@ func TestRestClient_CreateDocument(t *testing.T) {
 		t.Fatalf("%s failed: invalid dbinfo returned %#v", name, result.DocInfo)
 	}
 
+	// duplicated id
 	if result := client.CreateDocument(DocumentSpec{
 		DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"},
 		DocumentData: map[string]interface{}{"id": "1", "username": "user", "email": "user@domain1.com", "grade": 2, "active": false},
 	}); result.CallErr != nil {
 		t.Fatalf("%s failed: %s", name, result.CallErr)
 	} else if result.StatusCode != 409 {
-		// duplicated id
 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 409, result.StatusCode)
 	}
 
+	// duplicated unique index
 	if result := client.CreateDocument(DocumentSpec{
 		DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"},
 		DocumentData: map[string]interface{}{"id": "2", "username": "user", "email": "user@domain.com", "grade": 3, "active": true},
 	}); result.CallErr != nil {
 		t.Fatalf("%s failed: %s", name, result.CallErr)
 	} else if result.StatusCode != 409 {
-		// duplicated unique index
 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 409, result.StatusCode)
 	}
 
+	// collection not found
 	if result := client.CreateDocument(DocumentSpec{
 		DbName: dbname, CollName: "table_not_found", PartitionKeyValues: []interface{}{"user"},
 		DocumentData: map[string]interface{}{"id": "1", "username": "user", "email": "user@domain.com", "grade": 1, "active": true},
@@ -396,6 +397,7 @@ func TestRestClient_CreateDocument(t *testing.T) {
 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
 	}
 
+	// database not found
 	client.DeleteDatabase("db_not_found")
 	if result := client.CreateDocument(DocumentSpec{
 		DbName: "db_not_found", CollName: collname, PartitionKeyValues: []interface{}{"user"},
@@ -454,16 +456,17 @@ func TestRestClient_UpsertDocument(t *testing.T) {
 		t.Fatalf("%s failed: invalid dbinfo returned %#v", name, result.DocInfo)
 	}
 
+	// duplicated unique key
 	if result := client.CreateDocument(DocumentSpec{
 		DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user1"}, IsUpsert: true,
 		DocumentData: map[string]interface{}{"id": "3", "username": "user1", "email": "user1@domain1.com", "grade": 2, "active": false, "data": "value"},
 	}); result.CallErr != nil {
 		t.Fatalf("%s failed: %s", name, result.CallErr)
 	} else if result.StatusCode != 409 {
-		// duplicated unique key
 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 409, result.StatusCode)
 	}
 
+	// collection not found
 	if result := client.CreateDocument(DocumentSpec{
 		DbName: dbname, CollName: "table_not_found", PartitionKeyValues: []interface{}{"user"}, IsUpsert: true,
 		DocumentData: map[string]interface{}{"id": "1", "username": "user", "email": "user@domain.com", "grade": 1, "active": true},
@@ -473,6 +476,7 @@ func TestRestClient_UpsertDocument(t *testing.T) {
 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
 	}
 
+	// database not found
 	client.DeleteDatabase("db_not_found")
 	if result := client.CreateDocument(DocumentSpec{
 		DbName: "db_not_found", CollName: collname, PartitionKeyValues: []interface{}{"user"}, IsUpsert: true,
@@ -499,6 +503,7 @@ func TestRestClient_ReplaceDocument(t *testing.T) {
 		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
 	})
 
+	// insert 2 documents
 	docInfo := map[string]interface{}{"id": "2", "username": "user", "email": "user2@domain.com", "grade": 2.0, "active": false}
 	if result := client.CreateDocument(DocumentSpec{DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"}, DocumentData: docInfo}); result.Error() != nil {
 		t.Fatalf("%s failed: %s", name, result.Error())
@@ -516,6 +521,7 @@ func TestRestClient_ReplaceDocument(t *testing.T) {
 		t.Fatalf("%s failed: invalid dbinfo returned %#v", name, result.DocInfo)
 	}
 
+	// conflict unique key
 	docInfo["email"] = "user2@domain.com"
 	if result := client.ReplaceDocument("", DocumentSpec{DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"}, DocumentData: docInfo}); result.CallErr != nil {
 		t.Fatalf("%s failed: %s", name, result.CallErr)
@@ -523,6 +529,7 @@ func TestRestClient_ReplaceDocument(t *testing.T) {
 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
 	}
 
+	// replace document without etag matching
 	var etag string
 	docInfo = map[string]interface{}{"id": "1", "username": "user", "email": "user1@domain.com", "grade": 1.0, "active": true}
 	docInfo["grade"] = 2.0
@@ -537,6 +544,7 @@ func TestRestClient_ReplaceDocument(t *testing.T) {
 		etag = result.DocInfo["_etag"].(string)
 	}
 
+	// replace document with etag matching: should not match
 	docInfo["email"] = "user3@domain.com"
 	docInfo["grade"] = 3.0
 	docInfo["active"] = true
@@ -545,6 +553,7 @@ func TestRestClient_ReplaceDocument(t *testing.T) {
 	} else if result.StatusCode != 412 {
 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 412, result.StatusCode)
 	}
+	// replace document with etag matching: should match
 	if result := client.ReplaceDocument(etag, DocumentSpec{DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"}, DocumentData: docInfo}); result.Error() != nil {
 		t.Fatalf("%s failed: %s", name, result.Error())
 	} else if result.DocInfo["id"] != docInfo["id"] || result.DocInfo["username"] != docInfo["username"] || result.DocInfo["email"] != docInfo["email"] ||
@@ -555,6 +564,7 @@ func TestRestClient_ReplaceDocument(t *testing.T) {
 		etag = result.DocInfo["_etag"].(string)
 	}
 
+	// document not found
 	docInfo["id"] = "0"
 	if result := client.ReplaceDocument("", DocumentSpec{DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"}, DocumentData: docInfo}); result.CallErr != nil {
 		t.Fatalf("%s failed: %s", name, result.CallErr)
@@ -562,6 +572,7 @@ func TestRestClient_ReplaceDocument(t *testing.T) {
 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
 	}
 
+	// collection not found
 	docInfo["id"] = "1"
 	if result := client.ReplaceDocument("", DocumentSpec{DbName: dbname, CollName: "tbl_not_found", PartitionKeyValues: []interface{}{"user"}, DocumentData: docInfo}); result.CallErr != nil {
 		t.Fatalf("%s failed: %s", name, result.CallErr)
@@ -569,11 +580,52 @@ func TestRestClient_ReplaceDocument(t *testing.T) {
 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
 	}
 
+	// database not found
 	client.DeleteDatabase("db_not_found")
 	if result := client.ReplaceDocument("", DocumentSpec{DbName: "db_not_found", CollName: collname, PartitionKeyValues: []interface{}{"user"}, DocumentData: docInfo}); result.CallErr != nil {
 		t.Fatalf("%s failed: %s", name, result.CallErr)
 	} else if result.StatusCode != 404 {
 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+}
+
+func TestRestClient_ReplaceDocumentCrossPartition(t *testing.T) {
+	name := "TestRestClient_ReplaceDocumentCrossPartition"
+	client := _newRestClient(t, name)
+
+	dbname := "mydb"
+	collname := "mytable"
+	client.DeleteDatabase(dbname)
+	client.CreateDatabase(DatabaseSpec{Id: dbname})
+	client.CreateCollection(CollectionSpec{
+		DbName:           dbname,
+		CollName:         collname,
+		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/username"}, "kind": "Hash"},
+		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
+	})
+
+	// insert a document
+	docInfo := map[string]interface{}{"id": "1", "username": "user1", "email": "user1@domain.com", "grade": 1.0, "active": true}
+	if result := client.CreateDocument(DocumentSpec{DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user1"}, DocumentData: docInfo}); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if result.DocInfo["id"] != docInfo["id"] || result.DocInfo["username"] != docInfo["username"] || result.DocInfo["email"] != docInfo["email"] ||
+		result.DocInfo["grade"] != docInfo["grade"] || result.DocInfo["active"] != docInfo["active"] || result.DocInfo["_rid"] == "" ||
+		result.DocInfo["_self"] == "" || result.DocInfo["_ts"].(float64) == 0.0 || result.DocInfo["_etag"] == "" || result.DocInfo["_attachments"] == "" {
+		t.Fatalf("%s failed: invalid dbinfo returned %#v", name, result.DocInfo)
+	}
+
+	docInfo["username"] = "user2"
+	if result := client.ReplaceDocument("", DocumentSpec{DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user2"}, DocumentData: docInfo}); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+
+	docInfo["username"] = "user2"
+	if result := client.ReplaceDocument("", DocumentSpec{DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user1"}, DocumentData: docInfo}); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 400 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 400, result.StatusCode)
 	}
 }
 
