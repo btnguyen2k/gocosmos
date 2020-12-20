@@ -76,7 +76,7 @@ func Test_parseQuery_CreateDatabase(t *testing.T) {
 	}
 	for _, query := range invalidQueries {
 		if _, err := parseQuery(nil, query); err == nil {
-			t.Fatalf("%s failed: query must not be parsed/validated successfuly", name+"/"+query)
+			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
 		}
 	}
 }
@@ -175,7 +175,7 @@ func Test_parseQuery_CreateCollection(t *testing.T) {
 	}
 	for _, query := range invalidQueries {
 		if _, err := parseQuery(nil, query); err == nil {
-			t.Fatalf("%s failed: query must not be parsed/validated successfuly", name+"/"+query)
+			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
 		}
 	}
 }
@@ -214,7 +214,7 @@ func Test_parseQuery_DropCollection(t *testing.T) {
 	}
 	for _, query := range invalidQueries {
 		if _, err := parseQuery(nil, query); err == nil {
-			t.Fatalf("%s failed: query must not be parsed/validated successfuly", name+"/"+query)
+			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
 		}
 	}
 }
@@ -295,7 +295,7 @@ $1, :3, @2)`: {
 	}
 	for _, query := range invalidQueries {
 		if _, err := parseQuery(nil, query); err == nil {
-			t.Fatalf("%s failed: query must not be parsed/validated successfuly", name+"/"+query)
+			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
 		}
 	}
 }
@@ -357,7 +357,7 @@ a,b,c) VALUES ($1,
 	}
 	for _, query := range invalidQueries {
 		if _, err := parseQuery(nil, query); err == nil {
-			t.Fatalf("%s failed: query must not be parsed/validated successfuly", name+"/"+query)
+			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
 		}
 	}
 }
@@ -410,7 +410,7 @@ db_3-0.table-3_0 WHERE
 	}
 	for _, query := range invalidQueries {
 		if _, err := parseQuery(nil, query); err == nil {
-			t.Fatalf("%s failed: query must not be parsed/validated successfuly", name+"/"+query)
+			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
 		}
 	}
 }
@@ -457,7 +457,7 @@ func Test_parseQuery_Select(t *testing.T) {
 	}
 	for _, query := range invalidQueries {
 		if _, err := parseQuery(nil, query); err == nil {
-			t.Fatalf("%s failed: query must not be parsed/validated successfuly", name+"/"+query)
+			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
 		}
 	}
 }
@@ -519,7 +519,7 @@ SET a=$1, b=
 	}
 	for _, query := range invalidQueries {
 		if _, err := parseQuery(nil, query); err == nil {
-			t.Fatalf("%s failed: query must not be parsed/validated successfuly", name+"/"+query)
+			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
 		}
 	}
 }
