@@ -987,8 +987,7 @@ func Test_Query_SelectPlaceholder(t *testing.T) {
 		}
 	}
 
-	if _, err := db.Query(`SELECT * FROM c WHERE c.username=$2 AND c.id>:10 ORDER BY c.id WITH database=dbtemp WITH collection=tbltemp`, "30", "user0");
-		err == nil || strings.Index(err.Error(), "no placeholder") < 0 {
+	if _, err := db.Query(`SELECT * FROM c WHERE c.username=$2 AND c.id>:10 ORDER BY c.id WITH database=dbtemp WITH collection=tbltemp`, "30", "user0"); err == nil || strings.Index(err.Error(), "no placeholder") < 0 {
 		t.Fatalf("%s failed: expecting 'no placeholder' but received %s", name, err)
 	}
 }
@@ -1131,13 +1130,11 @@ func Test_Exec_UpdatePlaceholder(t *testing.T) {
 		t.Fatalf("%s failed: expected RowsAffected=0/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
 	}
 
-	if _, err := db.Exec(`UPDATE dbtemp.tbltemp SET grade=10 WHERE id=$10`, "1", "user");
-		err == nil || strings.Index(err.Error(), "invalid value index") < 0 {
+	if _, err := db.Exec(`UPDATE dbtemp.tbltemp SET grade=10 WHERE id=$10`, "1", "user"); err == nil || strings.Index(err.Error(), "invalid value index") < 0 {
 		t.Fatalf("%s failed: expected 'invalid value index' but received '%s'", name, err)
 	}
 
-	if _, err := db.Exec(`UPDATE dbtemp.tbltemp SET grade=$10 WHERE id=1`, "1", "user");
-		err == nil || strings.Index(err.Error(), "invalid value index") < 0 {
+	if _, err := db.Exec(`UPDATE dbtemp.tbltemp SET grade=$10 WHERE id=1`, "1", "user"); err == nil || strings.Index(err.Error(), "invalid value index") < 0 {
 		t.Fatalf("%s failed: expected 'invalid value index' but received '%s'", name, err)
 	}
 }
