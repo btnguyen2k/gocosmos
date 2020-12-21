@@ -83,7 +83,7 @@ func _parseValue(input string, separator rune) (value interface{}, leftOver stri
 //     - a boolean value in JSON (include the double quotes): "true"
 //     - a null value in JSON (include the double quotes): "null"
 //     - a map value in JSON (include the double quotes): "{\"key\":\"value\"}"
-//     - a list value in JSON (include the double quotes): "[1,true,nil,\"string\"]"
+//     - a list value in JSON (include the double quotes): "[1,true,null,\"string\"]"
 //
 // CosmosDB automatically creates a few extra fields for the insert document.
 // See https://docs.microsoft.com/en-us/azure/cosmos-db/account-databases-containers-items#properties-of-an-item

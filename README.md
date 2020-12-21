@@ -10,47 +10,82 @@ gocosmos also includes a REST client for [Azure Cosmos DB SQL API](https://azure
 
 Latest release [v0.1.0](RELEASE-NOTES.md).
 
-## Example usage
+## Example usage: REST client
 
 ```go
 import (
   "os"
+  "database/sql"
+  "github.com/btnguyen2k/gocosmos"
+)
+
+func main() {
+  cosmosDbConnStr := "AccountEndpoint=https://localhost:8081/;AccountKey=<cosmosdb-account-key>"
+	client, err := gocosmos.NewRestClient(nil, cosmosDbConnStr)
+	if err != nil {
+    panic(err)
+	}
+
+  dbSpec := gocosmos.DatabaseSpec{Id:"mydb", Ru: 400}
+  result := client.CreateDatabase(dbSpec)
+  if result.Error() != nil {
+    panic(result.Error)
+  }
+
+  // database "mydb" has been created successfuly
+}
+```
+
+## Example usage: database/sql driver
+
+```go
+import (
   "database/sql"
   _ "github.com/btnguyen2k/gocosmos"
 )
 
 func main() {
   driver := "gocosmos"
-	dsn := strings.ReplaceAll(os.Getenv("COSMOSDB_URL"), `"`, "")
+  dsn := "AccountEndpoint=https://localhost:8081/;AccountKey=<cosmosdb-account-key>"
 	db, err := sql.Open(driver, dsn)
 	if err != nil {
     panic(err)
   }
   defer db.Close()
 
-	_, err := db.Exec("CREATE DATABASE dbtemp WITH ru=400")
+	_, err := db.Exec("CREATE DATABASE mydb WITH maxru=10000")
 	if err != nil {
     panic(err)
-	}
+  }
+  
+  // database "mydb" has been created successfuly
 }
 ```
 
-## Supported statements
+## Features
 
+The REST client supports:
+- Database: `Create`, `Get`, `Delete` and `List`.
+- Collection: `Create`, `Replace`, `Get`, `Delete` and `List`.
+- Document: `Create`, `Replace`, `Get`, `Delete`, `Query` and `List`.
+
+The `database/sql` driver supports:
 - Database:
-  - [x] CREATE DATABASE
-  - [x] DROP DATABASE
-  - [x] LIST DATABASES
-- Table/Collection
-  - [x] CREATE TABLE/COLLECTION
-  - [x] DROP TABLE/COLLECTION
-  - [x] LIST TABLES/COLLECTIONS
+  - `CREATE DATABASE`
+  - `DROP DATABASE`
+  - `LIST DATABASES`
+- Table/Collection:
+  - `CREATE TABLE/COLLECTION`
+  - `DROP TABLE/COLLECTION`
+  - `LIST TABLES/COLLECTIONS`
 - Item/Document:
-  - [x] INSERT
-  - [x] UPSERT
-  - [x] SELECT
-  - [x] UPDATE
-  - [x] DELETE
+  - `INSERT`
+  - `UPSERT`
+  - `SELECT`
+  - `UPDATE`
+  - `DELETE`
+
+See [supported SQL statements](SQL.md) for details.
 
 ## License
 
