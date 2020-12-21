@@ -10,47 +10,98 @@ gocosmos also includes a REST client for [Azure Cosmos DB SQL API](https://azure
 
 Latest release [v0.1.0](RELEASE-NOTES.md).
 
-## Example usage
+## Example usage: REST client
 
 ```go
 import (
   "os"
+  "database/sql"
+  "github.com/btnguyen2k/gocosmos"
+)
+
+func main() {
+  cosmosDbConnStr := "AccountEndpoint=https://localhost:8081/;AccountKey=<cosmosdb-account-key>"
+	client, err := gocosmos.NewRestClient(nil, cosmosDbConnStr)
+	if err != nil {
+    panic(err)
+	}
+
+  dbSpec := gocosmos.DatabaseSpec{Id:"mydb", Ru: 400}
+  result := client.CreateDatabase(dbSpec)
+  if result.Error() != nil {
+    panic(result.Error)
+  }
+
+  // database "mydb" has been created successfuly
+}
+```
+
+## Example usage: database/sql driver
+
+```go
+import (
   "database/sql"
   _ "github.com/btnguyen2k/gocosmos"
 )
 
 func main() {
   driver := "gocosmos"
-	dsn := strings.ReplaceAll(os.Getenv("COSMOSDB_URL"), `"`, "")
+  dsn := "AccountEndpoint=https://localhost:8081/;AccountKey=<cosmosdb-account-key>"
 	db, err := sql.Open(driver, dsn)
 	if err != nil {
     panic(err)
   }
   defer db.Close()
 
-	_, err := db.Exec("CREATE DATABASE dbtemp WITH ru=400")
+	_, err := db.Exec("CREATE DATABASE mydb WITH maxru=10000")
 	if err != nil {
     panic(err)
-	}
+  }
+  
+  // database "mydb" has been created successfuly
 }
 ```
 
-## Supported statements
+## Features
 
+The REST client supports:
+- Database: `Create`, `Get`, `Delete` and `List`.
+- Collection: `Create`, `Replace`, `Get`, `Delete` and `List`.
+- Document: `Create`, `Replace`, `Get`, `Delete`, `Query` and `List`.
+
+The `database/sql` driver supports:
 - Database:
-  - [x] CREATE DATABASE
-  - [x] DROP DATABASE
-  - [x] LIST DATABASES
-- Table/Collection
-  - [x] CREATE TABLE/COLLECTION
-  - [x] DROP TABLE/COLLECTION
-  - [x] LIST TABLES/COLLECTIONS
+  - `CREATE DATABASE`
+  - `DROP DATABASE`
+  - `LIST DATABASES`
+- Table/Collection:
+  - `CREATE TABLE/COLLECTION`
+  - `DROP TABLE/COLLECTION`
+  - `LIST TABLES/COLLECTIONS`
 - Item/Document:
-  - [x] INSERT
-  - [x] UPSERT
-  - [x] SELECT
-  - [x] UPDATE
-  - [x] DELETE
+  - `INSERT`
+  - `UPSERT`
+  - `SELECT`
+  - `UPDATE`
+  - `DELETE`
+
+Summary of supported SQL statements:
+
+|Statement|Syntax|
+|---------|-----------|
+|Create a new database                      |`CREATE DATABASE [IF NOT EXISTS] <db-name>`|
+|Delete an existing database                |`DROP DATABASE [IF EXISTS] <db-name>`|
+|List all existing databases                |`LIST DATABASES`|
+|Create a new collection                    |`CREATE COLLECTION [IF NOT EXISTS] <db-name>.<collection-name> <WITH [LARGE]PK=partitionKey>`|
+|Delete an existing collection              |`DROP COLLECTION [IF EXISTS] <db-name>.<collection-name>`|
+|List all existing collections in a database|`LIST COLLECTIONS FROM <db-name>`|
+|Insert a new document into collection      |`INSERT INTO <db-name>.<collection-name> ...`|
+|Insert or replace a document               |`UPSERT INTO <db-name>.<collection-name> ...`|
+|Delete an existing document                |`DELETE FROM <db-name>.<collection-name> WHERE id=<id-value>`|
+|Update an existing document                |`UPDATE <db-name>.<collection-name> SET ... WHERE id=<id-value>`|
+|Query documents in a collection            |`SELECT [CROSS PARTITION] ... FROM <collection-name> ... WITH database=<db-name>`|
+
+See [supported SQL statements](SQL.md) for details.
 
 ## License
 

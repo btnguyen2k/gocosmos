@@ -24,6 +24,49 @@ type placeholder struct {
 	index int
 }
 
+func _parseValue(input string, separator rune) (value interface{}, leftOver string, err error) {
+	if loc := reValPlaceholder.FindStringIndex(input); loc != nil && loc[0] == 0 {
+		token := strings.TrimFunc(input[loc[0]+1:loc[1]], func(r rune) bool { return _isSpace(r) || r == separator })
+		index, err := strconv.Atoi(token)
+		return placeholder{index}, input[loc[1]:], err
+	}
+	if loc := reValNull.FindStringIndex(input); loc != nil && loc[0] == 0 {
+		return nil, input[loc[1]:], nil
+	}
+	if loc := reValNumber.FindStringIndex(input); loc != nil && loc[0] == 0 {
+		token := strings.TrimFunc(input[loc[0]:loc[1]], func(r rune) bool { return _isSpace(r) || r == separator })
+		var data interface{}
+		err := json.Unmarshal([]byte(token), &data)
+		if err != nil {
+			err = errors.New("(nul) cannot parse query, invalid token at: " + token)
+		}
+		return data, input[loc[1]:], err
+	}
+	if loc := reValBoolean.FindStringIndex(input); loc != nil && loc[0] == 0 {
+		token := strings.TrimFunc(input[loc[0]:loc[1]], func(r rune) bool { return _isSpace(r) || r == separator })
+		var data bool
+		err := json.Unmarshal([]byte(token), &data)
+		// if err != nil {
+		// 	err = errors.New("(bool) cannot parse query, invalid token at: " + token)
+		// }
+		return data, input[loc[1]:], err
+	}
+	if loc := reValString.FindStringIndex(input); loc != nil && loc[0] == 0 {
+		var data interface{}
+		token, err := strconv.Unquote(strings.TrimFunc(input[loc[0]:loc[1]], func(r rune) bool { return _isSpace(r) || r == separator }))
+		if err == nil {
+			err = json.Unmarshal([]byte(token), &data)
+			if err != nil {
+				err = errors.New("(unmarshal) cannot parse query, invalid token at: " + token)
+			}
+		} else {
+			err = errors.New("(unquote) cannot parse query, invalid token at: " + token)
+		}
+		return data, input[loc[1]:], err
+	}
+	return nil, input, errors.New("cannot parse query, invalid token at: " + input)
+}
+
 // StmtInsert implements "INSERT" operation.
 //
 // Syntax: INSERT|UPSERT INTO <db-name>.<collection-name> (<field-list>) VALUES (<value-list>)
@@ -40,7 +83,7 @@ type placeholder struct {
 //     - a boolean value in JSON (include the double quotes): "true"
 //     - a null value in JSON (include the double quotes): "null"
 //     - a map value in JSON (include the double quotes): "{\"key\":\"value\"}"
-//     - a list value in JSON (include the double quotes): "[1,true,nil,\"string\"]"
+//     - a list value in JSON (include the double quotes): "[1,true,null,\"string\"]"
 //
 // CosmosDB automatically creates a few extra fields for the insert document.
 // See https://docs.microsoft.com/en-us/azure/cosmos-db/account-databases-containers-items#properties-of-an-item
@@ -60,55 +103,18 @@ func (s *StmtInsert) parse() error {
 	s.values = make([]interface{}, 0)
 	s.numInput = 1
 	for temp := strings.TrimSpace(s.valuesStr); temp != ""; temp = strings.TrimSpace(temp) {
-		if loc := reValPlaceholder.FindStringIndex(temp); loc != nil && loc[0] == 0 {
-			token := strings.TrimFunc(temp[loc[0]+1:loc[1]], func(r rune) bool { return _isSpace(r) || r == ',' })
-			s.numInput++
-			index, _ := strconv.Atoi(token)
-			s.values = append(s.values, placeholder{index})
-			temp = temp[loc[1]:]
-			continue
-		}
-		if loc := reValNull.FindStringIndex(temp); loc != nil && loc[0] == 0 {
-			s.values = append(s.values, nil)
-			temp = temp[loc[1]:]
-			continue
-		}
-		if loc := reValNumber.FindStringIndex(temp); loc != nil && loc[0] == 0 {
-			token := strings.TrimFunc(temp[loc[0]:loc[1]], func(r rune) bool { return _isSpace(r) || r == ',' })
-			var data interface{}
-			if err := json.Unmarshal([]byte(token), &data); err != nil {
-				return errors.New("(nul) cannot parse query, invalid token at: " + token)
+		value, leftOver, err := _parseValue(temp, ',')
+		if err == nil {
+			s.values = append(s.values, value)
+			temp = leftOver
+			switch value.(type) {
+			case placeholder:
+				s.numInput++
 			}
-			s.values = append(s.values, data)
-			temp = temp[loc[1]:]
 			continue
 		}
-		if loc := reValBoolean.FindStringIndex(temp); loc != nil && loc[0] == 0 {
-			token := strings.TrimFunc(temp[loc[0]:loc[1]], func(r rune) bool { return _isSpace(r) || r == ',' })
-			var data bool
-			if err := json.Unmarshal([]byte(token), &data); err != nil {
-				return errors.New("(bool) cannot parse query, invalid token at: " + token)
-			}
-			s.values = append(s.values, data)
-			temp = temp[loc[1]:]
-			continue
-		}
-		if loc := reValString.FindStringIndex(temp); loc != nil && loc[0] == 0 {
-			token, err := strconv.Unquote(strings.TrimFunc(temp[loc[0]:loc[1]], func(r rune) bool { return _isSpace(r) || r == ',' }))
-			if err != nil {
-				return errors.New("(unquote) cannot parse query, invalid token at: " + token)
-			}
-			var data interface{}
-			if err := json.Unmarshal([]byte(token), &data); err != nil {
-				return errors.New("(unmarshal) cannot parse query, invalid token at: " + token)
-			}
-			s.values = append(s.values, data)
-			temp = temp[loc[1]:]
-			continue
-		}
-		return errors.New("cannot parse query, invalid token at: " + temp)
+		return err
 	}
-
 	return nil
 }
 
@@ -206,7 +212,7 @@ func (r *ResultInsert) RowsAffected() (int64, error) {
 // Syntax: DELETE FROM <db-name>.<collection-name> WHERE id=<id-value>
 //
 // - currently DELETE only removes one document specified by id.
-// - <id-value> is treated as a string. Either `WHERE id=abc` or `WHERE id="abc"` is accepted.
+// - <id-value> is treated as string. Either `WHERE id=abc` or `WHERE id="abc"` is accepted.
 type StmtDelete struct {
 	*Stmt
 	dbName   string
@@ -226,10 +232,10 @@ func (s *StmtDelete) parse() error {
 		s.idStr = strings.TrimSpace(s.idStr[1 : len(s.idStr)-1])
 	} else if loc := reValPlaceholder.FindStringIndex(s.idStr); loc != nil {
 		if loc[0] == 0 && loc[1] == len(s.idStr) {
-			index, err := strconv.Atoi(s.idStr[loc[0]+1:])
-			if err != nil || index < 1 {
-				return fmt.Errorf("invalid id placeholder literate: %s", s.idStr)
-			}
+			index, _ := strconv.Atoi(s.idStr[loc[0]+1:])
+			// if err != nil || index < 1 {
+			// 	return fmt.Errorf("invalid id placeholder literate: %s", s.idStr)
+			// }
 			s.id = placeholder{index}
 			s.numInput++
 		} else {
@@ -270,7 +276,7 @@ func (s *StmtDelete) Exec(args []driver.Value) (driver.Result, error) {
 	case 404:
 		// consider "document not found" as successful operation
 		// but database/collection not found is not!
-		if strings.Index(err.Error(), "ResourceType: Document") >= 0 {
+		if strings.Index(fmt.Sprintf("%s", err), "ResourceType: Document") >= 0 {
 			err = nil
 		} else {
 			err = ErrNotFound
@@ -315,8 +321,7 @@ func (r *ResultDelete) RowsAffected() (int64, error) {
 
 // StmtSelect implements "SELECT" operation.
 //
-// The "SELECT" query follows CosmosDB's SQL grammar (https://docs.microsoft.com/en-us/azure/cosmos-db/sql-query-getting-started)
-// with a few extensions:
+// The "SELECT" query follows CosmosDB's SQL grammar (https://docs.microsoft.com/en-us/azure/cosmos-db/sql-query-select) with a few extensions:
 // - Syntax: SELECT [CROSS PARTITION] ... FROM <collection/table-name> ... WITH database|db=<db-name> [WITH collection|table=<collection/table-name>] [WITH cross_partition=true]
 // - (extension) If the collection is partitioned, specify CROSS PARTITION to allow execution across multiple partitions.
 //   This clause is not required if query is to be executed on a single partition.
@@ -360,16 +365,13 @@ func (s *StmtSelect) parse(withOptsStr string) error {
 	s.numInput = len(matches)
 	s.placeholders = make(map[int]string)
 	for _, match := range matches {
-		if v, err := strconv.Atoi(match[1]); err == nil {
-			key := "@_" + match[1]
-			s.placeholders[v] = key
-			if strings.HasSuffix(match[0], " ") {
-				key += " "
-			}
-			s.selectQuery = strings.ReplaceAll(s.selectQuery, match[0], key)
-		} else {
-			return errors.New("cannot parse query, invalid token at: " + match[0])
+		v, _ := strconv.Atoi(match[1])
+		key := "@_" + match[1]
+		s.placeholders[v] = key
+		if strings.HasSuffix(match[0], " ") {
+			key += " "
 		}
+		s.selectQuery = strings.ReplaceAll(s.selectQuery, match[0], key)
 	}
 
 	return nil
@@ -389,7 +391,7 @@ func (s *StmtSelect) Query(args []driver.Value) (driver.Rows, error) {
 	for i, arg := range args {
 		v, ok := s.placeholders[i+1]
 		if !ok {
-			return nil, fmt.Errorf("there is placeholder number %d", i+1)
+			return nil, fmt.Errorf("there is no placeholder #%d", i+1)
 		}
 		params = append(params, map[string]interface{}{"name": fmt.Sprintf("%s", v), "value": arg})
 	}
@@ -402,23 +404,17 @@ func (s *StmtSelect) Query(args []driver.Value) (driver.Rows, error) {
 	}
 	documents := make([]DocInfo, 0)
 	var restResult *RespQueryDocs
-	for restResult = s.conn.restClient.QueryDocuments(query); restResult.Error() == nil; {
+	for restResult = s.conn.restClient.QueryDocuments(query); restResult.Error() == nil; restResult = s.conn.restClient.QueryDocuments(query) {
 		documents = append(documents, restResult.Documents...)
 		if restResult.ContinuationToken == "" {
 			break
 		}
 		query.ContinuationToken = restResult.ContinuationToken
-		restResult = s.conn.restClient.QueryDocuments(query)
 	}
 	err := restResult.Error()
 	var rows driver.Rows
 	if err == nil {
-		rows = &ResultSelect{
-			count:       int(restResult.Count),
-			documents:   documents,
-			cursorCount: 0,
-			columnList:  make([]string, 0),
-		}
+		rows = &ResultSelect{count: len(documents), documents: documents, cursorCount: 0, columnList: make([]string, 0)}
 		if len(documents) > 0 {
 			doc := documents[0]
 			columnList := make([]string, len(doc))
@@ -436,8 +432,8 @@ func (s *StmtSelect) Query(args []driver.Value) (driver.Rows, error) {
 		err = ErrForbidden
 	case 404:
 		err = ErrNotFound
-	case 409:
-		err = ErrConflict
+		// case 409:
+		// 	err = ErrConflict
 	}
 	return rows, err
 }
@@ -498,7 +494,7 @@ func (r *ResultSelect) Next(dest []driver.Value) error {
 //     - a boolean value in JSON (include the double quotes): "true"
 //     - a null value in JSON (include the double quotes): "null"
 //     - a map value in JSON (include the double quotes): "{\"key\":\"value\"}"
-//     - a list value in JSON (include the double quotes): "[1,true,nil,\"string\"]"
+//     - a list value in JSON (include the double quotes): "[1,true,null,\"string\"]"
 type StmtUpdate struct {
 	*Stmt
 	dbName    string
@@ -519,16 +515,16 @@ func (s *StmtUpdate) _parseId() error {
 	if hasPrefix && hasSuffix {
 		s.idStr = strings.TrimSpace(s.idStr[1 : len(s.idStr)-1])
 	} else if loc := reValPlaceholder.FindStringIndex(s.idStr); loc != nil {
-		if loc[0] == 0 && loc[1] == len(s.idStr) {
-			index, err := strconv.Atoi(s.idStr[loc[0]+1:])
-			if err != nil || index < 1 {
-				return fmt.Errorf("invalid id placeholder literate: %s", s.idStr)
-			}
-			s.id = placeholder{index}
-			s.numInput++
-		} else {
-			return fmt.Errorf("invalid id literate: %s", s.idStr)
-		}
+		// if loc[0] == 0 && loc[1] == len(s.idStr) {
+		index, _ := strconv.Atoi(s.idStr[loc[0]+1:])
+		// if err != nil || index < 1 {
+		// 	return fmt.Errorf("invalid id placeholder literate: %s", s.idStr)
+		// }
+		s.id = placeholder{index}
+		s.numInput++
+		// } else {
+		// 	return fmt.Errorf("invalid id literate: %s", s.idStr)
+		// }
 	}
 	return nil
 }
@@ -555,58 +551,21 @@ func (s *StmtUpdate) _parseUpdateClause() error {
 			s.fields = append(s.fields, field)
 			temp = strings.TrimSpace(temp[loc[1]:])
 		} else {
-			return errors.New("(field) cannot parse query, invalid token at: " + temp[loc[0]:loc[1]])
+			return errors.New("(field) cannot parse query, invalid token at: " + temp)
 		}
 
 		// secondly, parse the value part
-		if loc := reValPlaceholder.FindStringIndex(temp); loc != nil && loc[0] == 0 {
-			token := strings.TrimFunc(temp[loc[0]+1:loc[1]], func(r rune) bool { return _isSpace(r) || r == ',' })
-			s.numInput++
-			index, _ := strconv.Atoi(token)
-			s.values = append(s.values, placeholder{index})
-			temp = temp[loc[1]:]
-			continue
-		}
-		if loc := reValNull.FindStringIndex(temp); loc != nil && loc[0] == 0 {
-			s.values = append(s.values, nil)
-			temp = temp[loc[1]:]
-			continue
-		}
-		if loc := reValNumber.FindStringIndex(temp); loc != nil && loc[0] == 0 {
-			token := strings.TrimFunc(temp[loc[0]:loc[1]], func(r rune) bool { return _isSpace(r) || r == ',' })
-			var data interface{}
-			if err := json.Unmarshal([]byte(token), &data); err != nil {
-				return errors.New("(nul) cannot parse query, invalid token at: " + token)
+		value, leftOver, err := _parseValue(temp, ',')
+		if err == nil {
+			s.values = append(s.values, value)
+			temp = leftOver
+			switch value.(type) {
+			case placeholder:
+				s.numInput++
 			}
-			s.values = append(s.values, data)
-			temp = temp[loc[1]:]
 			continue
 		}
-		if loc := reValBoolean.FindStringIndex(temp); loc != nil && loc[0] == 0 {
-			token := strings.TrimFunc(temp[loc[0]:loc[1]], func(r rune) bool { return _isSpace(r) || r == ',' })
-			var data bool
-			if err := json.Unmarshal([]byte(token), &data); err != nil {
-				return errors.New("(bool) cannot parse query, invalid token at: " + token)
-			}
-			s.values = append(s.values, data)
-			temp = temp[loc[1]:]
-			continue
-		}
-		if loc := reValString.FindStringIndex(temp); loc != nil && loc[0] == 0 {
-			token, err := strconv.Unquote(strings.TrimFunc(temp[loc[0]:loc[1]], func(r rune) bool { return _isSpace(r) || r == ',' }))
-			if err != nil {
-				fmt.Println(err)
-				return errors.New("(unquote) cannot parse query, invalid token at: " + token)
-			}
-			var data interface{}
-			if err := json.Unmarshal([]byte(token), &data); err != nil {
-				return errors.New("(unmarshal) cannot parse query, invalid token at: " + token)
-			}
-			s.values = append(s.values, data)
-			temp = temp[loc[1]:]
-			continue
-		}
-		return errors.New("cannot parse query, invalid token at: " + temp)
+		return err
 	}
 	return nil
 }
@@ -632,9 +591,9 @@ func (s *StmtUpdate) validate() error {
 	if len(s.fields) == 0 {
 		return errors.New("invalid query: SET clause is empty")
 	}
-	if len(s.fields) != len(s.values) {
-		return fmt.Errorf("number of field (%d) does not match number of input value (%d)", len(s.fields), len(s.values))
-	}
+	// if len(s.fields) != len(s.values) {
+	// 	return fmt.Errorf("number of field (%d) does not match number of input value (%d)", len(s.fields), len(s.values))
+	// }
 	return nil
 }
 
@@ -658,7 +617,7 @@ func (s *StmtUpdate) Exec(args []driver.Value) (driver.Result, error) {
 		if getDocResult.StatusCode == 404 {
 			// consider "document not found" as successful operation
 			// but database/collection not found is not!
-			if strings.Index(err.Error(), "ResourceType: Document") >= 0 {
+			if strings.Index(fmt.Sprintf("%s", err), "ResourceType: Document") >= 0 {
 				return &ResultUpdate{Successful: false}, nil
 			}
 			return nil, ErrNotFound
@@ -685,10 +644,10 @@ func (s *StmtUpdate) Exec(args []driver.Value) (driver.Result, error) {
 	switch replaceDocResult.StatusCode {
 	case 403:
 		err = ErrForbidden
-	case 404:
+	case 404: // race case, but possible
 		// consider "document not found" as successful operation
 		// but database/collection not found is not!
-		if strings.Index(err.Error(), "ResourceType: Document") >= 0 {
+		if strings.Index(fmt.Sprintf("%s", err), "ResourceType: Document") >= 0 {
 			err = nil
 		} else {
 			err = ErrNotFound

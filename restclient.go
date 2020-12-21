@@ -266,9 +266,10 @@ func (c *RestClient) ReplaceCollection(spec CollectionSpec) *RespReplaceColl {
 	if spec.IndexingPolicy != nil {
 		params["indexingPolicy"] = spec.IndexingPolicy
 	}
-	if spec.UniqueKeyPolicy != nil {
-		params["uniqueKeyPolicy"] = spec.UniqueKeyPolicy
-	}
+	// The unique index cannot be modified. To change the unique index, remove the collection and re-create a new one.
+	// if spec.UniqueKeyPolicy != nil {
+	// 	params["uniqueKeyPolicy"] = spec.UniqueKeyPolicy
+	// }
 	req := c.buildJsonRequest(method, url, params)
 	req = c.addAuthHeader(req, method, "colls", "dbs/"+spec.DbName+"/colls/"+spec.CollName)
 	if spec.Ru > 0 {
@@ -702,9 +703,27 @@ func (d DocInfo) Rid() string {
 	return ""
 }
 
+// Attachments returns the value of document's "_attachments" attribute.
+func (d DocInfo) Attachments() string {
+	v := d.GetAttrAsTypeUnsafe("_attachments", reddo.TypeString)
+	if v != nil {
+		return v.(string)
+	}
+	return ""
+}
+
 // Etag returns the value of document's "_etag" attribute.
 func (d DocInfo) Etag() string {
 	v := d.GetAttrAsTypeUnsafe("_etag", reddo.TypeString)
+	if v != nil {
+		return v.(string)
+	}
+	return ""
+}
+
+// Self returns the value of document's "_self" attribute.
+func (d DocInfo) Self() string {
+	v := d.GetAttrAsTypeUnsafe("_self", reddo.TypeString)
 	if v != nil {
 		return v.(string)
 	}
