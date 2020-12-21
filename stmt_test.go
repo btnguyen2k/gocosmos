@@ -285,13 +285,15 @@ $1, :3, @2)`: {
 	}
 
 	invalidQueries := []string{
-		`INSERT INTO db (a,b,c) VALUES (1,2,3)`,           // no collection name
-		`INSERT INTO db.table (a,b,c)`,                    // no VALUES part
-		`INSERT INTO db.table VALUES (1,2,3)`,             // no column list
-		`INSERT INTO db.table (a) VALUES ('a string')`,    // invalid string literature
-		`INSERT INTO db.table (a) VALUES ("a string")`,    // should be "\"a string\""
-		`INSERT INTO db.table (a) VALUES ("{key:value}")`, // should be "{\"key\:\"value\"}"
-		`INSERT INTO db.table (a,b) VALUES (1,2,3)`,       // number of field and value mismatch
+		`INSERT INTO db (a,b,c) VALUES (1,2,3)`,                     // no collection name
+		`INSERT INTO db.table (a,b,c)`,                              // no VALUES part
+		`INSERT INTO db.table VALUES (1,2,3)`,                       // no column list
+		`INSERT INTO db.table (a) VALUES ('a string')`,              // invalid string literature
+		`INSERT INTO db.table (a) VALUES ("a string")`,              // should be "\"a string\""
+		`INSERT INTO db.table (a) VALUES ("{key:value}")`,           // should be "{\"key\:\"value\"}"
+		`INSERT INTO db.table (a,b) VALUES (1,2,3)`,                 // number of field and value mismatch
+		`INSERT INTO db.table (a,b) VALUES (0x1qa,2)`,               // invalid number
+		`INSERT INTO db.table (a,b) VALUES ("cannot \\"unquote",2)`, // invalid string
 	}
 	for _, query := range invalidQueries {
 		if _, err := parseQuery(nil, query); err == nil {
@@ -478,15 +480,15 @@ SET a=null, b=
 	1.0, c=true, 
   d="\"a string 'with' \\\"quote\\\"\"", e="{\"key\":\"value\"}"
 ,f="[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]" WHERE
-	id=abc`: {
+	id="abc"`: {
 			dbName: "db1", collName: "table1", fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{
 				nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`},
 			}, idStr: "abc", id: nil},
 		`UPDATE db-1.table_1 
 SET a=$1, b=
-	$2, c=:3 WHERE
+	$2, c=:3, d=0 WHERE
 	id=@4`: {
-			dbName: "db-1", collName: "table_1", fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}},
+			dbName: "db-1", collName: "table_1", fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0},
 			idStr: "@4", id: placeholder{4}},
 	}
 	for query, data := range testData {
@@ -516,6 +518,9 @@ SET a=$1, b=
 		`UPDATE db.table WHERE id=1`,                       // no SET clause
 		`UPDATE db.table SET      WHERE id=1`,              // SET clause is empty
 		`UPDATE db.table SET a="{key:value}" WHERE id=1`,   // should be "{\"key\:\"value\"}"
+		`UPDATE db.table SET =1 WHERE id=2`,                // invalid SET clause
+		`UPDATE db.table SET a=1 WHERE id=   `,             // empty id
+		`UPDATE db.table SET a=1,b=2,c=3 WHERE id="4`,      // invalid id literate
 	}
 	for _, query := range invalidQueries {
 		if _, err := parseQuery(nil, query); err == nil {

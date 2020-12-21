@@ -182,6 +182,23 @@ func TestRestClient_CreateCollection(t *testing.T) {
 	}
 }
 
+func TestRestClient_CreateCollectionIndexingPolicy(t *testing.T) {
+	name := "TestRestClient_CreateCollectionIndexingPolicy"
+	client := _newRestClient(t, name)
+
+	dbname := "mydb"
+	collname := "mytable"
+	collSpec := CollectionSpec{
+		DbName: dbname, CollName: collname,
+		IndexingPolicy:   map[string]interface{}{"indexingMode": "consistent", "automatic": true},
+		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/id"}, "kind": "Hash"}}
+	client.DeleteDatabase(dbname)
+	client.CreateDatabase(DatabaseSpec{Id: dbname})
+	if result := client.CreateCollection(collSpec); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	}
+}
+
 func TestRestClient_ReplaceCollection(t *testing.T) {
 	name := "TestRestClient_ReplaceCollection"
 	client := _newRestClient(t, name)
@@ -363,6 +380,27 @@ func TestRestClient_CreateDocument(t *testing.T) {
 		t.Fatalf("%s failed: %s", name, result.Error())
 	} else if result.DocInfo["id"] != "1" || result.DocInfo["username"] != "user" || result.DocInfo["email"] != "user@domain.com" ||
 		result.DocInfo["grade"].(float64) != 1.0 || result.DocInfo["active"] != true || result.DocInfo["_rid"] == "" ||
+		result.DocInfo["_self"] == "" || result.DocInfo["_ts"].(float64) == 0.0 || result.DocInfo["_etag"] == "" || result.DocInfo["_attachments"] == "" {
+		t.Fatalf("%s failed: invalid dbinfo returned %#v", name, result.DocInfo)
+	}
+
+	if result := client.CreateDocument(DocumentSpec{
+		DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"}, IndexingDirective: "Include",
+		DocumentData: map[string]interface{}{"id": "11", "username": "user", "email": "user11@domain.com", "grade": 1.1, "active": false},
+	}); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if result.DocInfo["id"] != "11" || result.DocInfo["username"] != "user" || result.DocInfo["email"] != "user11@domain.com" ||
+		result.DocInfo["grade"].(float64) != 1.1 || result.DocInfo["active"] != false || result.DocInfo["_rid"] == "" ||
+		result.DocInfo["_self"] == "" || result.DocInfo["_ts"].(float64) == 0.0 || result.DocInfo["_etag"] == "" || result.DocInfo["_attachments"] == "" {
+		t.Fatalf("%s failed: invalid dbinfo returned %#v", name, result.DocInfo)
+	}
+	if result := client.CreateDocument(DocumentSpec{
+		DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"}, IndexingDirective: "Exclude",
+		DocumentData: map[string]interface{}{"id": "111", "username": "user", "email": "user111@domain.com", "grade": 1.11, "active": false},
+	}); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if result.DocInfo["id"] != "111" || result.DocInfo["username"] != "user" || result.DocInfo["email"] != "user111@domain.com" ||
+		result.DocInfo["grade"].(float64) != 1.11 || result.DocInfo["active"] != false || result.DocInfo["_rid"] == "" ||
 		result.DocInfo["_self"] == "" || result.DocInfo["_ts"].(float64) == 0.0 || result.DocInfo["_etag"] == "" || result.DocInfo["_attachments"] == "" {
 		t.Fatalf("%s failed: invalid dbinfo returned %#v", name, result.DocInfo)
 	}
@@ -642,23 +680,39 @@ func TestRestClient_GetDocument(t *testing.T) {
 		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
 	})
 
-	var etag string
+	var etag, sessionToken string
 	docInfo := map[string]interface{}{"id": "1", "username": "user", "email": "user1@domain.com", "grade": 1.0, "active": true}
 	if result := client.CreateDocument(DocumentSpec{DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"}, DocumentData: docInfo}); result.Error() != nil {
 		t.Fatalf("%s failed: %s", name, result.Error())
 	} else {
 		etag = result.DocInfo["_etag"].(string)
+		sessionToken = result.SessionToken
 	}
 
 	if result := client.GetDocument(DocReq{DbName: dbname, CollName: collname, DocId: "1", PartitionKeyValues: []interface{}{"user"}}); result.Error() != nil {
 		t.Fatalf("%s failed: %s", name, result.Error())
-	} else if result.DocInfo["id"] != docInfo["id"] || result.DocInfo["username"] != docInfo["username"] || result.DocInfo["email"] != docInfo["email"] ||
-		result.DocInfo["grade"] != docInfo["grade"] || result.DocInfo["active"] != docInfo["active"] || result.DocInfo["_rid"] == "" ||
-		result.DocInfo["_self"] == "" || result.DocInfo["_ts"].(float64) == 0.0 || result.DocInfo["_etag"] == "" || result.DocInfo["_attachments"] == "" {
+	} else if result.DocInfo.Id() != docInfo["id"] || result.DocInfo["username"] != docInfo["username"] || result.DocInfo["email"] != docInfo["email"] ||
+		result.DocInfo["grade"] != docInfo["grade"] || result.DocInfo["active"] != docInfo["active"] || result.DocInfo.Rid() == "" ||
+		result.DocInfo.Self() == "" || result.DocInfo.Ts() == 0 || result.DocInfo.Etag() == "" || result.DocInfo.Attachments() == "" {
 		t.Fatalf("%s failed: invalid dbinfo returned %#v", name, result.DocInfo)
+	} else {
+		ago := time.Now().Add(-5 * time.Minute)
+		docTime := result.DocInfo.TsAsTime()
+		if !ago.Before(docTime) {
+			t.Fatalf("%s failed: invalid document time %s", name, docTime)
+		}
+
+		clone := result.DocInfo.RemoveSystemAttrs()
+		for k := range clone {
+			if strings.HasPrefix(k, "_") {
+				t.Fatalf("%s failed: invalid cloned document %#v", name, clone)
+			}
+		}
 	}
 
-	if result := client.GetDocument(DocReq{NotMatchEtag: etag + "dummy", DbName: dbname, CollName: collname, DocId: "1", PartitionKeyValues: []interface{}{"user"}}); result.Error() != nil {
+	if result := client.GetDocument(DocReq{NotMatchEtag: etag + "dummy", DbName: dbname, CollName: collname, DocId: "1",
+		ConsistencyLevel: "Session", SessionToken: sessionToken,
+		PartitionKeyValues: []interface{}{"user"}}); result.Error() != nil {
 		t.Fatalf("%s failed: %s", name, result.Error())
 	} else if result.DocInfo["id"] != docInfo["id"] || result.DocInfo["username"] != docInfo["username"] || result.DocInfo["email"] != docInfo["email"] ||
 		result.DocInfo["grade"] != docInfo["grade"] || result.DocInfo["active"] != docInfo["active"] || result.DocInfo["_rid"] == "" ||
@@ -766,17 +820,19 @@ func TestRestClient_QueryDocuments(t *testing.T) {
 		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
 	})
 	totalRu := 0.0
+	var sessionToken string
 	for i := 0; i < 100; i++ {
 		docInfo := map[string]interface{}{"id": fmt.Sprintf("%02d", i), "username": "user", "email": "user" + strconv.Itoa(i) + "@domain.com", "grade": i, "active": i%10 == 0}
 		if result := client.CreateDocument(DocumentSpec{DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"}, DocumentData: docInfo}); result.Error() != nil {
 			t.Fatalf("%s failed: %s", name, result.Error())
 		} else {
 			totalRu += result.RequestCharge
+			sessionToken = result.SessionToken
 		}
 	}
 	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
 
-	query := QueryReq{DbName: dbname, CollName: collname, MaxItemCount: 10,
+	query := QueryReq{DbName: dbname, CollName: collname, MaxItemCount: 10, ConsistencyLevel: "Session", SessionToken: sessionToken,
 		Query:  "SELECT * FROM c WHERE c.id>=@id AND c.username='user'",
 		Params: []interface{}{map[string]interface{}{"name": "@id", "value": "37"}},
 	}
@@ -925,14 +981,17 @@ func TestRestClient_ListDocuments(t *testing.T) {
 	// 	fmt.Println("\tCollection etag:", result.Etag, result.Ts)
 	// }
 
+	var sessionToken string
 	rand.Seed(time.Now().UnixNano())
 	removed := make(map[int]bool)
 	for i := 0; i < 5; i++ {
 		id := rand.Intn(100)
 		removed[id] = true
 		result := client.DeleteDocument(DocReq{DbName: dbname, CollName: collname, DocId: fmt.Sprintf("%02d", id), PartitionKeyValues: []interface{}{"user"}})
-		if result.Error() != nil && result.Error() != ErrNotFound {
+		if result.Error() != nil && result.StatusCode != 404 {
 			t.Fatalf("%s failed: %s", name, result.Error())
+		} else {
+			sessionToken = result.SessionToken
 		}
 
 		id = rand.Intn(100)
@@ -944,7 +1003,12 @@ func TestRestClient_ListDocuments(t *testing.T) {
 				PartitionKeyValues: []interface{}{"user"},
 				DocumentData:       map[string]interface{}{"id": fmt.Sprintf("%02d", id), "username": "user", "email": "user" + strconv.Itoa(id) + "@domain.com", "grade": id, "active": i%10 == 0, "extra": time.Now()},
 			}
-			client.ReplaceDocument("", doc)
+			result := client.ReplaceDocument("", doc)
+			if result.Error() != nil && result.Error() != ErrNotFound {
+				t.Fatalf("%s failed: %s", name, result.Error())
+			} else {
+				sessionToken = result.SessionToken
+			}
 		}
 	}
 	// if result := client.GetCollection(dbname, collname); result.Error() != nil {
@@ -953,7 +1017,7 @@ func TestRestClient_ListDocuments(t *testing.T) {
 	// 	fmt.Println("\tCollection etag:", result.Etag, result.Ts)
 	// }
 
-	req := ListDocsReq{DbName: dbname, CollName: collname, MaxItemCount: 10}
+	req := ListDocsReq{DbName: dbname, CollName: collname, MaxItemCount: 10, ConsistencyLevel: "Session", SessionToken: sessionToken}
 	var result *RespListDocs
 	documents := make([]DocInfo, 0)
 	totalRu = 0.0
@@ -1024,7 +1088,7 @@ func TestRestClient_ListDocumentsCrossPartition(t *testing.T) {
 		id := rand.Intn(100)
 		removed[id] = true
 		result := client.DeleteDocument(DocReq{DbName: dbname, CollName: collname, DocId: fmt.Sprintf("%02d", id), PartitionKeyValues: []interface{}{"user" + strconv.Itoa(id%4)}})
-		if result.Error() != nil && result.Error() != ErrNotFound {
+		if result.Error() != nil && result.StatusCode != 404 {
 			t.Fatalf("%s failed: %s", name, result.Error())
 		}
 

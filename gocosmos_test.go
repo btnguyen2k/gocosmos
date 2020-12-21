@@ -1,6 +1,7 @@
 package gocosmos
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -21,19 +22,6 @@ func Test_OpenDatabase(t *testing.T) {
 	}
 	if db == nil {
 		t.Fatalf("%s failed: nil", name)
-	}
-}
-
-func Test_Transaction(t *testing.T) {
-	name := "Test_OpenDatabase"
-	driver := "gocosmos"
-	dsn := "dummy"
-	db, err := sql.Open(driver, dsn)
-	if err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
-	if tx, err := db.BeginTx(nil, nil); tx != nil || err == nil {
-		t.Fatalf("%s failed: transaction is not supported yet", name)
 	}
 }
 
@@ -91,6 +79,16 @@ func _openDb(t *testing.T, testName string) *sql.DB {
 		t.Fatalf("%s failed: %s", testName+"/sql.Open", err)
 	}
 	return db
+}
+
+func TestDriver_Transaction(t *testing.T) {
+	name := "TestDriver_Transaction"
+	db := _openDb(t, name)
+	if tx, err := db.BeginTx(context.Background(), nil); tx != nil || err == nil {
+		t.Fatalf("%s failed: transaction is not supported yet", name)
+	} else if strings.Index(err.Error(), "not supported") < 0 {
+		t.Fatalf("%s failed: transaction is not supported yet / %s", name, err)
+	}
 }
 
 func TestDriver_Open(t *testing.T) {
@@ -528,6 +526,11 @@ func Test_Exec_InsertPlaceholder(t *testing.T) {
 		// duplicated unique index (in logical partition scope)
 		t.Fatalf("%s failed: expected ErrConflict but received %#v", name, err)
 	}
+
+	if _, err := db.Exec(`INSERT INTO dbtemp.tbltemp (id, username, email, grade, actived, data) VALUES (:1, $2, @3, @4, $5, :10)`,
+		"9", "user", "user@domain.com", 9, false, nil, "user"); err == nil || strings.Index(err.Error(), "invalid value index") < 0 {
+		t.Fatalf("%s failed: expected 'invalid value index' bur received %#v", name, err)
+	}
 }
 
 func Test_Query_Upsert(t *testing.T) {
@@ -734,6 +737,10 @@ func Test_Exec_Delete(t *testing.T) {
 	if _, err := db.Exec(`DELETE FROM db_not_exists.table WHERE id=1`, "user"); err != ErrNotFound {
 		t.Fatalf("%s failed: expected ErrNotFound but received %#v", name, err)
 	}
+
+	if _, err := db.Exec(`DELETE FROM dbtemp.tbltemp WHERE id=$10`, "1", "user"); err == nil || strings.Index(err.Error(), "invalid value index") < 0 {
+		t.Fatalf("%s failed: expected 'invalid value index' bur received %#v", name, err)
+	}
 }
 
 func Test_Exec_Select(t *testing.T) {
@@ -841,6 +848,58 @@ func Test_Query_Select(t *testing.T) {
 	}
 }
 
+func Test_Query_SelectLongList(t *testing.T) {
+	name := "Test_Query_SelectLongList"
+	db := _openDb(t, name)
+
+	db.Exec("DROP DATABASE db_not_exists")
+	db.Exec("DROP DATABASE dbtemp")
+	db.Exec("CREATE DATABASE dbtemp WITH maxru=10000")
+	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
+
+	for i := 0; i < 1000; i++ {
+		id := fmt.Sprintf("%03d", i)
+		username := "user" + strconv.Itoa(i%4)
+		db.Exec("INSERT INTO dbtemp.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4)", id, username, "user"+id+"@domain.com", i, username)
+	}
+
+	if dbRows, err := db.Query(`SELECT * FROM c WHERE c.username="user0" AND c.id>"030" ORDER BY c.id WITH database=dbtemp WITH collection=tbltemp`); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	} else {
+		colTypes, err := dbRows.ColumnTypes()
+		if err != nil {
+			t.Fatalf("%s failed: %s", name, err)
+		}
+		numCols := len(colTypes)
+		rows := make(map[string]map[string]interface{})
+		for dbRows.Next() {
+			vals := make([]interface{}, numCols)
+			scanVals := make([]interface{}, numCols)
+			for i := 0; i < numCols; i++ {
+				scanVals[i] = &vals[i]
+			}
+			if err := dbRows.Scan(scanVals...); err == nil {
+				row := make(map[string]interface{})
+				for i, v := range colTypes {
+					row[v.Name()] = vals[i]
+				}
+				id := fmt.Sprintf("%s", row["id"])
+				rows[id] = row
+			} else if err != sql.ErrNoRows {
+				t.Fatalf("%s failed: %s", name, err)
+			}
+		}
+		if len(rows) != 242 {
+			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 242, len(rows))
+		}
+		for k := range rows {
+			if k <= "030" {
+				t.Fatalf("%s failed: document #%s should not be returned", name, k)
+			}
+		}
+	}
+}
+
 func Test_Query_SelectPlaceholder(t *testing.T) {
 	name := "Test_Query_SelectPlaceholder"
 	db := _openDb(t, name)
@@ -926,6 +985,11 @@ func Test_Query_SelectPlaceholder(t *testing.T) {
 				t.Fatalf("%s failed: document #%s should not be returned", name, k)
 			}
 		}
+	}
+
+	if _, err := db.Query(`SELECT * FROM c WHERE c.username=$2 AND c.id>:10 ORDER BY c.id WITH database=dbtemp WITH collection=tbltemp`, "30", "user0");
+		err == nil || strings.Index(err.Error(), "no placeholder") < 0 {
+		t.Fatalf("%s failed: expecting 'no placeholder' but received %s", name, err)
 	}
 }
 
@@ -1065,5 +1129,15 @@ func Test_Exec_UpdatePlaceholder(t *testing.T) {
 		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
 	} else if numRows, err := result.RowsAffected(); numRows != 0 || err != nil {
 		t.Fatalf("%s failed: expected RowsAffected=0/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+
+	if _, err := db.Exec(`UPDATE dbtemp.tbltemp SET grade=10 WHERE id=$10`, "1", "user");
+		err == nil || strings.Index(err.Error(), "invalid value index") < 0 {
+		t.Fatalf("%s failed: expected 'invalid value index' but received '%s'", name, err)
+	}
+
+	if _, err := db.Exec(`UPDATE dbtemp.tbltemp SET grade=$10 WHERE id=1`, "1", "user");
+		err == nil || strings.Index(err.Error(), "invalid value index") < 0 {
+		t.Fatalf("%s failed: expected 'invalid value index' but received '%s'", name, err)
 	}
 }
