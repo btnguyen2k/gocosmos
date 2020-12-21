@@ -85,6 +85,22 @@ The `database/sql` driver supports:
   - `UPDATE`
   - `DELETE`
 
+Summary of supported SQL statements:
+
+|Statement|Syntax|
+|---------|-----------|
+|Create a new database                      |`CREATE DATABASE [IF NOT EXISTS] <db-name>`|
+|Delete an existing database                |`DROP DATABASE [IF EXISTS] <db-name>`|
+|List all existing databases                |`LIST DATABASES`|
+|Create a new collection                    |`CREATE COLLECTION [IF NOT EXISTS] <db-name>.<collection-name> <WITH [LARGE]PK=partitionKey>`|
+|Delete an existing collection              |`DROP COLLECTION [IF EXISTS] <db-name>.<collection-name>`|
+|List all existing collections in a database|`LIST COLLECTIONS FROM <db-name>`|
+|Insert a new document into collection      |`INSERT INTO <db-name>.<collection-name> ...`|
+|Insert or replace a document               |`UPSERT INTO <db-name>.<collection-name> ...`|
+|Delete an existing document                |`DELETE FROM <db-name>.<collection-name> WHERE id=<id-value>`|
+|Update an existing document                |`UPDATE <db-name>.<collection-name> SET ... WHERE id=<id-value>`|
+|Query documents in a collection            |`SELECT [CROSS PARTITION] ... FROM <collection-name> ... WITH database=<db-name>`|
+
 See [supported SQL statements](SQL.md) for details.
 
 ## License

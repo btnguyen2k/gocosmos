@@ -321,8 +321,7 @@ func (r *ResultDelete) RowsAffected() (int64, error) {
 
 // StmtSelect implements "SELECT" operation.
 //
-// The "SELECT" query follows CosmosDB's SQL grammar (https://docs.microsoft.com/en-us/azure/cosmos-db/sql-query-getting-started)
-// with a few extensions:
+// The "SELECT" query follows CosmosDB's SQL grammar (https://docs.microsoft.com/en-us/azure/cosmos-db/sql-query-select) with a few extensions:
 // - Syntax: SELECT [CROSS PARTITION] ... FROM <collection/table-name> ... WITH database|db=<db-name> [WITH collection|table=<collection/table-name>] [WITH cross_partition=true]
 // - (extension) If the collection is partitioned, specify CROSS PARTITION to allow execution across multiple partitions.
 //   This clause is not required if query is to be executed on a single partition.

@@ -10,7 +10,7 @@ Suported statements: `CREATE DATABASE`, `DROP DATABASE`, `LIST DATABASES`.
 
 #### CREATE DATABASE
 
-Summary: this statement is used to create a new database.
+Summary: create a new database.
 
 Syntax: `CREATE DATABASE [IF NOT EXISTS] <db-name> [WITH RU|MAXRU=<ru>]`.
 
@@ -31,7 +31,7 @@ if err != nil {
 
 #### DROP DATABASE
 
-Summary: this statement is used to delete an existing database.
+Summary: delete an existing database.
 
 Syntax: `DROP DATABASE [IF EXISTS] <db-name>`.
 
@@ -51,7 +51,7 @@ if err != nil {
 
 #### LIST DATABASES
 
-Summary: this statement is used list all existing databases.
+Summary: list all existing databases.
 
 Syntax: `LIST DATABASES`.
 
@@ -95,7 +95,7 @@ Suported statements: `CREATE COLLECTION`, `DROP COLLECTION`, `LIST COLLECTIONS`.
 
 #### CREATE COLLECTION
 
-Summary: this statement is used to create a new collection.
+Summary: create a new collection.
 
 Alias: `CREATE TABLE`.
 
@@ -120,7 +120,7 @@ if err != nil {
 
 #### DROP COLLECTION
 
-Summary: this statement is used to delete an existing collection.
+Summary: delete an existing collection.
 
 Alias: `DROP TABLE`.
 
@@ -142,7 +142,7 @@ if err != nil {
 
 #### LIST COLLECTIONS
 
-Summary: this statement is used list all existing collections in a database.
+Summary: list all existing collections in a database.
 
 Alias: `LIST TABLES`.
 
@@ -188,7 +188,7 @@ Suported statements: `INSERT`, `UPSERT`, `UPDATE`, `DELETE`, `SELECT`.
 
 #### INSERT
 
-Summary: this statement is used to insert a new document into an existing collection.
+Summary: insert a new document into an existing collection.
 
 Syntax: `INSERT INTO <db-name>.<collection-name> (<field1>, <field2>,...<fieldN>) VALUES (<value1>, <value2>,...<valueN>)`.
 
@@ -230,7 +230,7 @@ fmt.Println("Number of rows affected:", numRows)
 
 #### UPSERT
 
-Summary: this statement is used to insert a new document of update an existing one.
+Summary: insert a new document or replace an existing one.
 
 Syntax & Usage: see [INSERT](#insert).
 
@@ -238,7 +238,7 @@ Syntax & Usage: see [INSERT](#insert).
 
 #### DELETE
 
-Summary: this statement is used to delete an existing document.
+Summary: delete an existing document.
 
 Syntax: `DELETE FROM <db-name>.<collection-name> WHERE id=<id-value>`
 
@@ -247,6 +247,7 @@ Syntax: `DELETE FROM <db-name>.<collection-name> WHERE id=<id-value>`
 
 > Placeholder is a number prefixed by `$` or `@` or `:`, for example `$1`, `@2` or `:3`. The first placeholder is 1, the second one is 2 and so on.
 
+Example:
 ```go
 sql := `DELETE FROM mydb.mytable WHERE id=@1`
 result, err := db.Exec(sql, "myid", "mypk")
@@ -269,7 +270,7 @@ fmt.Println("Number of rows affected:", numRows)
 
 #### UPDATE
 
-Summary: this statement is used to update an existing document.
+Summary: update an existing document.
 
 Syntax: `UPDATE <db-name>.<collection-name> SET <fiel1>=<value1>,<field2>=<value2>,...<fieldN>=<valueN>, WHERE id=<id-value>`
 
@@ -290,6 +291,7 @@ Syntax: `UPDATE <db-name>.<collection-name> SET <fiel1>=<value1>,<field2>=<value
 
 > Placeholder is a number prefixed by `$` or `@` or `:`, for example `$1`, `@2` or `:3`. The first placeholder is 1, the second one is 2 and so on.
 
+Example:
 ```go
 sql := `UPDATE mydb.mytable SET a=1, b="\"a string\"", c=true, d="[1,true,null,\"string\"]", e=:2 WHERE id=@1`
 result, err := db.Exec(sql, "myid", map[string]interface{}{"key":"value"}, "mypk")
@@ -311,3 +313,57 @@ fmt.Println("Number of rows affected:", numRows)
 [Back to top](#top)
 
 #### SELECT
+
+Summary: query documents in a collection.
+
+Syntax: `SELECT [CROSS PARTITION] ... FROM <collection-name> ... WITH database=<db-name> [WITH collection=<collection-name>] [WITH cross_partition=true]`
+
+The `SELECT` query follows [Azure Cosmos DB's SQL grammar](https://docs.microsoft.com/en-us/azure/cosmos-db/sql-query-select) with a few extensions:
+- If the collection is partitioned, specify `CROSS PARTITION` to allow execution across multiple partitions. This clause is not required if query is to be executed on a single partition. Cross-partition execution can also be enabled using `WITH cross_partition=true`.
+- The database on which the query is execute _must_ be specified via `WITH database=<db-name>` or `WITH db=<db-name>`.
+- The collection to query from can be optionally specified via `WITH collection=<coll-name>` or `WITH table=<coll-name>`. If not specified, the collection name is extracted from the `FROM <collection-name>` clause.
+- Placeholder syntax: `@i`, `$i` or `:i` (where i denotes the i-th parameter, the first parameter is 1).
+
+Example: single partition, collection name is extracted from the `FROM...` clause
+```go
+sql := `SELECT * FROM mytable c WHERE c.age>@1 AND c.class=$2 AND c.pk="\"mypk\"" WITH db=mydb`
+dbRows, err := db.Query(sql, 21, "Grade A")
+if err != nil {
+    panic(err)
+}
+
+colTypes, err := dbRows.ColumnTypes()
+if err != nil {
+    panic(err)
+}
+numCols := len(colTypes)
+for dbRows.Next() {
+    vals := make([]interface{}, numCols)
+    scanVals := make([]interface{}, numCols)
+    for i := 0; i < numCols; i++ {
+        scanVals[i] = &vals[i]
+    }
+    if err := dbRows.Scan(scanVals...); err == nil {
+        row := make(map[string]interface{})
+        for i, v := range colTypes {
+            row[v.Name()] = vals[i]
+        }
+        fmt.Println("Collection:", row)
+    } else if err != sql.ErrNoRows {
+        panic(err)
+    }
+}
+```
+
+Example: cross partition, collection name is explicitly specified via `WITH...` clause
+```go
+sql := `SELECT CROSS PARTITION * FROM c WHERE c.age>@1 AND c.active=true WITH db=mydb WITH table=mytable`
+dbRows, err := db.Query(sql, 21)
+if err != nil {
+    panic(err)
+}
+```
+
+> Use `sql.DB.Query` to execute the statement, `Exec` will return error.
+
+[Back to top](#top)
