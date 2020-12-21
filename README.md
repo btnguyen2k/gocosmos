@@ -103,6 +103,9 @@ Summary of supported SQL statements:
 
 See [supported SQL statements](SQL.md) for details.
 
+> Azure Cosmos DB SQL API currently supports only [SELECT statement](https://docs.microsoft.com/en-us/azure/cosmos-db/sql-query-select).
+> `gocosmos` implements other statements by translating the SQL statement to REST API call to [Azure Cosmos DB REST API](https://docs.microsoft.com/en-us/rest/api/cosmos-db/).
+
 ## License
 
 MIT - see [LICENSE.md](LICENSE.md).
