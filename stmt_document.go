@@ -212,7 +212,7 @@ func (r *ResultInsert) RowsAffected() (int64, error) {
 // Syntax: DELETE FROM <db-name>.<collection-name> WHERE id=<id-value>
 //
 // - currently DELETE only removes one document specified by id.
-// - <id-value> is treated as a string. Either `WHERE id=abc` or `WHERE id="abc"` is accepted.
+// - <id-value> is treated as string. Either `WHERE id=abc` or `WHERE id="abc"` is accepted.
 type StmtDelete struct {
 	*Stmt
 	dbName   string
@@ -495,7 +495,7 @@ func (r *ResultSelect) Next(dest []driver.Value) error {
 //     - a boolean value in JSON (include the double quotes): "true"
 //     - a null value in JSON (include the double quotes): "null"
 //     - a map value in JSON (include the double quotes): "{\"key\":\"value\"}"
-//     - a list value in JSON (include the double quotes): "[1,true,nil,\"string\"]"
+//     - a list value in JSON (include the double quotes): "[1,true,null,\"string\"]"
 type StmtUpdate struct {
 	*Stmt
 	dbName    string
