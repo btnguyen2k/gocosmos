@@ -1,6 +1,6 @@
 /*
 //TODO: documentation.
- */
+*/
 package gocosmos
 
 const (

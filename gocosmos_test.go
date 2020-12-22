@@ -354,7 +354,7 @@ func Test_Exec_CreateCollectionDefaultDb(t *testing.T) {
 	name := "Test_Exec_CreateCollectionDefaultDb"
 	dbName := "mydefaultdb"
 	db := _openDefaultDb(t, name, dbName)
-	
+
 	db.Exec("DROP DATABASE IF EXISTS " + dbName)
 	db.Exec("CREATE DATABASE IF NOT EXISTS " + dbName)
 
