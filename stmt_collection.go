@@ -11,12 +11,16 @@ import (
 
 // StmtCreateCollection implements "CREATE COLLECTION" operation.
 //
-// Syntax: CREATE COLLECTION|TABLE [IF NOT EXISTS] <db-name>.<collection-name> <WITH [LARGE]PK=partitionKey> [WITH RU|MAXRU=ru] [WITH UK=/path1:/path2,/path3;/path4]
+// Syntax:
+//     CREATE COLLECTION|TABLE [IF NOT EXISTS] <db-name>.<collection-name> <WITH [LARGE]PK=partitionKey> [WITH RU|MAXRU=ru] [WITH UK=/path1:/path2,/path3;/path4]
 //
-// - ru: an integer specifying CosmosDB's database throughput expressed in RU/s.
-// - if "IF NOT EXISTS" is specified, Exec will silently swallow the error "409 Conflict".
-// - use LARGEPK if partitionKey is larger than 100 bytes.
-// - use UK to define unique keys. Each unique key consists a list of paths separated by comma (,). Unique keys are separated by colons (:) or semi-colons (;).
+// - ru: an integer specifying CosmosDB's database throughput expressed in RU/s. Supply either RU or MAXRU, not both!
+//
+// - If "IF NOT EXISTS" is specified, Exec will silently swallow the error "409 Conflict".
+//
+// - Use LARGEPK if partitionKey is larger than 100 bytes.
+//
+// - Use UK to define unique keys. Each unique key consists a list of paths separated by comma (,). Unique keys are separated by colons (:) or semi-colons (;).
 type StmtCreateCollection struct {
 	*Stmt
 	dbName      string
@@ -111,13 +115,7 @@ func (s *StmtCreateCollection) Exec(_ []driver.Value) (driver.Result, error) {
 	}
 
 	restResult := s.conn.restClient.CreateCollection(spec)
-	result := &ResultCreateCollection{
-		Successful: restResult.Error() == nil,
-		// StatusCode:   restResult.StatusCode,
-		InsertId: restResult.Rid,
-		// RUCharge:     restResult.RequestCharge,
-		// SessionToken: restResult.SessionToken,
-	}
+	result := &ResultCreateCollection{Successful: restResult.Error() == nil, InsertId: restResult.Rid}
 	err := restResult.Error()
 	switch restResult.StatusCode {
 	case 403:
@@ -166,9 +164,10 @@ func (r *ResultCreateCollection) RowsAffected() (int64, error) {
 
 // StmtDropCollection implements "DROP COLLECTION" operation.
 //
-// Syntax: DROP COLLECTION|TABLE [IF EXISTS] <db-name>.<collection-name>
+// Syntax:
+//     DROP COLLECTION|TABLE [IF EXISTS] <db-name>.<collection-name>
 //
-// - if "IF EXISTS" is specified, Exec will silently swallow the error "404 Not Found".
+// If "IF EXISTS" is specified, Exec will silently swallow the error "404 Not Found".
 type StmtDropCollection struct {
 	*Stmt
 	dbName   string
@@ -205,18 +204,11 @@ func (s *StmtDropCollection) Exec(_ []driver.Value) (driver.Result, error) {
 // StmtListCollections implements "LIST DATABASES" operation.
 //
 // Syntax:
-// - LIST COLLECTIONS|TABLES|COLLECTION|TABLE FROM <db-name>
+//     LIST COLLECTIONS|TABLES|COLLECTION|TABLE FROM <db-name>
 type StmtListCollections struct {
 	*Stmt
 	dbName string
 }
-
-// func (s *StmtListCollections) validateWithOpts() error {
-// 	if s.dbName == "" {
-// 		return errors.New("database name is missing")
-// 	}
-// 	return nil
-// }
 
 // Exec implements driver.Stmt.Exec.
 // This function is not implemented, use Query instead.

@@ -22,9 +22,9 @@ import (
 
 // NewRestClient constructs a new RestClient instance from the supplied connection string.
 //
-// - if httpClient is supplied, reuse it. Otherwise, a new http.Client instance is created.
-// - connStr is expected to be in the following format:
-// AccountEndpoint=<cosmosdb-restapi-endpoint>;AccountKey=<account-key>[;TimeoutMs=<timeout-in-ms>][;Version=<cosmosdb-api-version>]
+// httpClient is reused if supplied. Otherwise, a new http.Client instance is created.
+// connStr is expected to be in the following format:
+//     AccountEndpoint=<cosmosdb-restapi-endpoint>;AccountKey=<account-key>[;TimeoutMs=<timeout-in-ms>][;Version=<cosmosdb-api-version>]
 // If not supplied, default value for TimeoutMs is 10 seconds and Version is "2018-12-31".
 func NewRestClient(httpClient *http.Client, connStr string) (*RestClient, error) {
 	params := make(map[string]string)
@@ -133,7 +133,8 @@ type DatabaseSpec struct {
 
 // CreateDatabase invokes CosmosDB API to create a new database.
 //
-// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/create-a-database
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/create-a-database.
+//
 // Note: ru and maxru must not be supplied together!
 func (c *RestClient) CreateDatabase(spec DatabaseSpec) *RespCreateDb {
 	method := "POST"
@@ -157,7 +158,7 @@ func (c *RestClient) CreateDatabase(spec DatabaseSpec) *RespCreateDb {
 
 // GetDatabase invokes CosmosDB API to get an existing database.
 //
-// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/get-a-database
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/get-a-database.
 func (c *RestClient) GetDatabase(dbName string) *RespGetDb {
 	method := "GET"
 	url := c.endpoint + "/dbs/" + dbName
@@ -174,7 +175,7 @@ func (c *RestClient) GetDatabase(dbName string) *RespGetDb {
 
 // DeleteDatabase invokes CosmosDB API to delete an existing database.
 //
-// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/delete-a-database
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/delete-a-database.
 func (c *RestClient) DeleteDatabase(dbName string) *RespDeleteDb {
 	method := "DELETE"
 	url := c.endpoint + "/dbs/" + dbName
@@ -188,7 +189,7 @@ func (c *RestClient) DeleteDatabase(dbName string) *RespDeleteDb {
 
 // ListDatabases invokes CosmosDB API to list all available databases.
 //
-// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/list-databases
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/list-databases.
 func (c *RestClient) ListDatabases() *RespListDb {
 	method := "GET"
 	url := c.endpoint + "/dbs"
@@ -223,7 +224,8 @@ type CollectionSpec struct {
 
 // CreateCollection invokes CosmosDB API to create a new collection.
 //
-// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/create-a-collection
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/create-a-collection.
+//
 // Note: ru and maxru must not be supplied together!
 func (c *RestClient) CreateCollection(spec CollectionSpec) *RespCreateColl {
 	method := "POST"
@@ -254,7 +256,8 @@ func (c *RestClient) CreateCollection(spec CollectionSpec) *RespCreateColl {
 
 // ReplaceCollection invokes CosmosDB API to replace an existing collection.
 //
-// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/replace-a-collection
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/replace-a-collection.
+//
 // Note: ru and maxru must not be supplied together!
 func (c *RestClient) ReplaceCollection(spec CollectionSpec) *RespReplaceColl {
 	method := "PUT"
@@ -306,7 +309,7 @@ func (c *RestClient) GetCollection(dbName, collName string) *RespGetColl {
 
 // DeleteCollection invokes CosmosDB API to delete an existing collection.
 //
-// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/delete-a-collection
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/delete-a-collection.
 func (c *RestClient) DeleteCollection(dbName, collName string) *RespDeleteColl {
 	method := "DELETE"
 	url := c.endpoint + "/dbs/" + dbName + "/colls/" + collName
@@ -320,7 +323,7 @@ func (c *RestClient) DeleteCollection(dbName, collName string) *RespDeleteColl {
 
 // ListCollections invokes CosmosDB API to list all available collections.
 //
-// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/list-collections
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/list-collections.
 func (c *RestClient) ListCollections(dbName string) *RespListColl {
 	method := "GET"
 	url := c.endpoint + "/dbs/" + dbName + "/colls"
@@ -352,7 +355,7 @@ type DocumentSpec struct {
 
 // CreateDocument invokes CosmosDB API to create a new document.
 //
-// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/create-a-document
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/create-a-document.
 func (c *RestClient) CreateDocument(spec DocumentSpec) *RespCreateDoc {
 	method := "POST"
 	url := c.endpoint + "/dbs/" + spec.DbName + "/colls/" + spec.CollName + "/docs"
@@ -377,7 +380,7 @@ func (c *RestClient) CreateDocument(spec DocumentSpec) *RespCreateDoc {
 
 // ReplaceDocument invokes CosmosDB API to replace an existing document.
 //
-// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/replace-a-document
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/replace-a-document.
 func (c *RestClient) ReplaceDocument(matchEtag string, spec DocumentSpec) *RespReplaceDoc {
 	id, _ := spec.DocumentData["id"].(string)
 	method := "PUT"
@@ -410,7 +413,7 @@ type DocReq struct {
 
 // GetDocument invokes CosmosDB API to get an existing document.
 //
-// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/get-a-document
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/get-a-document.
 func (c *RestClient) GetDocument(r DocReq) *RespGetDoc {
 	method := "GET"
 	url := c.endpoint + "/dbs/" + r.DbName + "/colls/" + r.CollName + "/docs/" + r.DocId
@@ -438,7 +441,7 @@ func (c *RestClient) GetDocument(r DocReq) *RespGetDoc {
 
 // DeleteDocument invokes CosmosDB API to delete an existing document.
 //
-// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/delete-a-document
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/delete-a-document.
 func (c *RestClient) DeleteDocument(r DocReq) *RespDeleteDoc {
 	method := "DELETE"
 	url := c.endpoint + "/dbs/" + r.DbName + "/colls/" + r.CollName + "/docs/" + r.DocId
@@ -469,7 +472,7 @@ type QueryReq struct {
 
 // QueryDocuments invokes CosmosDB API to query a collection for documents.
 //
-// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/query-documents
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/query-documents.
 func (c *RestClient) QueryDocuments(query QueryReq) *RespQueryDocs {
 	method := "POST"
 	url := c.endpoint + "/dbs/" + query.DbName + "/colls/" + query.CollName + "/docs"
@@ -515,7 +518,7 @@ type ListDocsReq struct {
 
 // ListDocuments invokes CosmosDB API to query read-feed for documents.
 //
-// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/list-documents
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/list-documents.
 func (c *RestClient) ListDocuments(r ListDocsReq) *RespListDocs {
 	method := "GET"
 	url := c.endpoint + "/dbs/" + r.DbName + "/colls/" + r.CollName + "/docs"
@@ -676,6 +679,7 @@ func (d DocInfo) RemoveSystemAttrs() DocInfo {
 }
 
 // GetAttrAsType returns a document attribute converting to a specific type.
+//
 // Note: if typ is nil, the attribute value is returned as-is (i.e. without converting).
 func (d DocInfo) GetAttrAsType(attrName string, typ reflect.Type) (interface{}, error) {
 	v, ok := d[attrName]
