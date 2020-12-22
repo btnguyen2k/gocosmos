@@ -5,8 +5,7 @@
 [![Actions Status](https://github.com/btnguyen2k/gocosmos/workflows/gocosmos/badge.svg)](https://github.com/btnguyen2k/gocosmos/actions)
 [![codecov](https://codecov.io/gh/btnguyen2k/gocosmos/branch/main/graph/badge.svg?token=pYdHuxbIiI)](https://codecov.io/gh/btnguyen2k/gocosmos)
 
-Go driver for [Azure Cosmos DB SQL API](https://azure.microsoft.com/en-us/services/cosmos-db/) which can be used with the standard [database/sql](https://golang.org/pkg/database/sql/) package.
-gocosmos also includes a REST client for [Azure Cosmos DB SQL API](https://azure.microsoft.com/en-us/services/cosmos-db/).
+Go driver for [Azure Cosmos DB SQL API](https://azure.microsoft.com/en-us/services/cosmos-db/) which can be used with the standard [database/sql](https://golang.org/pkg/database/sql/) package. A REST client for [Azure Cosmos DB SQL API](https://azure.microsoft.com/en-us/services/cosmos-db/) is also included.
 
 Latest release [v0.1.0](RELEASE-NOTES.md).
 
@@ -62,6 +61,16 @@ func main() {
 }
 ```
 
+**Data Source Name (DSN) syntax for Cosmos DB**
+
+> AccountEndpoint=<cosmosdb-endpoint>;AccountKey=<cosmosdb-account-key>;TimeoutMs=<timeout-in-ms>;Version=<cosmosdb-api-version>;DefaultDb=<db-name>
+
+- `AccountEndpoint`: (required) endpoint to access Cosmos DB. For example, the endpoint for Azure Cosmos DB Emulator running on local is `https://localhost:8081/`.
+- `AccountKey`: (required) account key to authenticate.
+- `TimeoutMs`: (optional) operation timeout in milliseconds. Default value is `10 seconds` if not specified.
+- `Version`: (optional) version of Cosmos DB to use. Default value is `2018-12-31` if not specified. See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/#supported-rest-api-versions.
+- `DefaultDb`: (optional, available since [v0.1.1](RELEASE-NOTES.md)) specify the default database used in Cosmos DB operations. Alias `Db` can also be used instead of `DefaultDb`.
+
 ## Features
 
 The REST client supports:
@@ -92,14 +101,14 @@ Summary of supported SQL statements:
 |Create a new database                      |`CREATE DATABASE [IF NOT EXISTS] <db-name>`|
 |Delete an existing database                |`DROP DATABASE [IF EXISTS] <db-name>`|
 |List all existing databases                |`LIST DATABASES`|
-|Create a new collection                    |`CREATE COLLECTION [IF NOT EXISTS] <db-name>.<collection-name> <WITH [LARGE]PK=partitionKey>`|
-|Delete an existing collection              |`DROP COLLECTION [IF EXISTS] <db-name>.<collection-name>`|
-|List all existing collections in a database|`LIST COLLECTIONS FROM <db-name>`|
-|Insert a new document into collection      |`INSERT INTO <db-name>.<collection-name> ...`|
-|Insert or replace a document               |`UPSERT INTO <db-name>.<collection-name> ...`|
-|Delete an existing document                |`DELETE FROM <db-name>.<collection-name> WHERE id=<id-value>`|
-|Update an existing document                |`UPDATE <db-name>.<collection-name> SET ... WHERE id=<id-value>`|
-|Query documents in a collection            |`SELECT [CROSS PARTITION] ... FROM <collection-name> ... WITH database=<db-name>`|
+|Create a new collection                    |`CREATE COLLECTION [IF NOT EXISTS] [<db-name>.]<collection-name> <WITH [LARGE]PK=partitionKey>`|
+|Delete an existing collection              |`DROP COLLECTION [IF EXISTS] [<db-name>.]<collection-name>`|
+|List all existing collections in a database|`LIST COLLECTIONS [FROM <db-name>]`|
+|Insert a new document into collection      |`INSERT INTO [<db-name>.]<collection-name> ...`|
+|Insert or replace a document               |`UPSERT INTO [<db-name>.]<collection-name> ...`|
+|Delete an existing document                |`DELETE FROM [<db-name>.]<collection-name> WHERE id=<id-value>`|
+|Update an existing document                |`UPDATE [<db-name>.]<collection-name> SET ... WHERE id=<id-value>`|
+|Query documents in a collection            |`SELECT [CROSS PARTITION] ... FROM <collection-name> ... [WITH database=<db-name>]`|
 
 See [supported SQL statements](SQL.md) for details.
 
