@@ -10,10 +10,12 @@ import (
 
 // StmtCreateDatabase implements "CREATE DATABASE" operation.
 //
-// Syntax: CREATE DATABASE [IF NOT EXISTS] <db-name> [WITH RU|MAXRU=ru]
+// Syntax:
+//     CREATE DATABASE [IF NOT EXISTS] <db-name> [WITH RU|MAXRU=ru]
 //
-// - ru: an integer specifying CosmosDB's database throughput expressed in RU/s.
-// - if "IF NOT EXISTS" is specified, Exec will silently swallow the error "409 Conflict".
+// - ru: an integer specifying CosmosDB's database throughput expressed in RU/s. Supply either RU or MAXRU, not both!
+//
+// - If "IF NOT EXISTS" is specified, Exec will silently swallow the error "409 Conflict".
 type StmtCreateDatabase struct {
 	*Stmt
 	dbName      string
@@ -56,14 +58,10 @@ func (s *StmtCreateDatabase) Query(_ []driver.Value) (driver.Rows, error) {
 }
 
 // Exec implements driver.Stmt.Exec.
-// Upon successful call, this function return (*ResultCreateDatabase, nil)
+// Upon successful call, this function return (*ResultCreateDatabase, nil).
 func (s *StmtCreateDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 	restResult := s.conn.restClient.CreateDatabase(DatabaseSpec{Id: s.dbName, Ru: s.ru, MaxRu: s.maxru})
-	result := &ResultCreateDatabase{
-		Successful: restResult.Error() == nil,
-		// StatusCode: restResult.StatusCode,
-		InsertId: restResult.Rid,
-	}
+	result := &ResultCreateDatabase{Successful: restResult.Error() == nil, InsertId: restResult.Rid}
 	err := restResult.Error()
 	switch restResult.StatusCode {
 	case 403:
@@ -82,8 +80,6 @@ func (s *StmtCreateDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 type ResultCreateDatabase struct {
 	// Successful flags if the operation was successful or not.
 	Successful bool
-	// // StatusCode is the HTTP status code returned from CosmosDB.
-	// StatusCode int
 	// InsertId holds the "_rid" if the operation was successful.
 	InsertId string
 }
@@ -105,9 +101,10 @@ func (r *ResultCreateDatabase) RowsAffected() (int64, error) {
 
 // StmtDropDatabase implements "DROP DATABASE" operation.
 //
-// Syntax: DROP DATABASE [IF EXISTS] <db-name>
+// Syntax:
+//     DROP DATABASE [IF EXISTS] <db-name>
 //
-// - if "IF EXISTS" is specified, Exec will silently swallow the error "404 Not Found".
+// - If "IF EXISTS" is specified, Exec will silently swallow the error "404 Not Found".
 type StmtDropDatabase struct {
 	*Stmt
 	dbName   string
@@ -142,7 +139,8 @@ func (s *StmtDropDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 
 // StmtListDatabases implements "LIST DATABASES" operation.
 //
-// Syntax: LIST DATABASES|DATABASE
+// Syntax:
+//     LIST DATABASES|DATABASE
 type StmtListDatabases struct {
 	*Stmt
 }

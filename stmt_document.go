@@ -69,24 +69,25 @@ func _parseValue(input string, separator rune) (value interface{}, leftOver stri
 
 // StmtInsert implements "INSERT" operation.
 //
-// Syntax: INSERT|UPSERT INTO <db-name>.<collection-name> (<field-list>) VALUES (<value-list>)
+// Syntax:
+//     INSERT|UPSERT INTO <db-name>.<collection-name> (<field-list>) VALUES (<value-list>)
 //
-// - values are comma separated.
-// - a value is either:
-//   - a placeholder (e.g. :1, @2 or $3)
-//   - a null
-//   - a number
-//   - a boolean (true/false)
-//   - a string (inside double quotes) that must be a valid JSON, e.g.
-//     - a string value in JSON (include the double quotes): "\"a string\""
-//     - a number value in JSON (include the double quotes): "123"
-//     - a boolean value in JSON (include the double quotes): "true"
-//     - a null value in JSON (include the double quotes): "null"
-//     - a map value in JSON (include the double quotes): "{\"key\":\"value\"}"
-//     - a list value in JSON (include the double quotes): "[1,true,null,\"string\"]"
+//     - values are comma separated.
+//     - a value is either:
+//       - a placeholder (e.g. :1, @2 or $3)
+//       - a null
+//       - a number
+//       - a boolean (true/false)
+//       - a string (inside double quotes) that must be a valid JSON, e.g.
+//         - a string value in JSON (include the double quotes): "\"a string\""
+//         - a number value in JSON (include the double quotes): "123"
+//         - a boolean value in JSON (include the double quotes): "true"
+//         - a null value in JSON (include the double quotes): "null"
+//         - a map value in JSON (include the double quotes): "{\"key\":\"value\"}"
+//         - a list value in JSON (include the double quotes): "[1,true,null,\"string\"]"
 //
 // CosmosDB automatically creates a few extra fields for the insert document.
-// See https://docs.microsoft.com/en-us/azure/cosmos-db/account-databases-containers-items#properties-of-an-item
+// See https://docs.microsoft.com/en-us/azure/cosmos-db/account-databases-containers-items#properties-of-an-item.
 type StmtInsert struct {
 	*Stmt
 	dbName    string
@@ -150,12 +151,7 @@ func (s *StmtInsert) Exec(args []driver.Value) (driver.Result, error) {
 		}
 	}
 	restResult := s.conn.restClient.CreateDocument(spec)
-	result := &ResultInsert{
-		Successful: restResult.Error() == nil,
-		// StatusCode:   restResult.StatusCode,
-		// SessionToken: restResult.SessionToken,
-		// RUCharge:     restResult.RequestCharge,
-	}
+	result := &ResultInsert{Successful: restResult.Error() == nil}
 	if restResult.DocInfo != nil {
 		result.InsertId, _ = restResult.DocInfo["_rid"].(string)
 	}
@@ -181,15 +177,8 @@ func (s *StmtInsert) Query(args []driver.Value) (driver.Rows, error) {
 type ResultInsert struct {
 	// Successful flags if the operation was successful or not.
 	Successful bool
-	// // StatusCode is the HTTP status code returned from CosmosDB.
-	// StatusCode int
 	// InsertId holds the "_rid" if the operation was successful.
 	InsertId string
-	// // RUCharge holds the number of request units consumed by the operation.
-	// RUCharge float64
-	// // SessionToken is the string token used with session level consistency.
-	// // Clients must save this value and set it for subsequent read requests for session consistency.
-	// SessionToken string
 }
 
 // LastInsertId implements driver.Result.LastInsertId.
@@ -209,10 +198,12 @@ func (r *ResultInsert) RowsAffected() (int64, error) {
 
 // StmtDelete implements "DELETE" operation.
 //
-// Syntax: DELETE FROM <db-name>.<collection-name> WHERE id=<id-value>
+// Syntax:
+//     DELETE FROM <db-name>.<collection-name> WHERE id=<id-value>
 //
-// - currently DELETE only removes one document specified by id.
-// - <id-value> is treated as string. Either `WHERE id=abc` or `WHERE id="abc"` is accepted.
+// - Currently DELETE only removes one document specified by id.
+//
+// - <id-value> is treated as string. `WHERE id=abc` has the same effect as `WHERE id="abc"`.
 type StmtDelete struct {
 	*Stmt
 	dbName   string
@@ -297,11 +288,6 @@ type ResultDelete struct {
 	Successful bool
 	// StatusCode is the HTTP status code returned from CosmosDB.
 	StatusCode int
-	// // RUCharge holds the number of request units consumed by the operation.
-	// RUCharge float64
-	// // SessionToken is the string token used with session level consistency.
-	// // Clients must save this value and set it for subsequent read requests for session consistency.
-	// SessionToken string
 }
 
 // LastInsertId implements driver.Result.LastInsertId.
@@ -320,16 +306,18 @@ func (r *ResultDelete) RowsAffected() (int64, error) {
 /*----------------------------------------------------------------------*/
 
 // StmtSelect implements "SELECT" operation.
-//
 // The "SELECT" query follows CosmosDB's SQL grammar (https://docs.microsoft.com/en-us/azure/cosmos-db/sql-query-select) with a few extensions:
-// - Syntax: SELECT [CROSS PARTITION] ... FROM <collection/table-name> ... WITH database|db=<db-name> [WITH collection|table=<collection/table-name>] [WITH cross_partition=true]
-// - (extension) If the collection is partitioned, specify CROSS PARTITION to allow execution across multiple partitions.
-//   This clause is not required if query is to be executed on a single partition.
-//   Cross-partition execution can also be enabled using WITH cross_partition=true.
-// - (extension) Use WITH database=<db-name> (or WITH db=<db-name>) to specify the database on which the query is to be executed.
-// - (extension) Use WITH collection=<coll-name> (or WITH table=<coll-name>) to specify the collection/table on which the query is to be executed.
-//   If not specified, collection/table name is extracted from the "FROM <collection/table-name>" clause.
-// - (extension) Use placeholder syntax @i, $i or :i (where i denotes the i-th parameter, the first parameter is 1)
+//
+// Syntax:
+//     SELECT [CROSS PARTITION] ... FROM <collection/table-name> ... WITH database|db=<db-name> [WITH collection|table=<collection/table-name>] [WITH cross_partition=true]
+//
+//     - (extension) If the collection is partitioned, specify "CROSS PARTITION" to allow execution across multiple partitions.
+//       This clause is not required if query is to be executed on a single partition.
+//       Cross-partition execution can also be enabled using WITH cross_partition=true.
+//     - (extension) Use "WITH database=<db-name>" (or "WITH db=<db-name>") to specify the database on which the query is to be executed.
+//     - (extension) Use "WITH collection=<coll-name>" (or "WITH table=<coll-name>") to specify the collection/table on which the query is to be executed.
+//       If not specified, collection/table name is extracted from the "FROM <collection/table-name>" clause.
+//     - (extension) Use placeholder syntax @i, $i or :i (where i denotes the i-th parameter, the first parameter is 1)
 type StmtSelect struct {
 	*Stmt
 	isCrossPartition bool
@@ -479,22 +467,24 @@ func (r *ResultSelect) Next(dest []driver.Value) error {
 
 // StmtUpdate implements "UPDATE" operation.
 //
-// Syntax: UPDATE <db-name>.<collection-name> SET <field-name>=<value>[,<field-name>=<value>]*, WHERE id=<id-value>
+// Syntax:
+//     UPDATE <db-name>.<collection-name> SET <field-name>=<value>[,<field-name>=<value>]*, WHERE id=<id-value>
 //
-// - currently UPDATE only updates one document specified by id.
-// - <id-value> is treated as a string. Either `WHERE id=abc` or `WHERE id="abc"` is accepted.
-// - <value> is either:
-//   - a placeholder (e.g. :1, @2 or $3)
-//   - a null
-//   - a number
-//   - a boolean (true/false)
-//   - a string (inside double quotes) that must be a valid JSON, e.g.
-//     - a string value in JSON (include the double quotes): "\"a string\""
-//     - a number value in JSON (include the double quotes): "123"
-//     - a boolean value in JSON (include the double quotes): "true"
-//     - a null value in JSON (include the double quotes): "null"
-//     - a map value in JSON (include the double quotes): "{\"key\":\"value\"}"
-//     - a list value in JSON (include the double quotes): "[1,true,null,\"string\"]"
+//     - <id-value> is treated as a string. `WHERE id=abc` has the same effect as `WHERE id="abc"`.
+//     - <value> is either:
+//       - a placeholder (e.g. :1, @2 or $3)
+//       - a null
+//       - a number
+//       - a boolean (true/false)
+//       - a string (inside double quotes) that must be a valid JSON, e.g.
+//         - a string value in JSON (include the double quotes): "\"a string\""
+//         - a number value in JSON (include the double quotes): "123"
+//         - a boolean value in JSON (include the double quotes): "true"
+//         - a null value in JSON (include the double quotes): "null"
+//         - a map value in JSON (include the double quotes): "{\"key\":\"value\"}"
+//         - a list value in JSON (include the double quotes): "[1,true,null,\"string\"]"
+//
+// Currently UPDATE only updates one document specified by id.
 type StmtUpdate struct {
 	*Stmt
 	dbName    string
@@ -670,13 +660,6 @@ func (s *StmtUpdate) Query(args []driver.Value) (driver.Rows, error) {
 type ResultUpdate struct {
 	// Successful flags if the operation was successful or not.
 	Successful bool
-	// // StatusCode is the HTTP status code returned from CosmosDB.
-	// StatusCode int
-	// // RUCharge holds the number of request units consumed by the operation.
-	// RUCharge float64
-	// // SessionToken is the string token used with session level consistency.
-	// // Clients must save this value and set it for subsequent read requests for session consistency.
-	// SessionToken string
 }
 
 // LastInsertId implements driver.Result.LastInsertId.
