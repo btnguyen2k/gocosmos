@@ -68,17 +68,35 @@ func TestDriver_missingAccountKey(t *testing.T) {
 	}
 }
 
-func _openDb(t *testing.T, testName string) *sql.DB {
+func _openDefaultDb(t *testing.T, testName, defaultDb string) *sql.DB {
 	driver := "gocosmos"
 	url := strings.ReplaceAll(os.Getenv("COSMOSDB_URL"), `"`, "")
 	if url == "" {
 		t.Skipf("%s skipped", testName)
+	}
+	if defaultDb != "" {
+		if strings.Index(url, "DefaultDb=") < 0 {
+			url += ";DefaultDb=" + defaultDb
+		}
 	}
 	db, err := sql.Open(driver, url)
 	if err != nil {
 		t.Fatalf("%s failed: %s", testName+"/sql.Open", err)
 	}
 	return db
+}
+
+func _openDb(t *testing.T, testName string) *sql.DB {
+	return _openDefaultDb(t, testName, "")
+}
+
+func TestDriver_Conn(t *testing.T) {
+	name := "TestDriver_Conn"
+	db := _openDb(t, name)
+	_, err := db.Conn(context.Background())
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
 }
 
 func TestDriver_Transaction(t *testing.T) {
@@ -329,6 +347,47 @@ func Test_Exec_CreateCollection(t *testing.T) {
 	_, err = db.Exec(`CREATE COLLECTION db_not_exists.table WITH pk=/a`)
 	if err != ErrNotFound {
 		t.Fatalf("%s failed: expected ErrNotFound but received %#v", name, err)
+	}
+}
+
+func Test_Exec_CreateCollectionDefaultDb(t *testing.T) {
+	name := "Test_Exec_CreateCollectionDefaultDb"
+	dbName := "mydefaultdb"
+	db := _openDefaultDb(t, name, dbName)
+	
+	db.Exec("DROP DATABASE IF EXISTS " + dbName)
+	db.Exec("CREATE DATABASE IF NOT EXISTS " + dbName)
+
+	// first creation should be successful
+	result, err := db.Exec("CREATE COLLECTION tbltemp WITH pk=/id WITH ru=400")
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+	if id, err := result.LastInsertId(); id != 0 || err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	} else if regexp.MustCompile(`(?i){\s*LastInsertId\s*:\s*[^}]+?\s*}`).FindString(err.Error()) == "" {
+		t.Fatalf("%s failed: can not catch LastInsertId / %s", name, err)
+	}
+	if numRows, err := result.RowsAffected(); numRows != 1 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+
+	// second creation should return ErrConflict
+	_, err = db.Exec("CREATE COLLECTION tbltemp WITH pk=/id WITH ru=400")
+	if err != ErrConflict {
+		t.Fatalf("%s failed: expected ErrConflict but received %#v", name, err)
+	}
+
+	// third creation should be successful with "IF NOT EXISTS"
+	result, err = db.Exec("CREATE TABLE IF NOT EXISTS tbltemp WITH largepk=/a/b/c WITH maxru=4000 WITH uk=/a;/b,/c/d")
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+	if id, err := result.LastInsertId(); id != 0 && err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	}
+	if numRows, err := result.RowsAffected(); numRows != 0 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=0/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
 	}
 }
 

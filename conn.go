@@ -12,15 +12,13 @@ var (
 
 // Conn is Azure CosmosDB connection handle.
 type Conn struct {
-	restClient *RestClient       // Azure CosmosDB REST API client.
-	endpoint   string            // Azure CosmosDB endpoint
-	authKey    []byte            // Account key to authenticate
-	params     map[string]string // other parameters
+	restClient *RestClient // Azure CosmosDB REST API client.
+	defaultDb  string      // default database used in Cosmos DB operations.
 }
 
 // Prepare implements driver.Conn.Prepare.
 func (c *Conn) Prepare(query string) (driver.Stmt, error) {
-	return parseQuery(c, query)
+	return parseQueryWithDefaultDb(c, c.defaultDb, query)
 }
 
 // Close implements driver.Conn.Close.
