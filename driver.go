@@ -28,12 +28,19 @@ type Driver struct {
 // Open implements driver.Driver.Open.
 //
 // connStr is expected in the following format:
-//     AccountEndpoint=<cosmosdb-restapi-endpoint>;AccountKey=<account-key>[;TimeoutMs=<timeout-in-ms>][;Version=<cosmosdb-api-version>]
+//     AccountEndpoint=<cosmosdb-restapi-endpoint>;AccountKey=<account-key>[;TimeoutMs=<timeout-in-ms>][;Version=<cosmosdb-api-version>][;DefaultDb=<db-name>]
+//
 // If not supplied, default value for TimeoutMs is 10 seconds and Version is "2018-12-31".
+//
+// DefaultDb is added since v0.1.1
 func (d *Driver) Open(connStr string) (driver.Conn, error) {
 	restClient, err := NewRestClient(nil, connStr)
 	if err != nil {
 		return nil, err
 	}
-	return &Conn{restClient: restClient}, nil
+	defaultDb, ok := restClient.params["DEFAULTDB"]
+	if !ok {
+		defaultDb, _ = restClient.params["DB"]
+	}
+	return &Conn{restClient: restClient, defaultDb: defaultDb}, nil
 }

@@ -1,5 +1,10 @@
 # gocosmos release notes
 
+## 2020-12-2x - v0.1.1
+
+- Driver for `database/sql`:
+  - Add default database support to DSN.
+
 ## 2020-12-21 - v0.1.0
 
 First release:

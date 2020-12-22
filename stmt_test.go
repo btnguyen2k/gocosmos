@@ -22,9 +22,9 @@ func TestStmt_NumInput(t *testing.T) {
 		"CREATE COLLECTION IF NOT EXISTS db.tbltemp WITH pk=/id": 0,
 		"DROP COLLECTION IF EXISTS db.tbltemp":                   0,
 
-		// "SELECT * FROM tbltemp WHERE id=@1 AND email=$2 OR username=:3": 3,
-		"INSERT INTO db.tbltemp (id, name, email) VALUES ($1, :2, @3)": 4,
-		// "DELETE FROM tbltemp WHERE id=$1 OR (email=:2 AND username=@3)":                               3,
+		"SELECT * FROM tbltemp WHERE id=@1 AND email=$2 OR username=:3 WITH db=mydb": 3,
+		"INSERT INTO db.tbltemp (id, name, email) VALUES ($1, :2, @3)":               3 + 1, // need one extra input for partition key
+		"DELETE FROM db.tbltemp WHERE id=$1":                                         1 + 1, // need one extra input for partition key
 	}
 
 	for query, numInput := range testData {
@@ -180,6 +180,56 @@ func Test_parseQuery_CreateCollection(t *testing.T) {
 	}
 }
 
+func Test_parseQuery_CreateCollectionDefaultDb(t *testing.T) {
+	name := "Test_parseQuery_CreateCollectionDefaultDb"
+	dbName := "mydb"
+	type testStruct struct {
+		dbName      string
+		collName    string
+		ifNotExists bool
+		ru, maxru   int
+		pk          string
+		isLargePk   bool
+		uk          [][]string
+	}
+	testData := map[string]testStruct{
+		"CREATE COLLECTION table1 WITH pk=/id":                                                   {dbName: dbName, collName: "table1", ifNotExists: false, ru: 0, maxru: 0, pk: "/id", isLargePk: false, uk: nil},
+		"create\ntable\r\ndb2.table_2 WITH\r\nPK=/email WITH\nru=100":                            {dbName: "db2", collName: "table_2", ifNotExists: false, ru: 100, maxru: 0, pk: "/email", isLargePk: false, uk: nil},
+		"CREATE collection\nIF\nNOT\t\nEXISTS\r\n\ttable-3 with largePK=/id WITH\tmaxru=100":     {dbName: dbName, collName: "table-3", ifNotExists: true, ru: 0, maxru: 100, pk: "/id", isLargePk: true, uk: nil},
+		"create TABLE if not exists db3.table_0-1 WITH LARGEpk=/a/b/c with uk=/a:/b,/c/d;/e/f/g": {dbName: "db3", collName: "table_0-1", ifNotExists: true, ru: 0, maxru: 0, pk: "/a/b/c", isLargePk: false, uk: [][]string{{"/a"}, {"/b", "/c/d"}, {"/e/f/g"}}},
+	}
+	for query, data := range testData {
+		if stmt, err := parseQueryWithDefaultDb(nil, dbName, query); err != nil {
+			t.Fatalf("%s failed: %s", name+"/"+query, err)
+		} else if dbstmt, ok := stmt.(*StmtCreateCollection); !ok {
+			t.Fatalf("%s failed: the parsed stmt must be of type *StmtCreateCollection", name+"/"+query)
+		} else if dbstmt.dbName != data.dbName {
+			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
+		} else if dbstmt.collName != data.collName {
+			t.Fatalf("%s failed: <collection-name> expected %#v but received %#v", name+"/"+query, data.collName, dbstmt.collName)
+		} else if dbstmt.ifNotExists != data.ifNotExists {
+			t.Fatalf("%s failed: <if-not-exists> expected %#v but received %#v", name+"/"+query, data.ifNotExists, dbstmt.ifNotExists)
+		} else if dbstmt.ru != data.ru {
+			t.Fatalf("%s failed: <ru> expected %#v but received %#v", name+"/"+query, data.ru, dbstmt.ru)
+		} else if dbstmt.maxru != data.maxru {
+			t.Fatalf("%s failed: <maxru> expected %#v but received %#v", name+"/"+query, data.maxru, dbstmt.maxru)
+		} else if dbstmt.pk != data.pk {
+			t.Fatalf("%s failed: <pk> expected %#v but received %#v", name+"/"+query, data.pk, dbstmt.pk)
+		} else if !reflect.DeepEqual(dbstmt.uk, data.uk) {
+			t.Fatalf("%s failed: <uk> expected %#v but received %#v", name+"/"+query, data.uk, dbstmt.uk)
+		}
+	}
+
+	invalidQueries := []string{
+		"CREATE TABLE .mytable WITH pk=/id",
+	}
+	for _, query := range invalidQueries {
+		if _, err := parseQueryWithDefaultDb(nil, dbName, query); err == nil {
+			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
+		}
+	}
+}
+
 func Test_parseQuery_DropCollection(t *testing.T) {
 	name := "Test_parseQuery_DropCollection"
 	type testStruct struct {
@@ -219,6 +269,45 @@ func Test_parseQuery_DropCollection(t *testing.T) {
 	}
 }
 
+func Test_parseQuery_DropCollectionDefaultDb(t *testing.T) {
+	name := "Test_parseQuery_DropCollectionDefaultDb"
+	dbName := "mydb"
+	type testStruct struct {
+		dbName   string
+		collName string
+		ifExists bool
+	}
+	testData := map[string]testStruct{
+		"DROP COLLECTION table1":                {dbName: dbName, collName: "table1", ifExists: false},
+		"DROP\t\ntable\r\n\tdb-2.table_2":       {dbName: "db-2", collName: "table_2", ifExists: false},
+		"drop collection\nIF EXISTS\ttable-3":   {dbName: dbName, collName: "table-3", ifExists: true},
+		"Drop Table If Exists db-4_0.table_4-0": {dbName: "db-4_0", collName: "table_4-0", ifExists: true},
+	}
+
+	for query, data := range testData {
+		if stmt, err := parseQueryWithDefaultDb(nil, dbName, query); err != nil {
+			t.Fatalf("%s failed: %s", name+"/"+query, err)
+		} else if dbstmt, ok := stmt.(*StmtDropCollection); !ok {
+			t.Fatalf("%s failed: the parsed stmt must be of type *StmtDropDatabase", name+"/"+query)
+		} else if dbstmt.dbName != data.dbName {
+			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
+		} else if dbstmt.collName != data.collName {
+			t.Fatalf("%s failed: <collection-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
+		} else if dbstmt.ifExists != data.ifExists {
+			t.Fatalf("%s failed: <if-exists> expected %#v but received %#v", name+"/"+query, data.ifExists, dbstmt.ifExists)
+		}
+	}
+
+	invalidQueries := []string{
+		"DROP collection .mytable",
+	}
+	for _, query := range invalidQueries {
+		if _, err := parseQueryWithDefaultDb(nil, dbName, query); err == nil {
+			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
+		}
+	}
+}
+
 func Test_parseQuery_ListCollections(t *testing.T) {
 	name := "Test_parseQuery_ListCollections"
 	testData := map[string]string{
@@ -230,6 +319,43 @@ func Test_parseQuery_ListCollections(t *testing.T) {
 
 	for query, data := range testData {
 		if stmt, err := parseQuery(nil, query); err != nil {
+			t.Fatalf("%s failed: %s", name+"/"+query, err)
+		} else if dbstmt, ok := stmt.(*StmtListCollections); !ok {
+			t.Fatalf("%s failed: the parsed stmt must be of type *StmtListDatabases", name+"/"+query)
+		} else if dbstmt.dbName != data {
+			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data, dbstmt.dbName)
+		}
+	}
+
+	invalidQueries := []string{
+		"LIST COLLECTIONS",
+		"LIST TABLES",
+		"LIST COLLECTION",
+		"LIST TABLE",
+		"LIST COLLECTIONS FROM",
+		"LIST TABLES FROM",
+		"LIST COLLECTION FROM",
+		"LIST TABLE FROM",
+	}
+	for _, query := range invalidQueries {
+		if _, err := parseQuery(nil, query); err == nil {
+			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
+		}
+	}
+}
+
+func Test_parseQuery_ListCollectionsDefaultDb(t *testing.T) {
+	name := "Test_parseQuery_ListCollectionsDefaultDb"
+	dbName := "mydb"
+	testData := map[string]string{
+		"LIST COLLECTIONS":                 dbName,
+		"list\n\tcollection FROM\r\n db-2": "db-2",
+		"LIST tables":                      dbName,
+		"list TABLE from db-4_0":           "db-4_0",
+	}
+
+	for query, data := range testData {
+		if stmt, err := parseQueryWithDefaultDb(nil, dbName, query); err != nil {
 			t.Fatalf("%s failed: %s", name+"/"+query, err)
 		} else if dbstmt, ok := stmt.(*StmtListCollections); !ok {
 			t.Fatalf("%s failed: the parsed stmt must be of type *StmtListDatabases", name+"/"+query)
@@ -302,6 +428,62 @@ $1, :3, @2)`: {
 	}
 }
 
+func Test_parseQuery_InsertDefaultDb(t *testing.T) {
+	name := "Test_parseQuery_InsertDefaultDb"
+	dbName := "mydb"
+	type testStruct struct {
+		dbName   string
+		collName string
+		fields   []string
+		values   []interface{}
+	}
+	testData := map[string]testStruct{
+		`INSERT INTO
+table1 (a, b, c, d, e, 
+f) VALUES
+	(null, 1.0, 
+true, "\"a string 'with' \\\"quote\\\"\"", "{\"key\":\"value\"}", "[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]")`: {
+			dbName: dbName, collName: "table1", fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{
+				nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`},
+			},
+		},
+		`INSERT 
+INTO db-2.table_2 (
+a,b,c) VALUES (
+$1, :3, @2)`: {
+			dbName: "db-2", collName: "table_2", fields: []string{"a", "b", "c"}, values: []interface{}{
+				placeholder{1}, placeholder{3}, placeholder{2},
+			},
+		},
+	}
+	for query, data := range testData {
+		if stmt, err := parseQueryWithDefaultDb(nil, dbName, query); err != nil {
+			t.Fatalf("%s failed: %s", name+"/"+query, err)
+		} else if dbstmt, ok := stmt.(*StmtInsert); !ok {
+			t.Fatalf("%s failed: the parsed stmt must be of type *StmtInsert", name+"/"+query)
+		} else if dbstmt.isUpsert {
+			t.Fatalf("%s failed: is-upsert must be disabled", name+"/"+query)
+		} else if dbstmt.dbName != data.dbName {
+			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
+		} else if dbstmt.collName != data.collName {
+			t.Fatalf("%s failed: <collection-name> expected %#v but received %#v", name+"/"+query, data.collName, dbstmt.collName)
+		} else if !reflect.DeepEqual(dbstmt.fields, data.fields) {
+			t.Fatalf("%s failed: <fields> expected %#v but received %#v", name+"/"+query, data.fields, dbstmt.fields)
+		} else if !reflect.DeepEqual(dbstmt.values, data.values) {
+			t.Fatalf("%s failed: <values> expected %#v but received %#v", name+"/"+query, data.values, dbstmt.values)
+		}
+	}
+
+	invalidQueries := []string{
+		`INSERT INTO .table (a,b) VALUES (1,2)`,
+	}
+	for _, query := range invalidQueries {
+		if _, err := parseQueryWithDefaultDb(nil, dbName, query); err == nil {
+			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
+		}
+	}
+}
+
 func Test_parseQuery_Upsert(t *testing.T) {
 	name := "Test_parseQuery_Upsert"
 	type testStruct struct {
@@ -364,6 +546,63 @@ a,b,c) VALUES ($1,
 	}
 }
 
+func Test_parseQuery_UpsertDefaultDb(t *testing.T) {
+	name := "Test_parseQuery_UpsertDefaultDb"
+	dbName := "mydb"
+	type testStruct struct {
+		dbName   string
+		collName string
+		fields   []string
+		values   []interface{}
+	}
+	testData := map[string]testStruct{
+		`UPSERT INTO 
+table1 (a, 
+b, c, d, e,
+f) VALUES
+	(null, 1.0, true,
+  "\"a string 'with' \\\"quote\\\"\"", "{\"key\":\"value\"}", "[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]")`: {
+			dbName: dbName, collName: "table1", fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{
+				nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`},
+			},
+		},
+		`UPSERT 
+INTO db-2.table_2 (
+a,b,c) VALUES ($1,
+	:3, @2)`: {
+			dbName: "db-2", collName: "table_2", fields: []string{"a", "b", "c"}, values: []interface{}{
+				placeholder{1}, placeholder{3}, placeholder{2},
+			},
+		},
+	}
+	for query, data := range testData {
+		if stmt, err := parseQueryWithDefaultDb(nil, dbName, query); err != nil {
+			t.Fatalf("%s failed: %s", name+"/"+query, err)
+		} else if dbstmt, ok := stmt.(*StmtInsert); !ok {
+			t.Fatalf("%s failed: the parsed stmt must be of type *StmtInsert", name+"/"+query)
+		} else if !dbstmt.isUpsert {
+			t.Fatalf("%s failed: is-upsert must be enabled", name+"/"+query)
+		} else if dbstmt.dbName != data.dbName {
+			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
+		} else if dbstmt.collName != data.collName {
+			t.Fatalf("%s failed: <collection-name> expected %#v but received %#v", name+"/"+query, data.collName, dbstmt.collName)
+		} else if !reflect.DeepEqual(dbstmt.fields, data.fields) {
+			t.Fatalf("%s failed: <fields> expected %#v but received %#v", name+"/"+query, data.fields, dbstmt.fields)
+		} else if !reflect.DeepEqual(dbstmt.values, data.values) {
+			t.Fatalf("%s failed: <values> expected %#v but received %#v", name+"/"+query, data.values, dbstmt.values)
+		}
+	}
+
+	invalidQueries := []string{
+		`UPSERT INTO .table (a,b,c) VALUES (1,2,3)`,
+	}
+	for _, query := range invalidQueries {
+		if _, err := parseQueryWithDefaultDb(nil, dbName, query); err == nil {
+			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
+		}
+	}
+}
+
 func Test_parseQuery_Delete(t *testing.T) {
 	name := "Test_parseQuery_Delete"
 	type testStruct struct {
@@ -417,6 +656,53 @@ db_3-0.table-3_0 WHERE
 	}
 }
 
+func Test_parseQuery_DeleteDefaultDb(t *testing.T) {
+	name := "Test_parseQuery_DeleteDefaultDb"
+	dbName := "mydb"
+	type testStruct struct {
+		dbName   string
+		collName string
+		idStr    string
+		id       interface{}
+	}
+	testData := map[string]testStruct{
+		`DELETE FROM 
+table1 WHERE 
+	id=abc`: {dbName: dbName, collName: "table1", idStr: "abc", id: nil},
+		`
+	DELETE 
+FROM db-2.table_2
+	WHERE     id="def"`: {dbName: "db-2", collName: "table_2", idStr: "def", id: nil},
+		`DELETE FROM 
+db_3-0.table-3_0 WHERE 
+	id=@2`: {dbName: "db_3-0", collName: "table-3_0", idStr: "@2", id: placeholder{2}},
+	}
+	for query, data := range testData {
+		if stmt, err := parseQueryWithDefaultDb(nil, dbName, query); err != nil {
+			t.Fatalf("%s failed: %s", name+"/"+query, err)
+		} else if dbstmt, ok := stmt.(*StmtDelete); !ok {
+			t.Fatalf("%s failed: the parsed stmt must be of type *StmtDelete", name+"/"+query)
+		} else if dbstmt.dbName != data.dbName {
+			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
+		} else if dbstmt.collName != data.collName {
+			t.Fatalf("%s failed: <collection-name> expected %#v but received %#v", name+"/"+query, data.collName, dbstmt.collName)
+		} else if dbstmt.idStr != data.idStr {
+			t.Fatalf("%s failed: <id-str> expected %#v but received %#v", name+"/"+query, data.idStr, dbstmt.idStr)
+		} else if !reflect.DeepEqual(dbstmt.id, data.id) {
+			t.Fatalf("%s failed: <id> expected %#v but received %#v", name+"/"+query, data.id, dbstmt.id)
+		}
+	}
+
+	invalidQueries := []string{
+		`DELETE FROM .table WHERE id=1`, // no collection name
+	}
+	for _, query := range invalidQueries {
+		if _, err := parseQueryWithDefaultDb(nil, dbName, query); err == nil {
+			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
+		}
+	}
+}
+
 func Test_parseQuery_Select(t *testing.T) {
 	name := "Test_parseQuery_Select"
 	type testStruct struct {
@@ -460,6 +746,42 @@ func Test_parseQuery_Select(t *testing.T) {
 	for _, query := range invalidQueries {
 		if _, err := parseQuery(nil, query); err == nil {
 			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
+		}
+	}
+}
+
+func Test_parseQuery_SelectDefaultDb(t *testing.T) {
+	name := "Test_parseQuery_SelectDefaultDb"
+	dbName := "mydb"
+	type testStruct struct {
+		dbName           string
+		collName         string
+		isCrossPartition bool
+		selectQuery      string
+	}
+	testData := map[string]testStruct{
+		`SELECT * FROM c WITH collection=tbl`: {
+			dbName: dbName, collName: "tbl", isCrossPartition: false, selectQuery: `SELECT * FROM c`},
+		`SELECT CROSS PARTITION * FROM c WHERE id="1" WITH db=db-1 WITH table=tbl_1`: {
+			dbName: "db-1", collName: "tbl_1", isCrossPartition: true, selectQuery: `SELECT * FROM c WHERE id="1"`},
+		`SELECT id,username,email FROM c WHERE username!=@1 AND (id>:2 OR email=$3) WITH CROSS_PARTITION=true WITH table=tbl`: {
+			dbName: dbName, collName: "tbl", isCrossPartition: true, selectQuery: `SELECT id,username,email FROM c WHERE username!=@_1 AND (id>@_2 OR email=@_3)`},
+		`SELECT a,b,c FROM user u WHERE u.id="1"`: {
+			dbName: dbName, collName: "user", isCrossPartition: false, selectQuery: `SELECT a,b,c FROM user u WHERE u.id="1"`},
+	}
+	for query, data := range testData {
+		if stmt, err := parseQueryWithDefaultDb(nil, dbName, query); err != nil {
+			t.Fatalf("%s failed: %s", name+"/"+query, err)
+		} else if dbstmt, ok := stmt.(*StmtSelect); !ok {
+			t.Fatalf("%s failed: the parsed stmt must be of type *StmtSelect", name+"/"+query)
+		} else if dbstmt.dbName != data.dbName {
+			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
+		} else if dbstmt.collName != data.collName {
+			t.Fatalf("%s failed: <collection-name> expected %#v but received %#v", name+"/"+query, data.collName, dbstmt.collName)
+		} else if dbstmt.isCrossPartition != data.isCrossPartition {
+			t.Fatalf("%s failed: <cross-partition> expected %#v but received %#v", name+"/"+query, data.isCrossPartition, dbstmt.isCrossPartition)
+		} else if dbstmt.selectQuery != data.selectQuery {
+			t.Fatalf("%s failed: <select-query> expected %#v but received %#v", name+"/"+query, data.selectQuery, dbstmt.selectQuery)
 		}
 	}
 }
@@ -524,6 +846,64 @@ SET a=$1, b=
 	}
 	for _, query := range invalidQueries {
 		if _, err := parseQuery(nil, query); err == nil {
+			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
+		}
+	}
+}
+
+func Test_parseQuery_UpdateDefaultDb(t *testing.T) {
+	name := "Test_parseQuery_UpdateDefaultDb"
+	dbName := "mydb"
+	type testStruct struct {
+		dbName   string
+		collName string
+		idStr    string
+		id       interface{}
+		fields   []string
+		values   []interface{}
+	}
+	testData := map[string]testStruct{
+		`UPDATE table1 
+SET a=null, b=
+	1.0, c=true, 
+  d="\"a string 'with' \\\"quote\\\"\"", e="{\"key\":\"value\"}"
+,f="[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]" WHERE
+	id="abc"`: {
+			dbName: dbName, collName: "table1", fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{
+				nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`},
+			}, idStr: "abc", id: nil},
+		`UPDATE db-1.table_1 
+SET a=$1, b=
+	$2, c=:3, d=0 WHERE
+	id=@4`: {
+			dbName: "db-1", collName: "table_1", fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0},
+			idStr: "@4", id: placeholder{4}},
+	}
+	for query, data := range testData {
+		if stmt, err := parseQueryWithDefaultDb(nil, dbName, query); err != nil {
+			t.Fatalf("%s failed: %s", name+"/"+query, err)
+		} else if dbstmt, ok := stmt.(*StmtUpdate); !ok {
+			t.Fatalf("%s failed: the parsed stmt must be of type *StmtUpdate", name+"/"+query)
+		} else if dbstmt.dbName != data.dbName {
+			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
+		} else if dbstmt.collName != data.collName {
+			t.Fatalf("%s failed: <collection-name> expected %#v but received %#v", name+"/"+query, data.collName, dbstmt.collName)
+		} else if dbstmt.idStr != data.idStr {
+			t.Fatalf("%s failed: <id-str> expected %#v but received %#v", name+"/"+query, data.idStr, dbstmt.idStr)
+		} else if dbstmt.id != data.id {
+			t.Fatalf("%s failed: <id> expected %#v but received %#v", name+"/"+query, data.id, dbstmt.id)
+		} else if !reflect.DeepEqual(dbstmt.fields, data.fields) {
+			t.Fatalf("%s failed: <fields> expected %#v but received %#v", name+"/"+query, data.fields, dbstmt.fields)
+		} else if !reflect.DeepEqual(dbstmt.values, data.values) {
+			t.Fatalf("%s failed: <values> expected %#v but received %#v", name+"/"+query, data.values, dbstmt.values)
+		}
+	}
+
+	invalidQueries := []string{
+		`UPDATE .table SET a=1,b=2,c=3 WHERE id=4`,
+	}
+	for _, query := range invalidQueries {
+		if _, err := parseQueryWithDefaultDb(nil, dbName, query); err == nil {
 			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
 		}
 	}

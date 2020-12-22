@@ -12,7 +12,7 @@ import (
 // StmtCreateCollection implements "CREATE COLLECTION" operation.
 //
 // Syntax:
-//     CREATE COLLECTION|TABLE [IF NOT EXISTS] <db-name>.<collection-name> <WITH [LARGE]PK=partitionKey> [WITH RU|MAXRU=ru] [WITH UK=/path1:/path2,/path3;/path4]
+//     CREATE COLLECTION|TABLE [IF NOT EXISTS] [<db-name>.]<collection-name> <WITH [LARGE]PK=partitionKey> [WITH RU|MAXRU=ru] [WITH UK=/path1:/path2,/path3;/path4]
 //
 // - ru: an integer specifying CosmosDB's database throughput expressed in RU/s. Supply either RU or MAXRU, not both!
 //
@@ -30,10 +30,11 @@ type StmtCreateCollection struct {
 	ru, maxru   int
 	pk          string     // partition key
 	uk          [][]string // unique keys
+	withOptsStr string
 }
 
-func (s *StmtCreateCollection) parseWithOpts(withOptsStr string) error {
-	if err := s.Stmt.parseWithOpts(withOptsStr); err != nil {
+func (s *StmtCreateCollection) parse() error {
+	if err := s.Stmt.parseWithOpts(s.withOptsStr); err != nil {
 		return err
 	}
 
@@ -82,9 +83,12 @@ func (s *StmtCreateCollection) parseWithOpts(withOptsStr string) error {
 	return nil
 }
 
-func (s *StmtCreateCollection) validateWithOpts() error {
+func (s *StmtCreateCollection) validate() error {
 	if s.ru > 0 && s.maxru > 0 {
 		return errors.New("only one of RU or MAXRU must be specified")
+	}
+	if s.dbName == "" || s.collName == "" {
+		return errors.New("database/collection is missing")
 	}
 	return nil
 }
@@ -165,7 +169,7 @@ func (r *ResultCreateCollection) RowsAffected() (int64, error) {
 // StmtDropCollection implements "DROP COLLECTION" operation.
 //
 // Syntax:
-//     DROP COLLECTION|TABLE [IF EXISTS] <db-name>.<collection-name>
+//     DROP COLLECTION|TABLE [IF EXISTS] [<db-name>.]<collection-name>
 //
 // If "IF EXISTS" is specified, Exec will silently swallow the error "404 Not Found".
 type StmtDropCollection struct {
@@ -173,6 +177,13 @@ type StmtDropCollection struct {
 	dbName   string
 	collName string
 	ifExists bool
+}
+
+func (s *StmtDropCollection) validate() error {
+	if s.dbName == "" || s.collName == "" {
+		return errors.New("database/collection is missing")
+	}
+	return nil
 }
 
 // Query implements driver.Stmt.Query.
@@ -204,10 +215,17 @@ func (s *StmtDropCollection) Exec(_ []driver.Value) (driver.Result, error) {
 // StmtListCollections implements "LIST DATABASES" operation.
 //
 // Syntax:
-//     LIST COLLECTIONS|TABLES|COLLECTION|TABLE FROM <db-name>
+//     LIST COLLECTIONS|TABLES|COLLECTION|TABLE [FROM <db-name>]
 type StmtListCollections struct {
 	*Stmt
 	dbName string
+}
+
+func (s *StmtListCollections) validate() error {
+	if s.dbName == "" {
+		return errors.New("database is missing")
+	}
+	return nil
 }
 
 // Exec implements driver.Stmt.Exec.

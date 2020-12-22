@@ -21,10 +21,11 @@ type StmtCreateDatabase struct {
 	dbName      string
 	ifNotExists bool
 	ru, maxru   int
+	withOptsStr string
 }
 
-func (s *StmtCreateDatabase) parseWithOpts(withOptsStr string) error {
-	if err := s.Stmt.parseWithOpts(withOptsStr); err != nil {
+func (s *StmtCreateDatabase) parse() error {
+	if err := s.Stmt.parseWithOpts(s.withOptsStr); err != nil {
 		return err
 	}
 	if _, ok := s.withOpts["RU"]; ok {
@@ -44,7 +45,7 @@ func (s *StmtCreateDatabase) parseWithOpts(withOptsStr string) error {
 	return nil
 }
 
-func (s *StmtCreateDatabase) validateWithOpts() error {
+func (s *StmtCreateDatabase) validate() error {
 	if s.ru > 0 && s.maxru > 0 {
 		return errors.New("only one of RU or MAXRU must be specified")
 	}
@@ -111,6 +112,10 @@ type StmtDropDatabase struct {
 	ifExists bool
 }
 
+func (s *StmtDropDatabase) validate() error {
+	return nil
+}
+
 // Query implements driver.Stmt.Query.
 // This function is not implemented, use Exec instead.
 func (s *StmtDropDatabase) Query(_ []driver.Value) (driver.Rows, error) {
@@ -143,6 +148,10 @@ func (s *StmtDropDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 //     LIST DATABASES|DATABASE
 type StmtListDatabases struct {
 	*Stmt
+}
+
+func (s *StmtListDatabases) validate() error {
+	return nil
 }
 
 // Exec implements driver.Stmt.Exec.

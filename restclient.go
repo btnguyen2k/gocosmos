@@ -62,15 +62,17 @@ func NewRestClient(httpClient *http.Client, connStr string) (*RestClient, error)
 		endpoint:   endpoint,
 		authKey:    key,
 		apiVersion: apiVersion,
+		params:     params,
 	}, nil
 }
 
 // RestClient is REST-based client for Azure CosmosDB
 type RestClient struct {
 	client     *gjrc.Gjrc
-	endpoint   string // Azure CosmosDB endpoint
-	authKey    []byte // Account key to authenticate
-	apiVersion string // Azure CosmosDB API version
+	endpoint   string            // Azure CosmosDB endpoint
+	authKey    []byte            // Account key to authenticate
+	apiVersion string            // Azure CosmosDB API version
+	params     map[string]string // parsed parameters
 }
 
 func (c *RestClient) buildJsonRequest(method, url string, params interface{}) *http.Request {

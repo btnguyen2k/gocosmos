@@ -123,6 +123,9 @@ func (s *StmtInsert) validate() error {
 	if len(s.fields) != len(s.values) {
 		return fmt.Errorf("number of field (%d) does not match number of input value (%d)", len(s.fields), len(s.values))
 	}
+	if s.dbName == "" || s.collName == "" {
+		return errors.New("database/collection is missing")
+	}
 	return nil
 }
 
@@ -239,6 +242,9 @@ func (s *StmtDelete) parse() error {
 func (s *StmtDelete) validate() error {
 	if s.idStr == "" {
 		return errors.New("id value is missing")
+	}
+	if s.dbName == "" || s.collName == "" {
+		return errors.New("database/collection is missing")
 	}
 	return nil
 }
@@ -367,7 +373,7 @@ func (s *StmtSelect) parse(withOptsStr string) error {
 
 func (s *StmtSelect) validate() error {
 	if s.dbName == "" || s.collName == "" {
-		return errors.New("database or collection is not specified")
+		return errors.New("database/collection is missing")
 	}
 	return nil
 }
@@ -577,6 +583,9 @@ func (s *StmtUpdate) parse() error {
 func (s *StmtUpdate) validate() error {
 	if s.idStr == "" {
 		return errors.New("id value is missing")
+	}
+	if s.dbName == "" || s.collName == "" {
+		return errors.New("database/collection is missing")
 	}
 	if len(s.fields) == 0 {
 		return errors.New("invalid query: SET clause is empty")
