@@ -1,5 +1,5 @@
 /*
-//TODO: documentation.
+Package gocosmos provides database/sql driver and a REST API client for Azure Cosmos DB SQL API.
 */
 package gocosmos
 
