@@ -95,26 +95,99 @@ func TestRestClient_CreateDatabase(t *testing.T) {
 	}
 }
 
-// func TestRestClient_ChangeOfferDatabase(t *testing.T) {
-// 	name := "TestRestClient_ChangeOfferDatabase"
-// 	client := _newRestClient(t, name)
-//
-// 	dbname := "mydb"
-// 	dbspec := DatabaseSpec{Id: dbname, Ru: 400}
-// 	client.DeleteDatabase(dbname)
-// 	var dbInfo DbInfo
-// 	if result := client.CreateDatabase(dbspec); result.Error() != nil {
-// 		t.Fatalf("%s failed: %s", name, result.Error())
-// 	} else {
-// 		dbInfo = result.DbInfo
-// 	}
-//
-// 	if result := client.ReplaceOfferForResource(dbInfo.Rid, 500, 0); result.Error() != nil {
-// 		t.Fatalf("%s failed: %s", name, result.Error())
-// 	} else {
-// 		fmt.Printf("%#v\n", result.OfferInfo)
-// 	}
-// }
+func TestRestClient_ChangeOfferDatabase(t *testing.T) {
+	name := "TestRestClient_ChangeOfferDatabase"
+	client := _newRestClient(t, name)
+
+	dbname := "mydb"
+	dbspec := DatabaseSpec{Id: dbname, Ru: 400}
+	client.DeleteDatabase(dbname)
+	var dbInfo DbInfo
+	if result := client.CreateDatabase(dbspec); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else {
+		dbInfo = result.DbInfo
+	}
+
+	// database is created with manual ru=400
+	if result := client.GetOfferForResource(dbInfo.Rid); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if ru, maxru := result.OfferThroughput(), result.MaxThroughputEverProvisioned(); ru != 400 || maxru != 400 {
+		t.Fatalf("%s failed: <ru|maxru> expected %#v|%#v but recevied %#v|%#v", name, 400, 400, ru, maxru)
+	}
+
+	// change database's manual ru to 500
+	if result := client.ReplaceOfferForResource(dbInfo.Rid, 500, 0); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if auto, ru := result.IsAutopilot(), result.OfferThroughput(); ru != 500 || auto {
+		t.Fatalf("%s failed: <auto|ru> expected %#v|%#v but recevied %#v|%#v", name, false, 500, auto, ru)
+	}
+	if result := client.GetOfferForResource(dbInfo.Rid); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if auto, ru := result.IsAutopilot(), result.OfferThroughput(); ru != 500 || auto {
+		t.Fatalf("%s failed: <auto|ru> expected %#v|%#v but recevied %#v|%#v", name, false, 500, auto, ru)
+	}
+
+	// change database's autopilot ru to 6000
+	if result := client.ReplaceOfferForResource(dbInfo.Rid, 0, 6000); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if auto, maxru := result.IsAutopilot(), result.MaxThroughputEverProvisioned(); maxru != 6000 || !auto {
+		t.Fatalf("%s failed: <auto|maxru> expected %#v|%#v but recevied %#v|%#v", name, true, 6000, auto, maxru)
+	}
+	if result := client.GetOfferForResource(dbInfo.Rid); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if auto, maxru := result.IsAutopilot(), result.MaxThroughputEverProvisioned(); maxru != 6000 || !auto {
+		t.Fatalf("%s failed: <auto|maxru> expected %#v|%#v but recevied %#v|%#v", name, true, 6000, auto, maxru)
+	}
+
+	// change database's autopilot ru to 7000
+	if result := client.ReplaceOfferForResource(dbInfo.Rid, 0, 7000); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if auto, maxru := result.IsAutopilot(), result.MaxThroughputEverProvisioned(); maxru != 7000 || !auto {
+		t.Fatalf("%s failed: <auto|maxru> expected %#v|%#v but recevied %#v|%#v", name, true, 7000, auto, maxru)
+	}
+	if result := client.GetOfferForResource(dbInfo.Rid); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if auto, maxru := result.IsAutopilot(), result.MaxThroughputEverProvisioned(); maxru != 7000 || !auto {
+		t.Fatalf("%s failed: <auto|maxru> expected %#v|%#v but recevied %#v|%#v", name, true, 7000, auto, maxru)
+	}
+
+	// change database's manual ru to 800
+	if result := client.ReplaceOfferForResource(dbInfo.Rid, 800, 0); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if auto, ru := result.IsAutopilot(), result.OfferThroughput(); ru != 800 || auto {
+		t.Fatalf("%s failed: <auto|ru> expected %#v|%#v but recevied %#v|%#v", name, false, 800, auto, ru)
+	}
+	if result := client.GetOfferForResource(dbInfo.Rid); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if auto, ru := result.IsAutopilot(), result.OfferThroughput(); ru != 800 || auto {
+		t.Fatalf("%s failed: <auto|ru> expected %#v|%#v but recevied %#v|%#v", name, false, 800, auto, ru)
+	}
+
+	// change database's autopilot ru to auto
+	if result := client.ReplaceOfferForResource(dbInfo.Rid, 0, 0); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if auto := result.IsAutopilot(); !auto {
+		t.Fatalf("%s failed: <auto> expected %#v but recevied %#v", name, true, auto)
+	}
+	if result := client.GetOfferForResource(dbInfo.Rid); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if auto := result.IsAutopilot(); !auto {
+		t.Fatalf("%s failed: <auto> expected %#v but recevied %#v", name, true, auto)
+	}
+
+	// change database's autopilot ru to auto (again)
+	if result := client.ReplaceOfferForResource(dbInfo.Rid, 0, 0); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if auto := result.IsAutopilot(); !auto {
+		t.Fatalf("%s failed: <auto> expected %#v but recevied %#v", name, true, auto)
+	}
+	if result := client.GetOfferForResource(dbInfo.Rid); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if auto := result.IsAutopilot(); !auto {
+		t.Fatalf("%s failed: <auto> expected %#v but recevied %#v", name, true, auto)
+	}
+}
 
 func TestRestClient_DeleteDatabase(t *testing.T) {
 	name := "TestRestClient_DeleteDatabase"
@@ -333,8 +406,7 @@ func TestRestClient_ChangeOfferCollection(t *testing.T) {
 	}
 }
 
-func
-TestRestClient_CreateCollectionIndexingPolicy(t *testing.T) {
+func TestRestClient_CreateCollectionIndexingPolicy(t *testing.T) {
 	name := "TestRestClient_CreateCollectionIndexingPolicy"
 	client := _newRestClient(t, name)
 
@@ -351,8 +423,7 @@ TestRestClient_CreateCollectionIndexingPolicy(t *testing.T) {
 	}
 }
 
-func
-TestRestClient_ReplaceCollection(t *testing.T) {
+func TestRestClient_ReplaceCollection(t *testing.T) {
 	name := "TestRestClient_ReplaceCollection"
 	client := _newRestClient(t, name)
 
@@ -406,8 +477,7 @@ TestRestClient_ReplaceCollection(t *testing.T) {
 	}
 }
 
-func
-TestRestClient_DeleteCollection(t *testing.T) {
+func TestRestClient_DeleteCollection(t *testing.T) {
 	name := "TestRestClient_DeleteCollection"
 	client := _newRestClient(t, name)
 
@@ -436,8 +506,7 @@ TestRestClient_DeleteCollection(t *testing.T) {
 	}
 }
 
-func
-TestRestClient_GetCollection(t *testing.T) {
+func TestRestClient_GetCollection(t *testing.T) {
 	name := "TestRestClient_GetCollection"
 	client := _newRestClient(t, name)
 
@@ -475,8 +544,7 @@ TestRestClient_GetCollection(t *testing.T) {
 	}
 }
 
-func
-TestRestClient_ListCollection(t *testing.T) {
+func TestRestClient_ListCollection(t *testing.T) {
 	name := "TestRestClient_ListCollection"
 	client := _newRestClient(t, name)
 
@@ -514,8 +582,7 @@ TestRestClient_ListCollection(t *testing.T) {
 
 /*----------------------------------------------------------------------*/
 
-func
-TestRestClient_CreateDocument(t *testing.T) {
+func TestRestClient_CreateDocument(t *testing.T) {
 	name := "TestRestClient_CreateDocument"
 	client := _newRestClient(t, name)
 
@@ -604,8 +671,7 @@ TestRestClient_CreateDocument(t *testing.T) {
 	}
 }
 
-func
-TestRestClient_UpsertDocument(t *testing.T) {
+func TestRestClient_UpsertDocument(t *testing.T) {
 	name := "TestRestClient_UpsertDocument"
 	client := _newRestClient(t, name)
 
@@ -684,8 +750,7 @@ TestRestClient_UpsertDocument(t *testing.T) {
 	}
 }
 
-func
-TestRestClient_ReplaceDocument(t *testing.T) {
+func TestRestClient_ReplaceDocument(t *testing.T) {
 	name := "TestRestClient_ReplaceDocument"
 	client := _newRestClient(t, name)
 
@@ -784,8 +849,7 @@ TestRestClient_ReplaceDocument(t *testing.T) {
 	}
 }
 
-func
-TestRestClient_ReplaceDocumentCrossPartition(t *testing.T) {
+func TestRestClient_ReplaceDocumentCrossPartition(t *testing.T) {
 	name := "TestRestClient_ReplaceDocumentCrossPartition"
 	client := _newRestClient(t, name)
 
@@ -825,8 +889,7 @@ TestRestClient_ReplaceDocumentCrossPartition(t *testing.T) {
 	}
 }
 
-func
-TestRestClient_GetDocument(t *testing.T) {
+func TestRestClient_GetDocument(t *testing.T) {
 	name := "TestRestClient_GetDocument"
 	client := _newRestClient(t, name)
 
@@ -907,8 +970,7 @@ TestRestClient_GetDocument(t *testing.T) {
 	}
 }
 
-func
-TestRestClient_DeleteDocument(t *testing.T) {
+func TestRestClient_DeleteDocument(t *testing.T) {
 	name := "TestRestClient_DeleteDocument"
 	client := _newRestClient(t, name)
 
@@ -967,8 +1029,7 @@ TestRestClient_DeleteDocument(t *testing.T) {
 	}
 }
 
-func
-TestRestClient_QueryDocuments(t *testing.T) {
+func TestRestClient_QueryDocuments(t *testing.T) {
 	name := "TestRestClient_QueryDocuments"
 	client := _newRestClient(t, name)
 
@@ -1037,8 +1098,7 @@ TestRestClient_QueryDocuments(t *testing.T) {
 	}
 }
 
-func
-TestRestClient_QueryDocumentsCrossPartition(t *testing.T) {
+func TestRestClient_QueryDocumentsCrossPartition(t *testing.T) {
 	name := "TestRestClient_QueryDocumentsCrossPartition"
 	client := _newRestClient(t, name)
 
@@ -1105,8 +1165,7 @@ TestRestClient_QueryDocumentsCrossPartition(t *testing.T) {
 	}
 }
 
-func
-TestRestClient_ListDocuments(t *testing.T) {
+func TestRestClient_ListDocuments(t *testing.T) {
 	name := "TestRestClient_ListDocuments"
 	client := _newRestClient(t, name)
 
@@ -1222,8 +1281,7 @@ TestRestClient_ListDocuments(t *testing.T) {
 	}
 }
 
-func
-TestRestClient_ListDocumentsCrossPartition(t *testing.T) {
+func TestRestClient_ListDocumentsCrossPartition(t *testing.T) {
 	name := "TestRestClient_ListDocumentsCrossPartition"
 	client := _newRestClient(t, name)
 
