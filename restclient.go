@@ -14,10 +14,12 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/btnguyen2k/consu/gjrc"
 	"github.com/btnguyen2k/consu/reddo"
+	"github.com/btnguyen2k/consu/semita"
 )
 
 // NewRestClient constructs a new RestClient instance from the supplied connection string.
@@ -85,6 +87,7 @@ func (c *RestClient) buildJsonRequest(method, url string, params interface{}) *h
 	}
 	req, _ := http.NewRequest(method, url, r)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
 	req.Header.Set("X-Ms-Version", c.apiVersion)
 	return req
 }
@@ -555,6 +558,121 @@ func (c *RestClient) ListDocuments(r ListDocsReq) *RespListDocs {
 	return result
 }
 
+// GetOfferForResource invokes CosmosDB API to get offer info of a resource.
+func (c *RestClient) GetOfferForResource(rid string) *RespGetOffer {
+	queryResult := c.QueryOffers(`SELECT * FROM root WHERE root.offerResourceId="` + rid + `"`)
+	result := &RespGetOffer{RestReponse: queryResult.RestReponse}
+	if result.Error() == nil {
+		if len(queryResult.Offers) == 0 {
+			result.StatusCode = 404
+			result.ApiErr = fmt.Errorf("offer not found; StatusCode=%d;Body=%s", result.StatusCode, result.RespBody)
+		} else {
+			result.OfferInfo = queryResult.Offers[0]
+		}
+	}
+	return result
+}
+
+// QueryOffers invokes CosmosDB API to query existing offers.
+//
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/querying-offers.
+func (c *RestClient) QueryOffers(query string) *RespQueryOffers {
+	method := "POST"
+	url := c.endpoint + "/offers"
+	req := c.buildJsonRequest(method, url, map[string]interface{}{"query": query})
+	req = c.addAuthHeader(req, method, "offers", "")
+	req.Header.Set("Content-Type", "application/query+json")
+	req.Header.Set("X-Ms-Documentdb-Isquery", "true")
+
+	resp := c.client.Do(req)
+	result := &RespQueryOffers{RestReponse: c.buildRestReponse(resp)}
+	if result.CallErr == nil {
+		result.ContinuationToken = result.RespHeader["X-MS-CONTINUATION"]
+		result.CallErr = json.Unmarshal(result.RespBody, &result)
+	}
+	return result
+}
+
+func (c *RestClient) buildReplaceOfferContentAndHeaders(currentOffer OfferInfo, ru, maxru int) (map[string]interface{}, map[string]string) {
+	headers := make(map[string]string)
+	contentManualThroughput := map[string]interface{}{"offerThroughput": ru}
+	contentDisableManualThroughput := map[string]interface{}{"offerThroughput": -1}
+	contentAutopilotThroughput := map[string]interface{}{"offerAutopilotSettings": map[string]interface{}{"maxThroughput": maxru}}
+	contentDisableAutopilotThroughput := map[string]interface{}{"offerAutopilotSettings": map[string]interface{}{"maxThroughput": -1}}
+	if ru > 0 && maxru <= 0 {
+		if currentOffer.IsAutopilot() {
+			// change from auto-pilot to manual provisioning
+			headers["X-Ms-Cosmos-Migrate-Offer-To-Manual-Throughput"] = "true"
+			return contentDisableAutopilotThroughput, headers
+		}
+		return contentManualThroughput, headers
+	}
+	if ru <= 0 && maxru > 0 {
+		if !currentOffer.IsAutopilot() {
+			// change from manual to auto-pilot provisioning
+			headers["X-Ms-Cosmos-Migrate-Offer-To-Autopilot"] = "true"
+			return contentDisableManualThroughput, headers
+		}
+		return contentAutopilotThroughput, headers
+	}
+	// if we reach here, ru<=0 and maxru<=0
+	if !currentOffer.IsAutopilot() {
+		// change from auto-pilot to manual provisioning
+		headers["X-Ms-Cosmos-Migrate-Offer-To-Autopilot"] = "true"
+		return contentDisableManualThroughput, headers
+	}
+	return nil, headers
+}
+
+// ReplaceOfferForResource invokes CosmosDB API to replace/update offer info of a resource.
+//
+//     - If ru > 0 and maxru <= 0: switch to manual throughput and set provisioning value to ru.
+//     - If ru <= 0 and maxru > 0: switch to autopilot throughput and set max provisioning value to maxru.
+//     - If ru <= 0 and maxru <= 0: switch to autopilot throughput with default provisioning value.
+func (c *RestClient) ReplaceOfferForResource(rid string, ru, maxru int) *RespReplaceOffer {
+	if ru > 0 && maxru > 0 {
+		return &RespReplaceOffer{
+			RestReponse: RestReponse{
+				ApiErr:     errors.New("either one of RU or MAXRU must be supplied, not both"),
+				StatusCode: 400,
+			},
+		}
+	}
+
+	getResult := c.GetOfferForResource(rid)
+	if getResult.Error() == nil {
+		method := "PUT"
+		url := c.endpoint + "/offers/" + getResult.OfferInfo.Rid
+		params := map[string]interface{}{
+			"offerVersion": "V2", "offerType": "Invalid",
+			"resource":        getResult.OfferInfo.Resource,
+			"offerResourceId": getResult.OfferInfo.OfferResourceId,
+			"id":              getResult.OfferInfo.Rid,
+			"_rid":            getResult.OfferInfo.Rid,
+		}
+		content, headers := c.buildReplaceOfferContentAndHeaders(getResult.OfferInfo, ru, maxru)
+		if content == nil {
+			return &RespReplaceOffer{RestReponse: getResult.RestReponse, OfferInfo: getResult.OfferInfo}
+		}
+		params["content"] = content
+		req := c.buildJsonRequest(method, url, params)
+		req = c.addAuthHeader(req, method, "offers", getResult.OfferInfo.Rid)
+		for k, v := range headers {
+			req.Header.Set(k, v)
+		}
+		resp := c.client.Do(req)
+		result := &RespReplaceOffer{RestReponse: c.buildRestReponse(resp)}
+		if result.CallErr == nil {
+			if (headers["X-Ms-Cosmos-Migrate-Offer-To-Autopilot"] == "true" && maxru > 0) || (headers["X-Ms-Cosmos-Migrate-Offer-To-Manual-Throughput"] == "true" && ru > 0) {
+				return c.ReplaceOfferForResource(rid, ru, maxru)
+			}
+			result.CallErr = json.Unmarshal(result.RespBody, &result.OfferInfo)
+		}
+		return result
+	}
+	return &RespReplaceOffer{RestReponse: getResult.RestReponse}
+}
+
 /*----------------------------------------------------------------------*/
 
 // RestReponse captures the response from REST API call.
@@ -794,4 +912,80 @@ type RespListDocs struct {
 	Documents         []DocInfo `json:"Documents"`
 	ContinuationToken string    `json:"-"`
 	Etag              string    `json:"-"` // logical sequence number (LSN) of last document returned in the response
+}
+
+// OfferInfo captures info of a CosmosDB offer.
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/offers.
+type OfferInfo struct {
+	OfferVersion    string                 `json:"offerVersion"`    // V2 is the current version for request unit-based throughput.
+	OfferType       string                 `json:"offerType"`       // This value indicates the performance level for V1 offer version, allowed values for V1 offer are S1, S2, or S3. This property is set to Invalid for V2 offer version.
+	Content         map[string]interface{} `json:"content"`         // Contains information about the offer – for V2 offers, this contains the throughput of the collection.
+	Resource        string                 `json:"resource"`        // When creating a new collection, this property is set to the self-link of the collection.
+	OfferResourceId string                 `json:"offerResourceId"` // During creation of a collection, this property is automatically associated to the resource ID, that is, _rid of the collection.
+	Id              string                 `json:"id"`              // It is a system-generated property. The ID for the offer resource is automatically generated when it is created. It has the same value as the _rid for the offer.
+	Rid             string                 `json:"_rid"`            // It is a system-generated property. The resource ID (_rid) is a unique identifier that is also hierarchical per the resource stack on the resource model. It is used internally for placement and navigation of the offer.
+	Ts              int64                  `json:"_ts"`             // It is a system-generated property. It specifies the last updated timestamp of the resource. The value is a timestamp.
+	Self            string                 `json:"_self"`           // It is a system-generated property. It is the unique addressable URI for the resource.
+	Etag            string                 `json:"_etag"`           // It is a system-generated property that specifies the resource etag required for optimistic concurrency control.
+	_lock           sync.Mutex
+	_s              *semita.Semita
+}
+
+// OfferThroughput returns value of field 'offerThroughput'
+func (o OfferInfo) OfferThroughput() int {
+	o._lock.Lock()
+	if o._s == nil {
+		o._s = semita.NewSemita(o.Content)
+	}
+	defer o._lock.Unlock()
+	v, err := o._s.GetValueOfType("offerThroughput", reddo.TypeInt)
+	if err == nil {
+		return int(v.(int64))
+	}
+	return 0
+}
+
+// MaxThroughputEverProvisioned returns value of field 'maxThroughputEverProvisioned'
+func (o OfferInfo) MaxThroughputEverProvisioned() int {
+	o._lock.Lock()
+	if o._s == nil {
+		o._s = semita.NewSemita(o.Content)
+	}
+	defer o._lock.Unlock()
+	v, err := o._s.GetValueOfType("offerMinimumThroughputParameters.maxThroughputEverProvisioned", reddo.TypeInt)
+	if err == nil {
+		return int(v.(int64))
+	}
+	return 0
+}
+
+// IsAutopilot returns true if auto pilot is enabled, false otherwise.
+func (o OfferInfo) IsAutopilot() bool {
+	o._lock.Lock()
+	if o._s == nil {
+		o._s = semita.NewSemita(o.Content)
+	}
+	defer o._lock.Unlock()
+	v, err := o._s.GetValue("offerAutopilotSettings")
+	return err == nil && v != nil
+}
+
+// RespGetOffer captures the response from GetOffer call.
+type RespGetOffer struct {
+	RestReponse
+	OfferInfo
+}
+
+// RespQueryOffers captures the response from QueryOffers call.
+type RespQueryOffers struct {
+	RestReponse       `json:"-"`
+	Count             int64       `json:"_count"` // number of records returned from the operation
+	Offers            []OfferInfo `json:"Offers"`
+	ContinuationToken string      `json:"-"`
+}
+
+// RespReplaceOffer captures the response from ReplaceOffer call.
+type RespReplaceOffer struct {
+	RestReponse
+	OfferInfo
 }
