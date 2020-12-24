@@ -189,6 +189,48 @@ func TestRestClient_ChangeOfferDatabase(t *testing.T) {
 	}
 }
 
+func TestRestClient_ChangeOfferDatabaseInvalid(t *testing.T) {
+	name := "TestRestClient_ChangeOfferDatabaseInvalid"
+	client := _newRestClient(t, name)
+
+	client.DeleteDatabase("mydb")
+	dbspec := DatabaseSpec{Id: "mydb"}
+	var dbInfo DbInfo
+	if result := client.CreateDatabase(dbspec); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else {
+		dbInfo = result.DbInfo
+	}
+
+	if result := client.GetOfferForResource("not_found"); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but recevied %#v", name, 404, result.StatusCode)
+	}
+	if result := client.ReplaceOfferForResource("not_found", 400, 0); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but recevied %#v", name, 404, result.StatusCode)
+	}
+
+	if result := client.GetOfferForResource(dbInfo.Rid); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but recevied %#v", name, 404, result.StatusCode)
+	}
+	if result := client.ReplaceOfferForResource(dbInfo.Rid, 400, 0); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but recevied %#v", name, 404, result.StatusCode)
+	}
+
+	if result := client.ReplaceOfferForResource(dbInfo.Rid, 400, 4000); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 400 {
+		t.Fatalf("%s failed: <status-code> expected %#v but recevied %#v", name, 400, result.StatusCode)
+	}
+}
+
 func TestRestClient_DeleteDatabase(t *testing.T) {
 	name := "TestRestClient_DeleteDatabase"
 	client := _newRestClient(t, name)
@@ -403,6 +445,41 @@ func TestRestClient_ChangeOfferCollection(t *testing.T) {
 		t.Fatalf("%s failed: %s", name, result.Error())
 	} else if auto := result.IsAutopilot(); !auto {
 		t.Fatalf("%s failed: <auto> expected %#v but recevied %#v", name, true, auto)
+	}
+}
+
+func TestRestClient_ChangeOfferCollectionInvalid(t *testing.T) {
+	name := "TestRestClient_ChangeOfferCollectionInvalid"
+	client := _newRestClient(t, name)
+
+	dbname := "mydb"
+	client.DeleteDatabase(dbname)
+	client.CreateDatabase(DatabaseSpec{Id: dbname})
+	collname := "mytable"
+	collspec := CollectionSpec{DbName: dbname, CollName: collname, PartitionKeyInfo: map[string]interface{}{"paths": []string{"/id"}, "kind": "Hash"}}
+
+	var collInfo CollInfo
+	if result := client.CreateCollection(collspec); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else {
+		collInfo = result.CollInfo
+	}
+
+	if result := client.GetOfferForResource("not_found"); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but recevied %#v", name, 404, result.StatusCode)
+	}
+	if result := client.ReplaceOfferForResource("not_found", 400, 0); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but recevied %#v", name, 404, result.StatusCode)
+	}
+
+	if result := client.ReplaceOfferForResource(collInfo.Rid, 400, 4000); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 400 {
+		t.Fatalf("%s failed: <status-code> expected %#v but recevied %#v", name, 400, result.StatusCode)
 	}
 }
 
