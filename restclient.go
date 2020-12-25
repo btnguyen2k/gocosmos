@@ -559,6 +559,8 @@ func (c *RestClient) ListDocuments(r ListDocsReq) *RespListDocs {
 }
 
 // GetOfferForResource invokes CosmosDB API to get offer info of a resource.
+//
+// Available since v0.1.1
 func (c *RestClient) GetOfferForResource(rid string) *RespGetOffer {
 	queryResult := c.QueryOffers(`SELECT * FROM root WHERE root.offerResourceId="` + rid + `"`)
 	result := &RespGetOffer{RestReponse: queryResult.RestReponse}
@@ -576,6 +578,8 @@ func (c *RestClient) GetOfferForResource(rid string) *RespGetOffer {
 // QueryOffers invokes CosmosDB API to query existing offers.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/querying-offers.
+//
+// Available since v0.1.1
 func (c *RestClient) QueryOffers(query string) *RespQueryOffers {
 	method := "POST"
 	url := c.endpoint + "/offers"
@@ -629,6 +633,8 @@ func (c *RestClient) buildReplaceOfferContentAndHeaders(currentOffer OfferInfo, 
 //     - If ru > 0 and maxru <= 0: switch to manual throughput and set provisioning value to ru.
 //     - If ru <= 0 and maxru > 0: switch to autopilot throughput and set max provisioning value to maxru.
 //     - If ru <= 0 and maxru <= 0: switch to autopilot throughput with default provisioning value.
+//
+// Available since v0.1.1
 func (c *RestClient) ReplaceOfferForResource(rid string, ru, maxru int) *RespReplaceOffer {
 	if ru > 0 && maxru > 0 {
 		return &RespReplaceOffer{

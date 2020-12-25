@@ -100,6 +100,104 @@ func (r *ResultCreateDatabase) RowsAffected() (int64, error) {
 
 /*----------------------------------------------------------------------*/
 
+// StmtAlterDatabase implements "ALTER DATABASE" operation.
+//
+// Syntax:
+//     ALTER DATABASE <db-name> WITH RU|MAXRU=<ru>
+//
+// - ru: an integer specifying CosmosDB's database throughput expressed in RU/s. Supply either RU or MAXRU, not both!
+//
+// Available since v0.1.1
+type StmtAlterDatabase struct {
+	*Stmt
+	dbName      string
+	ru, maxru   int
+	withOptsStr string
+}
+
+func (s *StmtAlterDatabase) parse() error {
+	if err := s.Stmt.parseWithOpts(s.withOptsStr); err != nil {
+		return err
+	}
+	if _, ok := s.withOpts["RU"]; ok {
+		ru, err := strconv.ParseInt(s.withOpts["RU"], 10, 64)
+		if err != nil || ru < 0 {
+			return fmt.Errorf("invalid RU value: %s", s.withOpts["RU"])
+		}
+		s.ru = int(ru)
+	}
+	if _, ok := s.withOpts["MAXRU"]; ok {
+		maxru, err := strconv.ParseInt(s.withOpts["MAXRU"], 10, 64)
+		if err != nil || maxru < 0 {
+			return fmt.Errorf("invalid MAXRU value: %s", s.withOpts["MAXRU"])
+		}
+		s.maxru = int(maxru)
+	}
+	return nil
+}
+
+func (s *StmtAlterDatabase) validate() error {
+	if s.ru <= 0 && s.maxru <= 0 {
+		return errors.New("either RU or MAXRU must be specified")
+	}
+	if s.ru > 0 && s.maxru > 0 {
+		return errors.New("only one of RU or MAXRU must be specified")
+	}
+	return nil
+}
+
+// Query implements driver.Stmt.Query.
+// This function is not implemented, use Exec instead.
+func (s *StmtAlterDatabase) Query(_ []driver.Value) (driver.Rows, error) {
+	return nil, errors.New("this operation is not supported, please use exec")
+}
+
+// Exec implements driver.Stmt.Exec.
+// Upon successful call, this function return (*ResultAlterDatabase, nil).
+func (s *StmtAlterDatabase) Exec(_ []driver.Value) (driver.Result, error) {
+	getResult := s.conn.restClient.GetDatabase(s.dbName)
+	if err := getResult.Error(); err != nil {
+		switch getResult.StatusCode {
+		case 403:
+			return nil, ErrForbidden
+		case 404:
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	restResult := s.conn.restClient.ReplaceOfferForResource(getResult.Rid, s.ru, s.maxru)
+	result := &ResultAlterDatabase{Successful: restResult.Error() == nil}
+	err := restResult.Error()
+	switch restResult.StatusCode {
+	case 403:
+		err = ErrForbidden
+	case 404:
+		err = ErrNotFound
+	}
+	return result, err
+}
+
+// ResultAlterDatabase captures the result from ALTER DATABASE operation.
+type ResultAlterDatabase struct {
+	// Successful flags if the operation was successful or not.
+	Successful bool
+}
+
+// LastInsertId implements driver.Result.LastInsertId.
+func (r *ResultAlterDatabase) LastInsertId() (int64, error) {
+	return 0, fmt.Errorf("this operation is not supported")
+}
+
+// RowsAffected implements driver.Result.RowsAffected.
+func (r *ResultAlterDatabase) RowsAffected() (int64, error) {
+	if r.Successful {
+		return 1, nil
+	}
+	return 0, nil
+}
+
+/*----------------------------------------------------------------------*/
+
 // StmtDropDatabase implements "DROP DATABASE" operation.
 //
 // Syntax:

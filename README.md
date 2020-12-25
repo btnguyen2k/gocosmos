@@ -80,10 +80,12 @@ The REST client supports:
 The `database/sql` driver supports:
 - Database:
   - `CREATE DATABASE`
+  - `ALTER DATABASE`
   - `DROP DATABASE`
   - `LIST DATABASES`
 - Table/Collection:
   - `CREATE TABLE/COLLECTION`
+  - `ALTER TABLE/COLLECTION`
   - `DROP TABLE/COLLECTION`
   - `LIST TABLES/COLLECTIONS`
 - Item/Document:
@@ -98,9 +100,11 @@ Summary of supported SQL statements:
 |Statement|Syntax|
 |---------|-----------|
 |Create a new database                      |`CREATE DATABASE [IF NOT EXISTS] <db-name>`|
+|Change database's throughput               |`ALTER DATABASE <db-name> WITH  RU/MAXRU=<ru>`|
 |Delete an existing database                |`DROP DATABASE [IF EXISTS] <db-name>`|
 |List all existing databases                |`LIST DATABASES`|
 |Create a new collection                    |`CREATE COLLECTION [IF NOT EXISTS] [<db-name>.]<collection-name> <WITH [LARGE]PK=partitionKey>`|
+|Change collection's throughput             |`ALTER COLLECTION [<db-name>.]<collection-name> WITH  RU/MAXRU=<ru>`|
 |Delete an existing collection              |`DROP COLLECTION [IF EXISTS] [<db-name>.]<collection-name>`|
 |List all existing collections in a database|`LIST COLLECTIONS [FROM <db-name>]`|
 |Insert a new document into collection      |`INSERT INTO [<db-name>.]<collection-name> ...`|

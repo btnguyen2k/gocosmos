@@ -1,6 +1,7 @@
 package gocosmos
 
 import (
+	"fmt"
 	"reflect"
 	"testing"
 )
@@ -76,6 +77,43 @@ func Test_parseQuery_CreateDatabase(t *testing.T) {
 	}
 	for _, query := range invalidQueries {
 		if _, err := parseQuery(nil, query); err == nil {
+			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
+		}
+	}
+}
+
+func Test_parseQuery_AlterDatabase(t *testing.T) {
+	name := "Test_parseQuery_AlterDatabase"
+	type testStruct struct {
+		dbName    string
+		ru, maxru int
+	}
+	testData := map[string]testStruct{
+		"ALTER database db1 WITH ru=400":      {dbName: "db1", ru: 400, maxru: 0},
+		"alter DATABASE db-1 with maxru=4000": {dbName: "db-1", ru: 0, maxru: 4000},
+	}
+	for query, data := range testData {
+		if stmt, err := parseQuery(nil, query); err != nil {
+			t.Fatalf("%s failed: %s", name+"/"+query, err)
+		} else if dbstmt, ok := stmt.(*StmtAlterDatabase); !ok {
+			t.Fatalf("%s failed: the parsed stmt must be of type *StmtAlterDatabase", name+"/"+query)
+		} else if dbstmt.dbName != data.dbName {
+			t.Fatalf("%s failed: <db-name> expected %#v but received %#v", name+"/"+query, data.dbName, dbstmt.dbName)
+		} else if dbstmt.ru != data.ru {
+			t.Fatalf("%s failed: <ru> expected %#v but received %#v", name+"/"+query, data.ru, dbstmt.ru)
+		} else if dbstmt.maxru != data.maxru {
+			t.Fatalf("%s failed: <maxru> expected %#v but received %#v", name+"/"+query, data.maxru, dbstmt.maxru)
+		}
+	}
+
+	invalidQueries := []string{
+		"ALTER DATABASE dbtemp",
+		"ALTER DATABASE dbtemp WITH ru=400 WITH maxru=4000",
+	}
+	for _, query := range invalidQueries {
+		if _, err := parseQuery(nil, query); err == nil {
+			temp, _ := parseQuery(nil, query)
+			fmt.Printf("%#v\n", temp)
 			t.Fatalf("%s failed: query must not be parsed/validated successfully", name+"/"+query)
 		}
 	}

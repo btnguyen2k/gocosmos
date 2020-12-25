@@ -2,6 +2,10 @@
 
 ## 2020-12-2x - v0.1.1
 
+- REST client: new functions
+  - `GetOfferForResource(rid string)`: get throughput info of a resource.
+  - `QueryOffers(query string)`: query existing offers.
+  - `ReplaceOfferForResource(rid string, ru, maxru int)`: replace/update a resource's throughput.
 - Driver for `database/sql`:
   - Add default database support to DSN.
 
