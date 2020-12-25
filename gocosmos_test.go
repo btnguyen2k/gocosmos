@@ -190,6 +190,45 @@ func Test_Exec_CreateDatabase(t *testing.T) {
 	}
 }
 
+func Test_Query_AlterDatabase(t *testing.T) {
+	name := "Test_Query_AlterDatabase"
+	db := _openDb(t, name)
+	_, err := db.Query("ALTER DATABASE dbtemp WITH ru=400")
+	if err == nil || strings.Index(err.Error(), "not supported") < 0 {
+		t.Fatalf("%s failed: expected 'not support' error, but received %#v", name, err)
+	}
+}
+
+func Test_Exec_AlterDatabase(t *testing.T) {
+	name := "Test_Exec_AlterDatabase"
+	db := _openDb(t, name)
+
+	db.Exec("DROP DATABASE IF EXISTS db_not_found")
+	db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp WITH ru=400")
+
+	result, err := db.Exec("ALTER DATABASE dbtemp WITH ru=500")
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+	if numRows, err := result.RowsAffected(); numRows != 1 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+
+	result, err = db.Exec("ALTER DATABASE dbtemp WITH maxru=6000")
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+	if numRows, err := result.RowsAffected(); numRows != 1 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+
+	_, err = db.Exec("ALTER DATABASE db_not_found WITH maxru=6000")
+	if err != ErrNotFound {
+		t.Fatalf("%s failed: expected ErrNotFound but received %s", name, err)
+	}
+}
+
 func Test_Query_DropDatabase(t *testing.T) {
 	name := "Test_Query_DropDatabase"
 	db := _openDb(t, name)
