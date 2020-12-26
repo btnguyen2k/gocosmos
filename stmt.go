@@ -16,10 +16,12 @@ const (
 
 var (
 	reCreateDb = regexp.MustCompile(`(?is)^CREATE\s+DATABASE` + ifNotExists + `\s+` + field + with + `$`)
+	reAlterDb  = regexp.MustCompile(`(?is)^ALTER\s+DATABASE` + `\s+` + field + with + `$`)
 	reDropDb   = regexp.MustCompile(`(?is)^DROP\s+DATABASE` + ifExists + `\s+` + field + `$`)
 	reListDbs  = regexp.MustCompile(`(?is)^LIST\s+DATABASES?$`)
 
 	reCreateColl = regexp.MustCompile(`(?is)^CREATE\s+(COLLECTION|TABLE)` + ifNotExists + `\s+(` + field + `\.)?` + field + with + `$`)
+	reAlterColl  = regexp.MustCompile(`(?is)^ALTER\s+(COLLECTION|TABLE)` + `\s+(` + field + `\.)?` + field + with + `$`)
 	reDropColl   = regexp.MustCompile(`(?is)^DROP\s+(COLLECTION|TABLE)` + ifExists + `\s+(` + field + `\.)?` + field + `$`)
 	reListColls  = regexp.MustCompile(`(?is)^LIST\s+(COLLECTIONS?|TABLES?)(\s+FROM\s+` + field + `)?$`)
 
@@ -42,6 +44,18 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 			dbName:      strings.TrimSpace(groups[0][2]),
 			ifNotExists: strings.TrimSpace(groups[0][1]) != "",
 			withOptsStr: strings.TrimSpace(groups[0][3]),
+		}
+		if err := stmt.parse(); err != nil {
+			return nil, err
+		}
+		return stmt, stmt.validate()
+	}
+	if re := reAlterDb; re.MatchString(query) {
+		groups := re.FindAllStringSubmatch(query, -1)
+		stmt := &StmtAlterDatabase{
+			Stmt:        &Stmt{query: query, conn: c, numInput: 0},
+			dbName:      strings.TrimSpace(groups[0][1]),
+			withOptsStr: strings.TrimSpace(groups[0][2]),
 		}
 		if err := stmt.parse(); err != nil {
 			return nil, err
@@ -72,6 +86,22 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 			dbName:      strings.TrimSpace(groups[0][4]),
 			collName:    strings.TrimSpace(groups[0][5]),
 			withOptsStr: strings.TrimSpace(groups[0][6]),
+		}
+		if stmt.dbName == "" {
+			stmt.dbName = defaultDb
+		}
+		if err := stmt.parse(); err != nil {
+			return nil, err
+		}
+		return stmt, stmt.validate()
+	}
+	if re := reAlterColl; re.MatchString(query) {
+		groups := re.FindAllStringSubmatch(query, -1)
+		stmt := &StmtAlterCollection{
+			Stmt:        &Stmt{query: query, conn: c, numInput: 0},
+			dbName:      strings.TrimSpace(groups[0][3]),
+			collName:    strings.TrimSpace(groups[0][4]),
+			withOptsStr: strings.TrimSpace(groups[0][5]),
 		}
 		if stmt.dbName == "" {
 			stmt.dbName = defaultDb

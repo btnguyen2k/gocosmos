@@ -4,10 +4,9 @@
 [![PkgGoDev](https://pkg.go.dev/badge/github.com/btnguyen2k/gocosmos)](https://pkg.go.dev/github.com/btnguyen2k/gocosmos)
 [![Actions Status](https://github.com/btnguyen2k/gocosmos/workflows/gocosmos/badge.svg)](https://github.com/btnguyen2k/gocosmos/actions)
 [![codecov](https://codecov.io/gh/btnguyen2k/gocosmos/branch/main/graph/badge.svg?token=pYdHuxbIiI)](https://codecov.io/gh/btnguyen2k/gocosmos)
+[![Release](https://img.shields.io/github/release/btnguyen2k/gocosmos.svg?style=flat-square)](RELEASE-NOTES.md)
 
 Go driver for [Azure Cosmos DB SQL API](https://azure.microsoft.com/en-us/services/cosmos-db/) which can be used with the standard [database/sql](https://golang.org/pkg/database/sql/) package. A REST client for [Azure Cosmos DB SQL API](https://azure.microsoft.com/en-us/services/cosmos-db/) is also included.
-
-Latest release [v0.1.0](RELEASE-NOTES.md).
 
 ## Example usage: REST client
 
@@ -74,17 +73,19 @@ func main() {
 ## Features
 
 The REST client supports:
-- Database: `Create`, `Get`, `Delete` and `List`.
-- Collection: `Create`, `Replace`, `Get`, `Delete` and `List`.
+- Database: `Create`, `Get`, `Delete`, `List` and change throughput.
+- Collection: `Create`, `Replace`, `Get`, `Delete`, `List` and change throughput.
 - Document: `Create`, `Replace`, `Get`, `Delete`, `Query` and `List`.
 
 The `database/sql` driver supports:
 - Database:
   - `CREATE DATABASE`
+  - `ALTER DATABASE`
   - `DROP DATABASE`
   - `LIST DATABASES`
 - Table/Collection:
   - `CREATE TABLE/COLLECTION`
+  - `ALTER TABLE/COLLECTION`
   - `DROP TABLE/COLLECTION`
   - `LIST TABLES/COLLECTIONS`
 - Item/Document:
@@ -99,9 +100,11 @@ Summary of supported SQL statements:
 |Statement|Syntax|
 |---------|-----------|
 |Create a new database                      |`CREATE DATABASE [IF NOT EXISTS] <db-name>`|
+|Change database's throughput               |`ALTER DATABASE <db-name> WITH  RU/MAXRU=<ru>`|
 |Delete an existing database                |`DROP DATABASE [IF EXISTS] <db-name>`|
 |List all existing databases                |`LIST DATABASES`|
 |Create a new collection                    |`CREATE COLLECTION [IF NOT EXISTS] [<db-name>.]<collection-name> <WITH [LARGE]PK=partitionKey>`|
+|Change collection's throughput             |`ALTER COLLECTION [<db-name>.]<collection-name> WITH  RU/MAXRU=<ru>`|
 |Delete an existing collection              |`DROP COLLECTION [IF EXISTS] [<db-name>.]<collection-name>`|
 |List all existing collections in a database|`LIST COLLECTIONS [FROM <db-name>]`|
 |Insert a new document into collection      |`INSERT INTO [<db-name>.]<collection-name> ...`|

@@ -14,7 +14,7 @@ import (
 // Syntax:
 //     CREATE COLLECTION|TABLE [IF NOT EXISTS] [<db-name>.]<collection-name> <WITH [LARGE]PK=partitionKey> [WITH RU|MAXRU=ru] [WITH UK=/path1:/path2,/path3;/path4]
 //
-// - ru: an integer specifying CosmosDB's database throughput expressed in RU/s. Supply either RU or MAXRU, not both!
+// - ru: an integer specifying CosmosDB's collection throughput expressed in RU/s. Supply either RU or MAXRU, not both!
 //
 // - If "IF NOT EXISTS" is specified, Exec will silently swallow the error "409 Conflict".
 //
@@ -140,15 +140,8 @@ func (s *StmtCreateCollection) Exec(_ []driver.Value) (driver.Result, error) {
 type ResultCreateCollection struct {
 	// Successful flags if the operation was successful or not.
 	Successful bool
-	// // StatusCode is the HTTP status code returned from CosmosDB.
-	// StatusCode int
 	// InsertId holds the "_rid" if the operation was successful.
 	InsertId string
-	// // RUCharge holds the number of request units consumed by the operation.
-	// RUCharge float64
-	// // SessionToken is the string token used with session level consistency.
-	// // Clients must save this value and set it for subsequent read requests for session consistency.
-	// SessionToken string
 }
 
 // LastInsertId implements driver.Result.LastInsertId.
@@ -158,6 +151,105 @@ func (r *ResultCreateCollection) LastInsertId() (int64, error) {
 
 // RowsAffected implements driver.Result.RowsAffected.
 func (r *ResultCreateCollection) RowsAffected() (int64, error) {
+	if r.Successful {
+		return 1, nil
+	}
+	return 0, nil
+}
+
+/*----------------------------------------------------------------------*/
+
+// StmtAlterCollection implements "ALTER COLLECTION" operation.
+//
+// Syntax:
+//     ALTER COLLECTION|TABLE [<db-name>.]<collection-name> WITH RU|MAXRU=<ru>
+//
+// - ru: an integer specifying CosmosDB's collection throughput expressed in RU/s. Supply either RU or MAXRU, not both!
+type StmtAlterCollection struct {
+	*Stmt
+	dbName      string
+	collName    string // collection name
+	ru, maxru   int
+	withOptsStr string
+}
+
+func (s *StmtAlterCollection) parse() error {
+	if err := s.Stmt.parseWithOpts(s.withOptsStr); err != nil {
+		return err
+	}
+
+	if _, ok := s.withOpts["RU"]; ok {
+		ru, err := strconv.ParseInt(s.withOpts["RU"], 10, 64)
+		if err != nil || ru < 0 {
+			return fmt.Errorf("invalid RU value: %s", s.withOpts["RU"])
+		}
+		s.ru = int(ru)
+	}
+	if _, ok := s.withOpts["MAXRU"]; ok {
+		maxru, err := strconv.ParseInt(s.withOpts["MAXRU"], 10, 64)
+		if err != nil || maxru < 0 {
+			return fmt.Errorf("invalid MAXRU value: %s", s.withOpts["MAXRU"])
+		}
+		s.maxru = int(maxru)
+	}
+
+	return nil
+}
+
+func (s *StmtAlterCollection) validate() error {
+	if (s.ru <= 0 && s.maxru <= 0) || (s.ru > 0 && s.maxru > 0) {
+		return errors.New("only one of RU or MAXRU must be specified")
+	}
+	if s.dbName == "" || s.collName == "" {
+		return errors.New("database/collection is missing")
+	}
+	return nil
+}
+
+// Query implements driver.Stmt.Query.
+// This function is not implemented, use Exec instead.
+func (s *StmtAlterCollection) Query(_ []driver.Value) (driver.Rows, error) {
+	return nil, errors.New("this operation is not supported, please use exec")
+}
+
+// Exec implements driver.Stmt.Exec.
+// Upon successful call, this function returns (*ResultAlterCollection, nil).
+func (s *StmtAlterCollection) Exec(_ []driver.Value) (driver.Result, error) {
+	getResult := s.conn.restClient.GetCollection(s.dbName, s.collName)
+	if err := getResult.Error(); err != nil {
+		switch getResult.StatusCode {
+		case 403:
+			return nil, ErrForbidden
+		case 404:
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	restResult := s.conn.restClient.ReplaceOfferForResource(getResult.Rid, s.ru, s.maxru)
+	result := &ResultAlterCollection{Successful: restResult.Error() == nil}
+	err := restResult.Error()
+	switch restResult.StatusCode {
+	case 403:
+		err = ErrForbidden
+	case 404:
+		err = ErrNotFound
+	}
+	return result, err
+}
+
+// ResultAlterCollection captures the result from ALTER COLLECTION operation.
+type ResultAlterCollection struct {
+	// Successful flags if the operation was successful or not.
+	Successful bool
+}
+
+// LastInsertId implements driver.Result.LastInsertId.
+func (r *ResultAlterCollection) LastInsertId() (int64, error) {
+	return 0, fmt.Errorf("this operation is not supported")
+}
+
+// RowsAffected implements driver.Result.RowsAffected.
+func (r *ResultAlterCollection) RowsAffected() (int64, error) {
 	if r.Successful {
 		return 1, nil
 	}
