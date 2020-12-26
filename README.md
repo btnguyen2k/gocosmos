@@ -34,6 +34,16 @@ func main() {
 }
 ```
 
+**Connection string syntax for Cosmos DB**
+
+> AccountEndpoint=<cosmosdb-endpoint>;AccountKey=<cosmosdb-account-key>;TimeoutMs=<timeout-in-ms>;Version=<cosmosdb-api-version>;AutoId=<true/false>
+
+- `AccountEndpoint`: (required) endpoint to access Cosmos DB. For example, the endpoint for Azure Cosmos DB Emulator running on local is `https://localhost:8081/`.
+- `AccountKey`: (required) account key to authenticate.
+- `TimeoutMs`: (optional) operation timeout in milliseconds. Default value is `10 seconds` if not specified.
+- `Version`: (optional) version of Cosmos DB to use. Default value is `2018-12-31` if not specified. See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/#supported-rest-api-versions.
+- `AutoId`: (optional, available since [v0.1.2](RELEASE-NOTES.md)) see [auto id](#auto-id) session.
+
 ## Example usage: database/sql driver
 
 ```go
@@ -62,13 +72,23 @@ func main() {
 
 **Data Source Name (DSN) syntax for Cosmos DB**
 
-> AccountEndpoint=<cosmosdb-endpoint>;AccountKey=<cosmosdb-account-key>;TimeoutMs=<timeout-in-ms>;Version=<cosmosdb-api-version>;DefaultDb=<db-name>
+> AccountEndpoint=<cosmosdb-endpoint>;AccountKey=<cosmosdb-account-key>;TimeoutMs=<timeout-in-ms>;Version=<cosmosdb-api-version>;DefaultDb=<db-name>;AutoId=<true/false>
 
 - `AccountEndpoint`: (required) endpoint to access Cosmos DB. For example, the endpoint for Azure Cosmos DB Emulator running on local is `https://localhost:8081/`.
 - `AccountKey`: (required) account key to authenticate.
 - `TimeoutMs`: (optional) operation timeout in milliseconds. Default value is `10 seconds` if not specified.
 - `Version`: (optional) version of Cosmos DB to use. Default value is `2018-12-31` if not specified. See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/#supported-rest-api-versions.
 - `DefaultDb`: (optional, available since [v0.1.1](RELEASE-NOTES.md)) specify the default database used in Cosmos DB operations. Alias `Db` can also be used instead of `DefaultDb`.
+- `AutoId`: (optional, available since [v0.1.2](RELEASE-NOTES.md)) see [auto id](#auto-id) session.
+
+### Auto-id
+
+Azure Cosmos DB requires each document has a [unique ID](https://docs.microsoft.com/en-us/rest/api/cosmos-db/documents) that identifies the document.
+When creating new document, if value for the unique ID field is not supplied `gocosmos` is able to generate one automatically. This feature is enabled
+by specifying setting `AutoId=true` in the connection string (for REST client) or Data Source Name (for `database/sql` driver). If not specified, default
+value is `AutoId=true`.
+
+_This settings is available since [v0.1.2](RELEASE-NOTES.md)._
 
 ## Features
 

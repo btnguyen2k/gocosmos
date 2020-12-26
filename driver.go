@@ -3,10 +3,59 @@ package gocosmos
 import (
 	"database/sql"
 	"database/sql/driver"
+	"encoding/binary"
 	"errors"
+	"log"
+	"net"
+	"strings"
+	"time"
+
+	"github.com/btnguyen2k/consu/olaf"
 )
 
+var (
+	idGen *olaf.Olaf
+)
+
+func _myCurrentIp() (string, error) {
+	if addrs, err := net.InterfaceAddrs(); err == nil {
+		for _, address := range addrs {
+			if ipnet, ok := address.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+				if ipnet.IP.To4() != nil {
+					return ipnet.IP.String(), nil
+				}
+			}
+		}
+	}
+	return "", errors.New("cannot fetch local IP")
+}
+
+func _myMacAddr(ip string) (net.HardwareAddr, error) {
+	if interfaces, err := net.Interfaces(); err == nil {
+		for _, interf := range interfaces {
+			if addrs, err := interf.Addrs(); err == nil {
+				for _, addr := range addrs {
+					if strings.HasPrefix(addr.String(), ip+"/") {
+						return interf.HardwareAddr, nil
+					}
+				}
+			}
+		}
+	}
+	return nil, errors.New("cannot fetch interface info for IP " + ip)
+}
+
 func init() {
+	idGen = olaf.NewOlaf(time.Now().UnixNano())
+	if myCurrentIp, err := _myCurrentIp(); err == nil {
+		if myMacAddr, err := _myMacAddr(myCurrentIp); err == nil {
+			for len(myMacAddr) < 8 {
+				myMacAddr = append([]byte{0}, myMacAddr...)
+			}
+			log.Printf("[DEBUG] gocosmos - Local IP: %s / MAC: %s", myCurrentIp, myMacAddr)
+			idGen = olaf.NewOlaf(int64(binary.BigEndian.Uint64(myMacAddr)))
+		}
+	}
 	sql.Register("gocosmos", &Driver{})
 }
 
@@ -28,11 +77,13 @@ type Driver struct {
 // Open implements driver.Driver.Open.
 //
 // connStr is expected in the following format:
-//     AccountEndpoint=<cosmosdb-restapi-endpoint>;AccountKey=<account-key>[;TimeoutMs=<timeout-in-ms>][;Version=<cosmosdb-api-version>][;DefaultDb=<db-name>]
+//     AccountEndpoint=<cosmosdb-restapi-endpoint>;AccountKey=<account-key>[;TimeoutMs=<timeout-in-ms>][;Version=<cosmosdb-api-version>][;DefaultDb=<db-name>][;AutoId=<true/false>]
 //
-// If not supplied, default value for TimeoutMs is 10 seconds and Version is "2018-12-31".
+// If not supplied, default value for TimeoutMs is 10 seconds, Version is "2018-12-31" and AutoId is true.
 //
 // DefaultDb is added since v0.1.1
+//
+// AutoId is added since v0.1.2
 func (d *Driver) Open(connStr string) (driver.Conn, error) {
 	restClient, err := NewRestClient(nil, connStr)
 	if err != nil {

@@ -22,12 +22,22 @@ import (
 	"github.com/btnguyen2k/consu/semita"
 )
 
+const (
+	settingEndpoint   = "ACCOUNTENDPOINT"
+	settingAccountKey = "ACCOUNTKEY"
+	settingTimeout    = "TIMEOUTMS"
+	settingVersion    = "VERSION"
+	settingAutoId     = "AUTOID"
+)
+
 // NewRestClient constructs a new RestClient instance from the supplied connection string.
 //
 // httpClient is reused if supplied. Otherwise, a new http.Client instance is created.
 // connStr is expected to be in the following format:
-//     AccountEndpoint=<cosmosdb-restapi-endpoint>;AccountKey=<account-key>[;TimeoutMs=<timeout-in-ms>][;Version=<cosmosdb-api-version>]
-// If not supplied, default value for TimeoutMs is 10 seconds and Version is "2018-12-31".
+//     AccountEndpoint=<cosmosdb-restapi-endpoint>;AccountKey=<account-key>[;TimeoutMs=<timeout-in-ms>][;Version=<cosmosdb-api-version>][;AutoId=<true/false>]
+// If not supplied, default value for TimeoutMs is 10 seconds, Version is "2018-12-31" and AutoId is true.
+//
+// AutoId is added since v0.1.2
 func NewRestClient(httpClient *http.Client, connStr string) (*RestClient, error) {
 	params := make(map[string]string)
 	parts := strings.Split(connStr, ";")
@@ -39,11 +49,11 @@ func NewRestClient(httpClient *http.Client, connStr string) (*RestClient, error)
 			params[strings.ToUpper(tokens[0])] = ""
 		}
 	}
-	endpoint := strings.TrimSuffix(params["ACCOUNTENDPOINT"], "/")
+	endpoint := strings.TrimSuffix(params[settingEndpoint], "/")
 	if endpoint == "" {
 		return nil, errors.New("AccountEndpoint not found in connection string")
 	}
-	accountKey := params["ACCOUNTKEY"]
+	accountKey := params[settingAccountKey]
 	if accountKey == "" {
 		return nil, errors.New("AccountKey not found in connection string")
 	}
@@ -51,19 +61,24 @@ func NewRestClient(httpClient *http.Client, connStr string) (*RestClient, error)
 	if err != nil {
 		return nil, fmt.Errorf("cannot base64 decode account key: %s", err)
 	}
-	timeoutMs, err := strconv.Atoi(params["TIMEOUTMS"])
+	timeoutMs, err := strconv.Atoi(params[settingTimeout])
 	if err != nil || timeoutMs < 0 {
 		timeoutMs = 10000
 	}
-	apiVersion := params["VERSION"]
+	apiVersion := params[settingVersion]
 	if apiVersion == "" {
 		apiVersion = "2018-12-31"
+	}
+	autoId, err := strconv.ParseBool(params[settingAutoId])
+	if err != nil {
+		autoId = true
 	}
 	return &RestClient{
 		client:     gjrc.NewGjrc(httpClient, time.Duration(timeoutMs)*time.Millisecond),
 		endpoint:   endpoint,
 		authKey:    key,
 		apiVersion: apiVersion,
+		autoId:     autoId,
 		params:     params,
 	}, nil
 }
@@ -74,6 +89,7 @@ type RestClient struct {
 	endpoint   string            // Azure CosmosDB endpoint
 	authKey    []byte            // Account key to authenticate
 	apiVersion string            // Azure CosmosDB API version
+	autoId     bool              // if true and value for 'id' field is not specified, CreateDocument
 	params     map[string]string // parsed parameters
 }
 
@@ -364,6 +380,11 @@ type DocumentSpec struct {
 func (c *RestClient) CreateDocument(spec DocumentSpec) *RespCreateDoc {
 	method := "POST"
 	url := c.endpoint + "/dbs/" + spec.DbName + "/colls/" + spec.CollName + "/docs"
+	if c.autoId {
+		if id, ok := spec.DocumentData["id"].(string); !ok || strings.TrimSpace(id) == "" {
+			spec.DocumentData["id"] = strings.ToLower(idGen.Id128Hex())
+		}
+	}
 	req := c.buildJsonRequest(method, url, spec.DocumentData)
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+spec.DbName+"/colls/"+spec.CollName)
 	if spec.IsUpsert {
