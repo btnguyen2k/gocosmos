@@ -1,5 +1,10 @@
 # gocosmos release notes
 
+## 2020-12-26 - v0.1.2
+
+- REST client & Driver for `database/sql`:
+  - Add `auto-id` support.
+
 ## 2020-12-25 - v0.1.1
 
 - REST client: new functions

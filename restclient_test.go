@@ -748,6 +748,41 @@ func TestRestClient_CreateDocument(t *testing.T) {
 	}
 }
 
+func TestRestClient_CreateDocumentNoId(t *testing.T) {
+	name := "TestRestClient_CreateDocumentNoId"
+	client := _newRestClient(t, name)
+
+	dbname := "mydb"
+	collname := "mytable"
+	client.DeleteDatabase(dbname)
+	client.CreateDatabase(DatabaseSpec{Id: dbname})
+	client.CreateCollection(CollectionSpec{
+		DbName:           dbname,
+		CollName:         collname,
+		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/username"}, "kind": "Hash"},
+	})
+
+	client.autoId = true
+	if result := client.CreateDocument(DocumentSpec{
+		DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user1"},
+		DocumentData: map[string]interface{}{"username": "user1", "email": "user1@domain.com", "grade": 1, "active": true},
+	}); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if result.DocInfo["id"] == "" || result.DocInfo["username"] != "user1" || result.DocInfo["email"] != "user1@domain.com" ||
+		result.DocInfo["grade"].(float64) != 1.0 || result.DocInfo["active"] != true || result.DocInfo["_rid"] == "" ||
+		result.DocInfo["_self"] == "" || result.DocInfo["_ts"].(float64) == 0.0 || result.DocInfo["_etag"] == "" || result.DocInfo["_attachments"] == "" {
+		t.Fatalf("%s failed: invalid dbinfo returned %#v", name, result.DocInfo)
+	}
+
+	client.autoId = false
+	if result := client.CreateDocument(DocumentSpec{
+		DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user2"},
+		DocumentData: map[string]interface{}{"username": "user2", "email": "user2@domain.com", "grade": 2, "active": false},
+	}); result.Error() == nil {
+		t.Fatalf("%s failed: this operation should not be successful", name)
+	}
+}
+
 func TestRestClient_UpsertDocument(t *testing.T) {
 	name := "TestRestClient_UpsertDocument"
 	client := _newRestClient(t, name)
@@ -824,6 +859,42 @@ func TestRestClient_UpsertDocument(t *testing.T) {
 		t.Fatalf("%s failed: %s", name, result.CallErr)
 	} else if result.StatusCode != 404 {
 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+}
+
+func TestRestClient_UpsertDocumentNoId(t *testing.T) {
+	name := "TestRestClient_UpsertDocumentNoId"
+	client := _newRestClient(t, name)
+
+	dbname := "mydb"
+	collname := "mytable"
+	client.DeleteDatabase(dbname)
+	client.CreateDatabase(DatabaseSpec{Id: dbname})
+	client.CreateCollection(CollectionSpec{
+		DbName:           dbname,
+		CollName:         collname,
+		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/username"}, "kind": "Hash"},
+		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
+	})
+
+	client.autoId = true
+	if result := client.CreateDocument(DocumentSpec{
+		DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user1"}, IsUpsert: true,
+		DocumentData: map[string]interface{}{"username": "user1", "email": "user1@domain.com", "grade": 1, "active": true},
+	}); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if result.DocInfo["id"] == "" || result.DocInfo["username"] != "user1" || result.DocInfo["email"] != "user1@domain.com" ||
+		result.DocInfo["grade"].(float64) != 1.0 || result.DocInfo["active"] != true || result.DocInfo["_rid"] == "" ||
+		result.DocInfo["_self"] == "" || result.DocInfo["_ts"].(float64) == 0.0 || result.DocInfo["_etag"] == "" || result.DocInfo["_attachments"] == "" {
+		t.Fatalf("%s failed: invalid dbinfo returned %#v", name, result.DocInfo)
+	}
+
+	client.autoId = false
+	if result := client.CreateDocument(DocumentSpec{
+		DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user2"}, IsUpsert: true,
+		DocumentData: map[string]interface{}{"username": "user2", "email": "user2@domain.com", "grade": 2, "active": false},
+	}); result.Error() == nil {
+		t.Fatalf("%s failed: this operation should not be successful", name)
 	}
 }
 
