@@ -12,25 +12,25 @@ Go driver for [Azure Cosmos DB SQL API](https://azure.microsoft.com/en-us/servic
 
 ```go
 import (
-  "os"
-  "database/sql"
-  "github.com/btnguyen2k/gocosmos"
+	"os"
+	"database/sql"
+	"github.com/btnguyen2k/gocosmos"
 )
 
 func main() {
-  cosmosDbConnStr := "AccountEndpoint=https://localhost:8081/;AccountKey=<cosmosdb-account-key>"
+	cosmosDbConnStr := "AccountEndpoint=https://localhost:8081/;AccountKey=<cosmosdb-account-key>"
 	client, err := gocosmos.NewRestClient(nil, cosmosDbConnStr)
 	if err != nil {
-    panic(err)
+		panic(err)
 	}
 
-  dbSpec := gocosmos.DatabaseSpec{Id:"mydb", Ru: 400}
-  result := client.CreateDatabase(dbSpec)
-  if result.Error() != nil {
-    panic(result.Error)
-  }
+	dbSpec := gocosmos.DatabaseSpec{Id:"mydb", Ru: 400}
+	result := client.CreateDatabase(dbSpec)
+	if result.Error() != nil {
+		panic(result.Error)
+	}
 
-  // database "mydb" has been created successfuly
+	// database "mydb" has been created successfuly
 }
 ```
 
@@ -38,25 +38,25 @@ func main() {
 
 ```go
 import (
-  "database/sql"
-  _ "github.com/btnguyen2k/gocosmos"
+	"database/sql"
+	_ "github.com/btnguyen2k/gocosmos"
 )
 
 func main() {
-  driver := "gocosmos"
-  dsn := "AccountEndpoint=https://localhost:8081/;AccountKey=<cosmosdb-account-key>"
+	driver := "gocosmos"
+	dsn := "AccountEndpoint=https://localhost:8081/;AccountKey=<cosmosdb-account-key>"
 	db, err := sql.Open(driver, dsn)
 	if err != nil {
-    panic(err)
-  }
-  defer db.Close()
+		panic(err)
+	}
+	defer db.Close()
 
 	_, err := db.Exec("CREATE DATABASE mydb WITH maxru=10000")
 	if err != nil {
-    panic(err)
-  }
+		panic(err)
+	}
   
-  // database "mydb" has been created successfuly
+	// database "mydb" has been created successfuly
 }
 ```
 
