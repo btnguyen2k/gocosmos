@@ -1,7 +1,7 @@
 # gocosmos supported SQL statements
 
 - Database: [CREATE DATABASE](#create-database), [ALTER DATABASE](#alter-database), [DROP DATABASE](#drop-database), [LIST DATABASES](#list-databases).
-- Collection: [CREATE COLLECTION](#create-collection), [DROP COLLECTION](#drop-collection), [LIST COLLECTIONS](#list-collections).
+- Collection: [CREATE COLLECTION](#create-collection), [ALTER COLLECTION](#alter-collection), [DROP COLLECTION](#drop-collection), [LIST COLLECTIONS](#list-collections).
 - Document: [INSERT](#insert), [UPSERT](#upsert), [UPDATE](#update), [DELETE](#delete), [SELECT](#select).
 
 ## Database
@@ -113,7 +113,7 @@ for dbRows.Next() {
 
 ## Collection
 
-Suported statements: `CREATE COLLECTION`, `DROP COLLECTION`, `LIST COLLECTIONS`.
+Suported statements: `CREATE COLLECTION`, `ALTER COLLECTION`, `DROP COLLECTION`, `LIST COLLECTIONS`.
 
 #### CREATE COLLECTION
 
@@ -131,6 +131,28 @@ Syntax: `CREATE COLLECTION [IF NOT EXISTS] [<db-name>.]<collection-name> <WITH [
 Example:
 ```go
 _, err := db.Exec("CREATE COLLECTION IF NOT EXISTS mydb.mytable WITH pk=/username WITH ru=400 WITH uk=/email")
+if err != nil {
+    panic(err)
+}
+```
+
+> Use `sql.DB.Exec` to execute the statement, `Query` will return error.
+
+[Back to top](#top)
+
+#### ALTER COLLECTION
+
+Summary: change collection's throughput.
+
+Alias: `ALTER TABLE`.
+
+Syntax: `ALTER COLLECTION [<db-name>.]<collection-name> WITH RU|MAXRU=<ru>`.
+
+- Only one of RU or MAXRU must be specified.
+
+Example:
+```go
+_, err := db.Exec("ALTER COLLECTION mydb.mytable WITH ru=400")
 if err != nil {
     panic(err)
 }

@@ -73,8 +73,8 @@ func main() {
 ## Features
 
 The REST client supports:
-- Database: `Create`, `Get`, `Delete` and `List`.
-- Collection: `Create`, `Replace`, `Get`, `Delete` and `List`.
+- Database: `Create`, `Get`, `Delete`, `List` and change throughput.
+- Collection: `Create`, `Replace`, `Get`, `Delete`, `List` and change throughput.
 - Document: `Create`, `Replace`, `Get`, `Delete`, `Query` and `List`.
 
 The `database/sql` driver supports:

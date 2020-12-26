@@ -137,10 +137,7 @@ func (s *StmtAlterDatabase) parse() error {
 }
 
 func (s *StmtAlterDatabase) validate() error {
-	if s.ru <= 0 && s.maxru <= 0 {
-		return errors.New("either RU or MAXRU must be specified")
-	}
-	if s.ru > 0 && s.maxru > 0 {
+	if (s.ru <= 0 && s.maxru <= 0) || (s.ru > 0 && s.maxru > 0) {
 		return errors.New("only one of RU or MAXRU must be specified")
 	}
 	return nil

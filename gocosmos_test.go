@@ -219,11 +219,27 @@ func Test_Exec_AlterDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("%s failed: %s", name, err)
 	}
+	if id, err := result.LastInsertId(); id != 0 && err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	}
 	if numRows, err := result.RowsAffected(); numRows != 1 || err != nil {
 		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
 	}
 
 	_, err = db.Exec("ALTER DATABASE db_not_found WITH maxru=6000")
+	if err != ErrNotFound {
+		t.Fatalf("%s failed: expected ErrNotFound but received %s", name, err)
+	}
+}
+
+func Test_Exec_AlterDatabaseNoOffer(t *testing.T) {
+	name := "Test_Exec_AlterDatabaseNoOffer"
+	db := _openDb(t, name)
+
+	db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+
+	_, err := db.Exec("ALTER DATABASE dbtemp WITH maxru=6000")
 	if err != ErrNotFound {
 		t.Fatalf("%s failed: expected ErrNotFound but received %s", name, err)
 	}
@@ -427,6 +443,99 @@ func Test_Exec_CreateCollectionDefaultDb(t *testing.T) {
 	}
 	if numRows, err := result.RowsAffected(); numRows != 0 || err != nil {
 		t.Fatalf("%s failed: expected RowsAffected=0/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+}
+
+func Test_Query_AlterCollection(t *testing.T) {
+	name := "Test_Query_AlterCollection"
+	db := _openDb(t, name)
+	_, err := db.Query("ALTER COLLECTION dbtemp.tbltemp WITH ru=400")
+	if err == nil || strings.Index(err.Error(), "not supported") < 0 {
+		t.Fatalf("%s failed: expected 'not support' error, but received %#v", name, err)
+	}
+}
+
+func Test_Exec_AlterCollection(t *testing.T) {
+	name := "Test_Exec_AlterCollection"
+	db := _openDb(t, name)
+
+	db.Exec("DROP DATABASE IF EXISTS db_not_exists")
+	db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/id")
+
+	result, err := db.Exec("ALTER COLLECTION dbtemp.tbltemp WITH ru=500")
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+	if id, err := result.LastInsertId(); id != 0 || err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	}
+	if numRows, err := result.RowsAffected(); numRows != 1 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+
+	result, err = db.Exec("ALTER TABLE dbtemp.tbltemp WITH maxru=6000")
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+	if id, err := result.LastInsertId(); id != 0 || err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	}
+	if numRows, err := result.RowsAffected(); numRows != 1 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+
+	_, err = db.Exec(`ALTER COLLECTION dbtemp.tbl_not_found WITH ru=400`)
+	if err != ErrNotFound {
+		t.Fatalf("%s failed: expected ErrNotFound but received %#v", name, err)
+	}
+
+	_, err = db.Exec(`ALTER COLLECTION db_not_exists.table WITH ru=400`)
+	if err != ErrNotFound {
+		t.Fatalf("%s failed: expected ErrNotFound but received %#v", name, err)
+	}
+}
+
+func Test_Exec_AlterCollectionDefaultDb(t *testing.T) {
+	name := "Test_Exec_AlterCollectionDefaultDb"
+	dbName := "mydefaultdb"
+	db := _openDefaultDb(t, name, dbName)
+
+	db.Exec("DROP DATABASE IF EXISTS " + dbName)
+	db.Exec("CREATE DATABASE IF NOT EXISTS " + dbName)
+	db.Exec("CREATE COLLECTION tbltemp WITH pk=/id")
+
+	result, err := db.Exec("ALTER COLLECTION tbltemp WITH ru=500")
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+	if id, err := result.LastInsertId(); id != 0 || err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	}
+	if numRows, err := result.RowsAffected(); numRows != 1 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+
+	result, err = db.Exec("ALTER TABLE tbltemp WITH maxru=6000")
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+	if id, err := result.LastInsertId(); id != 0 || err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	}
+	if numRows, err := result.RowsAffected(); numRows != 1 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+
+	_, err = db.Exec(`ALTER COLLECTION tbl_not_found WITH ru=400`)
+	if err != ErrNotFound {
+		t.Fatalf("%s failed: expected ErrNotFound but received %#v", name, err)
+	}
+
+	_, err = db.Exec(`ALTER COLLECTION db_not_exists.table WITH ru=400`)
+	if err != ErrNotFound {
+		t.Fatalf("%s failed: expected ErrNotFound but received %#v", name, err)
 	}
 }
 

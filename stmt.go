@@ -95,6 +95,22 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 		}
 		return stmt, stmt.validate()
 	}
+	if re := reAlterColl; re.MatchString(query) {
+		groups := re.FindAllStringSubmatch(query, -1)
+		stmt := &StmtAlterCollection{
+			Stmt:        &Stmt{query: query, conn: c, numInput: 0},
+			dbName:      strings.TrimSpace(groups[0][3]),
+			collName:    strings.TrimSpace(groups[0][4]),
+			withOptsStr: strings.TrimSpace(groups[0][5]),
+		}
+		if stmt.dbName == "" {
+			stmt.dbName = defaultDb
+		}
+		if err := stmt.parse(); err != nil {
+			return nil, err
+		}
+		return stmt, stmt.validate()
+	}
 	if re := reDropColl; re.MatchString(query) {
 		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtDropCollection{

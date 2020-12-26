@@ -8,6 +8,7 @@
   - `ReplaceOfferForResource(rid string, ru, maxru int)`: replace/update a resource's throughput.
 - Driver for `database/sql`:
   - Add default database support to DSN.
+  - Add `ALTER DATABASE` and `ALTER COLLECTION` statements.
 
 ## 2020-12-21 - v0.1.0
 
