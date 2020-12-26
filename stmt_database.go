@@ -175,6 +175,8 @@ func (s *StmtAlterDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 }
 
 // ResultAlterDatabase captures the result from ALTER DATABASE operation.
+//
+// Available since v0.1.1
 type ResultAlterDatabase struct {
 	// Successful flags if the operation was successful or not.
 	Successful bool

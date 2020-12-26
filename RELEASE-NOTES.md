@@ -1,6 +1,6 @@
 # gocosmos release notes
 
-## 2020-12-2x - v0.1.1
+## 2020-12-25 - v0.1.1
 
 - REST client: new functions
   - `GetOfferForResource(rid string)`: get throughput info of a resource.

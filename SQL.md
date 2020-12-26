@@ -33,7 +33,7 @@ if err != nil {
 
 #### ALTER DATABASE
 
-Summary: change database's throughput.
+Summary: change database's throughput (since [v0.1.1](RELEASE-NOTES.md)).
 
 Syntax: `ALTER DATABASE <db-name> WITH RU|MAXRU=<ru>`.
 
@@ -142,7 +142,7 @@ if err != nil {
 
 #### ALTER COLLECTION
 
-Summary: change collection's throughput.
+Summary: change collection's throughput (since [v0.1.1](RELEASE-NOTES.md)).
 
 Alias: `ALTER TABLE`.
 

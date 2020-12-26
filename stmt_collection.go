@@ -165,6 +165,8 @@ func (r *ResultCreateCollection) RowsAffected() (int64, error) {
 //     ALTER COLLECTION|TABLE [<db-name>.]<collection-name> WITH RU|MAXRU=<ru>
 //
 // - ru: an integer specifying CosmosDB's collection throughput expressed in RU/s. Supply either RU or MAXRU, not both!
+//
+// Available since v0.1.1
 type StmtAlterCollection struct {
 	*Stmt
 	dbName      string
@@ -238,6 +240,8 @@ func (s *StmtAlterCollection) Exec(_ []driver.Value) (driver.Result, error) {
 }
 
 // ResultAlterCollection captures the result from ALTER COLLECTION operation.
+//
+// Available since v0.1.1
 type ResultAlterCollection struct {
 	// Successful flags if the operation was successful or not.
 	Successful bool
