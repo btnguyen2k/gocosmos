@@ -1,5 +1,10 @@
 # gocosmos release notes
 
+## 2020-12-27 - v0.1.3
+
+- REST client: new function `GetPkranges(dbName, collName string)`.
+- Support cross-partition queries & fix "The provided cross partition query can not be directly served by the gateway".
+
 ## 2020-12-26 - v0.1.2
 
 - REST client & Driver for `database/sql`:

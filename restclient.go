@@ -365,6 +365,25 @@ func (c *RestClient) ListCollections(dbName string) *RespListColl {
 	return result
 }
 
+// GetPkranges invokes CosmosDB API to retrieves the list of partition key ranges for a collection.
+//
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/get-partition-key-ranges.
+//
+// Available since v0.1.3
+func (c *RestClient) GetPkranges(dbName, collName string) *RespGetPkranges {
+	method := "GET"
+	url := c.endpoint + "/dbs/" + dbName + "/colls/" + collName + "/pkranges"
+	req := c.buildJsonRequest(method, url, nil)
+	req = c.addAuthHeader(req, method, "pkranges", "dbs/"+dbName+"/colls/"+collName)
+
+	resp := c.client.Do(req)
+	result := &RespGetPkranges{RestReponse: c.buildRestReponse(resp)}
+	if result.CallErr == nil {
+		result.CallErr = json.Unmarshal(result.RespBody, &result)
+	}
+	return result
+}
+
 // DocumentSpec specifies a CosmosDB document specifications for creation.
 type DocumentSpec struct {
 	DbName, CollName   string
@@ -500,6 +519,14 @@ type QueryReq struct {
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/query-documents.
 func (c *RestClient) QueryDocuments(query QueryReq) *RespQueryDocs {
+	var resultPkranges *RespGetPkranges
+	if query.CrossPartitionEnabled {
+		resultPkranges = c.GetPkranges(query.DbName, query.CollName)
+		if resultPkranges.Error() != nil {
+			return &RespQueryDocs{RestReponse: resultPkranges.RestReponse}
+		}
+	}
+
 	method := "POST"
 	url := c.endpoint + "/dbs/" + query.DbName + "/colls/" + query.CollName + "/docs"
 	req := c.buildJsonRequest(method, url, map[string]interface{}{"query": query.Query, "parameters": query.Params})
@@ -514,6 +541,11 @@ func (c *RestClient) QueryDocuments(query QueryReq) *RespQueryDocs {
 	}
 	if query.CrossPartitionEnabled {
 		req.Header.Set("X-Ms-Documentdb-Query-EnableCrossPartition", "true")
+		if len(resultPkranges.Pkranges) > 0 {
+			// TODO: what if there are 2 pk ranges or more?
+			req.Header.Set("X-Ms-Documentdb-Query-ParallelizeCrossPartitionQuery", "true")
+			req.Header.Set("X-Ms-Documentdb-PartitionkeyRangeid", resultPkranges.Pkranges[0].Id)
+		}
 	}
 	if query.ConsistencyLevel != "" {
 		req.Header.Set("X-Ms-Consistency-Level", query.ConsistencyLevel)
@@ -942,6 +974,7 @@ type RespListDocs struct {
 }
 
 // OfferInfo captures info of a CosmosDB offer.
+//
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/offers.
 type OfferInfo struct {
 	OfferVersion    string                 `json:"offerVersion"`    // V2 is the current version for request unit-based throughput.
@@ -1015,4 +1048,28 @@ type RespQueryOffers struct {
 type RespReplaceOffer struct {
 	RestReponse
 	OfferInfo
+}
+
+// PkrangeInfo captures info of a collection's partition key range.
+//
+// See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/get-partition-key-ranges.
+//
+// Available since v0.1.3.
+type PkrangeInfo struct {
+	Id           string `json:"id"`           // the stable and unique ID for the partition key range within each collection
+	MaxExclusive string `json:"maxExclusive"` // (internal use) the maximum partition key hash value for the partition key range
+	MinInclusive string `json:"minInclusive"` // (minimum use) the maximum partition key hash value for the partition key range
+	Rid          string `json:"_rid"`         // (system generated property) _rid attribute of the pkrange
+	Ts           int64  `json:"_ts"`          // (system-generated property) _ts attribute of the pkrange
+	Self         string `json:"_self"`        // (system-generated property) _self attribute of the pkrange
+	Etag         string `json:"_etag"`        // (system-generated property) _etag attribute of the pkrange
+}
+
+// RespGetPkranges captures the response from GetPkranges call.
+//
+// Available since v0.1.3.
+type RespGetPkranges struct {
+	RestReponse `json:"-"`
+	Pkranges    []PkrangeInfo `json:"PartitionKeyRanges"`
+	Count       int64         `json:"_count"` // number of records returned from the operation
 }

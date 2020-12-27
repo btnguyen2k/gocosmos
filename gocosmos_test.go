@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -1196,6 +1197,99 @@ func Test_Query_SelectPlaceholder(t *testing.T) {
 
 	if _, err := db.Query(`SELECT * FROM c WHERE c.username=$2 AND c.id>:10 ORDER BY c.id WITH database=dbtemp WITH collection=tbltemp`, "30", "user0"); err == nil || strings.Index(err.Error(), "no placeholder") < 0 {
 		t.Fatalf("%s failed: expecting 'no placeholder' but received %s", name, err)
+	}
+}
+
+func Test_Query_SelectPkranges(t *testing.T) {
+	name := "Test_Query_SelectPkranges"
+	db := _openDb(t, name)
+
+	db.Exec("DROP DATABASE dbtemp")
+	db.Exec("CREATE DATABASE dbtemp WITH maxru=10000")
+	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
+
+	var wait sync.WaitGroup
+	n := 1000
+	d := 256
+	wait.Add(n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			id := fmt.Sprintf("%04d", i)
+			username := "user" + fmt.Sprintf("%02x", i%d)
+			email := "user" + strconv.Itoa(i) + "@domain.com"
+			db.Exec("INSERT INTO dbtemp.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4)", id, username, email, i, username)
+			wait.Done()
+		}(i)
+	}
+	wait.Wait()
+
+	query := `SELECT CROSS PARTITION * FROM c WHERE c.id>$1 ORDER BY c.id OFFSET 5 LIMIT 23 WITH database=dbtemp WITH collection=tbltemp`
+	if dbRows, err := db.Query(query, "0123"); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	} else {
+		colTypes, err := dbRows.ColumnTypes()
+		if err != nil {
+			t.Fatalf("%s failed: %s", name, err)
+		}
+		numCols := len(colTypes)
+		rows := make(map[string]map[string]interface{})
+		for dbRows.Next() {
+			vals := make([]interface{}, numCols)
+			scanVals := make([]interface{}, numCols)
+			for i := 0; i < numCols; i++ {
+				scanVals[i] = &vals[i]
+			}
+			if err := dbRows.Scan(scanVals...); err == nil {
+				row := make(map[string]interface{})
+				for i, v := range colTypes {
+					row[v.Name()] = vals[i]
+				}
+				id := fmt.Sprintf("%s", row["id"])
+				rows[id] = row
+			} else if err != sql.ErrNoRows {
+				t.Fatalf("%s failed: %s", name, err)
+			}
+		}
+		if len(rows) != 23 {
+			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 23, len(rows))
+		}
+		for k := range rows {
+			if k <= "0123" {
+				t.Fatalf("%s failed: document #%s should not be returned", name, k)
+			}
+		}
+	}
+
+	query = `SELECT c.username, sum(c.index) FROM tbltemp c WHERE c.id<"0123" GROUP BY c.username OFFSET 110 LIMIT 20 WITH database=dbtemp WITH cross_partition=true`
+	if dbRows, err := db.Query(query); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	} else {
+		colTypes, err := dbRows.ColumnTypes()
+		if err != nil {
+			t.Fatalf("%s failed: %s", name, err)
+		}
+		numCols := len(colTypes)
+		rows := make(map[string]map[string]interface{})
+		for dbRows.Next() {
+			vals := make([]interface{}, numCols)
+			scanVals := make([]interface{}, numCols)
+			for i := 0; i < numCols; i++ {
+				scanVals[i] = &vals[i]
+			}
+			if err := dbRows.Scan(scanVals...); err == nil {
+				row := make(map[string]interface{})
+				for i, v := range colTypes {
+					row[v.Name()] = vals[i]
+				}
+				id := fmt.Sprintf("%s", row["username"])
+				rows[id] = row
+			} else if err != sql.ErrNoRows {
+				t.Fatalf("%s failed: %s", name, err)
+			}
+		}
+		if len(rows) != 13 {
+			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 13, len(rows))
+		}
 	}
 }
 

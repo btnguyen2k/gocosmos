@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -651,6 +652,54 @@ func TestRestClient_ListCollection(t *testing.T) {
 
 	client.DeleteDatabase("db_not_found")
 	if result := client.ListCollections("db_not_found"); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+}
+
+func TestRestClient_GetPkranges(t *testing.T) {
+	name := "TestRestClient_GetPkranges"
+	client := _newRestClient(t, name)
+
+	dbname := "mydb"
+	collname := "mytable"
+	client.DeleteDatabase(dbname)
+	client.CreateDatabase(DatabaseSpec{Id: dbname, MaxRu: 10000})
+	client.CreateCollection(CollectionSpec{DbName: dbname, CollName: collname,
+		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/username"}, "kind": "Hash"},
+	})
+	var wait sync.WaitGroup
+	n := 1000
+	d := 16
+	wait.Add(n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			id := fmt.Sprintf("%04d", i)
+			username := "user" + fmt.Sprintf("%02x", i%d)
+			client.CreateDocument(DocumentSpec{DbName: dbname, CollName: collname,
+				PartitionKeyValues: []interface{}{username},
+				DocumentData:       map[string]interface{}{"id": id, "username": username, "index": i},
+			})
+			wait.Done()
+		}(i)
+	}
+	wait.Wait()
+
+	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	} else if len(result.Pkranges) < 1 {
+		t.Fatalf("%s failed: invalid number of pk ranges %#v", name, len(result.Pkranges))
+	}
+
+	if result := client.GetPkranges(dbname, "table_not_found"); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+
+	client.DeleteDatabase("db_not_found")
+	if result := client.GetPkranges("db_not_found", collname); result.CallErr != nil {
 		t.Fatalf("%s failed: %s", name, result.CallErr)
 	} else if result.StatusCode != 404 {
 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
@@ -1310,6 +1359,100 @@ func TestRestClient_QueryDocumentsCrossPartition(t *testing.T) {
 		t.Fatalf("%s failed: %s", name, result.CallErr)
 	} else if result.StatusCode != 404 {
 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+}
+
+func TestRestClient_QueryDocumentsPkranges(t *testing.T) {
+	name := "TestRestClient_QueryDocumentsPkranges"
+	client := _newRestClient(t, name)
+
+	dbname := "mydb"
+	collname := "mytable"
+	client.DeleteDatabase(dbname)
+	client.CreateDatabase(DatabaseSpec{Id: dbname, MaxRu: 10000})
+	client.CreateCollection(CollectionSpec{
+		DbName:           dbname,
+		CollName:         collname,
+		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/username"}, "kind": "Hash"},
+		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
+	})
+	totalRu := 0.0
+	var wait sync.WaitGroup
+	n := 100
+	d := 16
+	wait.Add(n)
+	for i := 0; i < n; i++ {
+		go func(i int) {
+			id := fmt.Sprintf("%04d", i)
+			username := "user" + fmt.Sprintf("%02x", i%d)
+			email := "user" + strconv.Itoa(i) + "@domain.com"
+			if result := client.CreateDocument(DocumentSpec{DbName: dbname, CollName: collname,
+				PartitionKeyValues: []interface{}{username},
+				DocumentData:       map[string]interface{}{"id": id, "username": username, "email": email, "index": i},
+			}); result.Error() != nil {
+				t.Fatalf("%s failed: %s", name, result.Error())
+			} else {
+				totalRu += result.RequestCharge
+			}
+			wait.Done()
+		}(i)
+	}
+	wait.Wait()
+	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
+
+	{
+		query := QueryReq{DbName: dbname, CollName: collname, MaxItemCount: 10, CrossPartitionEnabled: true,
+			Query:  "SELECT * FROM c WHERE c.id>=@id ORDER BY c.id OFFSET 5 LIMIT 3",
+			Params: []interface{}{map[string]interface{}{"name": "@id", "value": "0037"}},
+		}
+		var result *RespQueryDocs
+		documents := make([]DocInfo, 0)
+		totalRu = 0.0
+		for result = client.QueryDocuments(query); result.Error() == nil; {
+			totalRu += result.RequestCharge
+			documents = append(documents, result.Documents...)
+			if result.ContinuationToken == "" {
+				break
+			}
+			query.ContinuationToken = result.ContinuationToken
+			result = client.QueryDocuments(query)
+		}
+		fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
+		if result.Error() != nil {
+			t.Fatalf("%s failed: %s", name, result.Error())
+		}
+		if len(documents) != 3 {
+			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 3, len(documents))
+		}
+		if documents[0].Id() != "0042" || documents[1].Id() != "0043" || documents[2].Id() != "0044" {
+			t.Fatalf("%s failed: <documents> not in correct order", name)
+		}
+	}
+
+	{
+		query := QueryReq{DbName: dbname, CollName: collname, MaxItemCount: 10, CrossPartitionEnabled: true,
+			Query:  "SELECT c.username, sum(c.index) FROM c WHERE c.id<@id GROUP BY c.username",
+			Params: []interface{}{map[string]interface{}{"name": "@id", "value": "0123"}},
+		}
+		var result *RespQueryDocs
+		documents := make([]DocInfo, 0)
+		totalRu = 0.0
+		for result = client.QueryDocuments(query); result.Error() == nil; {
+			totalRu += result.RequestCharge
+			documents = append(documents, result.Documents...)
+			if result.ContinuationToken == "" {
+				break
+			}
+			query.ContinuationToken = result.ContinuationToken
+			result = client.QueryDocuments(query)
+		}
+		fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
+		if result.Error() != nil {
+			t.Fatalf("%s failed: %s", name, result.Error())
+		}
+		if len(documents) != d {
+			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, d, len(documents))
+		}
 	}
 }
 
