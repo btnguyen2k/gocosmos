@@ -5,7 +5,6 @@ import (
 	"database/sql/driver"
 	"encoding/binary"
 	"errors"
-	"log"
 	"net"
 	"strings"
 	"time"
@@ -13,9 +12,7 @@ import (
 	"github.com/btnguyen2k/consu/olaf"
 )
 
-var (
-	idGen *olaf.Olaf
-)
+var idGen *olaf.Olaf
 
 func _myCurrentIp() (string, error) {
 	if addrs, err := net.InterfaceAddrs(); err == nil {
@@ -52,7 +49,7 @@ func init() {
 			for len(myMacAddr) < 8 {
 				myMacAddr = append([]byte{0}, myMacAddr...)
 			}
-			log.Printf("[DEBUG] gocosmos - Local IP: %s / MAC: %s", myCurrentIp, myMacAddr)
+			// log.Printf("[DEBUG] gocosmos - Local IP: %s / MAC: %s", myCurrentIp, myMacAddr)
 			idGen = olaf.NewOlaf(int64(binary.BigEndian.Uint64(myMacAddr)))
 		}
 	}
