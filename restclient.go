@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -23,30 +24,33 @@ import (
 )
 
 const (
-	settingEndpoint   = "ACCOUNTENDPOINT"
-	settingAccountKey = "ACCOUNTKEY"
-	settingTimeout    = "TIMEOUTMS"
-	settingVersion    = "VERSION"
-	settingAutoId     = "AUTOID"
+	settingEndpoint           = "ACCOUNTENDPOINT"
+	settingAccountKey         = "ACCOUNTKEY"
+	settingTimeout            = "TIMEOUTMS"
+	settingVersion            = "VERSION"
+	settingAutoId             = "AUTOID"
+	settingInsecureSkipVerify = "INSECURESKIPVERIFY"
 )
 
 // NewRestClient constructs a new RestClient instance from the supplied connection string.
 //
 // httpClient is reused if supplied. Otherwise, a new http.Client instance is created.
 // connStr is expected to be in the following format:
-//     AccountEndpoint=<cosmosdb-restapi-endpoint>;AccountKey=<account-key>[;TimeoutMs=<timeout-in-ms>][;Version=<cosmosdb-api-version>][;AutoId=<true/false>]
-// If not supplied, default value for TimeoutMs is 10 seconds, Version is "2018-12-31" and AutoId is true.
+//     AccountEndpoint=<cosmosdb-restapi-endpoint>;AccountKey=<account-key>[;TimeoutMs=<timeout-in-ms>][;Version=<cosmosdb-api-version>][;AutoId=<true/false>][;InsecureSkipVerify=<true/false>]
+// If not supplied, default value for TimeoutMs is 10 seconds, Version is "2018-12-31", AutoId is true, and InsecureSkipVerify is false
 //
-// AutoId is added since v0.1.2
+// - AutoId is added since v0.1.2
+// - InsecureSkipVerify is added since v0.1.4
 func NewRestClient(httpClient *http.Client, connStr string) (*RestClient, error) {
 	params := make(map[string]string)
 	parts := strings.Split(connStr, ";")
 	for _, part := range parts {
 		tokens := strings.SplitN(part, "=", 2)
+		key := strings.ToUpper(strings.TrimSpace(tokens[0]))
 		if len(tokens) == 2 {
-			params[strings.ToUpper(tokens[0])] = strings.TrimSpace(tokens[1])
+			params[key] = strings.TrimSpace(tokens[1])
 		} else {
-			params[strings.ToUpper(tokens[0])] = ""
+			params[key] = ""
 		}
 	}
 	endpoint := strings.TrimSuffix(params[settingEndpoint], "/")
@@ -72,6 +76,16 @@ func NewRestClient(httpClient *http.Client, connStr string) (*RestClient, error)
 	autoId, err := strconv.ParseBool(params[settingAutoId])
 	if err != nil {
 		autoId = true
+	}
+	insecureSkipVerify, err := strconv.ParseBool(params[settingInsecureSkipVerify])
+	if err != nil {
+		insecureSkipVerify = false
+	}
+	if httpClient == nil {
+		httpClient = &http.Client{
+			Timeout:   time.Duration(timeoutMs) * time.Millisecond,
+			Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: insecureSkipVerify}},
+		}
 	}
 	return &RestClient{
 		client:     gjrc.NewGjrc(httpClient, time.Duration(timeoutMs)*time.Millisecond),
