@@ -1,5 +1,9 @@
 # gocosmos release notes
 
+## 2022-02-16 - v0.1.6
+
+- REST client & Driver for `database/sql`: fix a bug in function `ReplaceOfferForResource` caused by a change from v0.1.5.
+
 ## 2022-02-16 - v0.1.5
 
 - Fix a bug where no-parameterized query returns error.

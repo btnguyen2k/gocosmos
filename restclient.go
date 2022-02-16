@@ -747,7 +747,13 @@ func (c *RestClient) ReplaceOfferForResource(rid string, ru, maxru int) *RespRep
 		}
 		params["content"] = content
 		req := c.buildJsonRequest(method, url, params)
-		req = c.addAuthHeader(req, method, "offers", getResult.OfferInfo.Rid)
+		/*
+		 * [btnguyen2k] 2022-02-16
+		 * OfferInfo.Rid is returned from the server, but it _must_ be lower-cased when we send back to the server for
+		 * issuing the 'replace-offer' request.
+		 * Not sure if this is intended or a bug of CosmosDB.
+		 */
+		req = c.addAuthHeader(req, method, "offers", strings.ToLower(getResult.OfferInfo.Rid))
 		for k, v := range headers {
 			req.Header.Set(k, v)
 		}

@@ -1390,7 +1390,7 @@ func TestRestClient_QueryAllDocuments(t *testing.T) {
 	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
 
 	query := QueryReq{DbName: dbname, CollName: collname, MaxItemCount: 10, ConsistencyLevel: "Session", SessionToken: sessionToken,
-		Query:  "SELECT * FROM c",
+		Query:                 "SELECT * FROM c",
 		CrossPartitionEnabled: true,
 	}
 	var result *RespQueryDocs
