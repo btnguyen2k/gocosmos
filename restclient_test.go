@@ -1362,6 +1362,75 @@ func TestRestClient_QueryDocumentsCrossPartition(t *testing.T) {
 	}
 }
 
+func TestRestClient_QueryAllDocuments(t *testing.T) {
+	name := "TestRestClient_QueryDocuments"
+	client := _newRestClient(t, name)
+
+	dbname := "mydb"
+	collname := "mytable"
+	client.DeleteDatabase(dbname)
+	client.CreateDatabase(DatabaseSpec{Id: dbname, MaxRu: 10000})
+	client.CreateCollection(CollectionSpec{
+		DbName:           dbname,
+		CollName:         collname,
+		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/username"}, "kind": "Hash"},
+		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
+	})
+	totalRu := 0.0
+	var sessionToken string
+	for i := 0; i < 100; i++ {
+		docInfo := map[string]interface{}{"id": fmt.Sprintf("%02d", i), "username": "user", "email": "user" + strconv.Itoa(i) + "@domain.com", "grade": i, "active": i%10 == 0}
+		if result := client.CreateDocument(DocumentSpec{DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"}, DocumentData: docInfo}); result.Error() != nil {
+			t.Fatalf("%s failed: %s", name, result.Error())
+		} else {
+			totalRu += result.RequestCharge
+			sessionToken = result.SessionToken
+		}
+	}
+	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
+
+	query := QueryReq{DbName: dbname, CollName: collname, MaxItemCount: 10, ConsistencyLevel: "Session", SessionToken: sessionToken,
+		Query:  "SELECT * FROM c",
+		CrossPartitionEnabled: true,
+	}
+	var result *RespQueryDocs
+	documents := make([]DocInfo, 0)
+	totalRu = 0.0
+	for result = client.QueryDocuments(query); result.Error() == nil; {
+		totalRu += result.RequestCharge
+		documents = append(documents, result.Documents...)
+		if result.ContinuationToken == "" {
+			break
+		}
+		query.ContinuationToken = result.ContinuationToken
+		result = client.QueryDocuments(query)
+	}
+	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
+	if result.Error() != nil {
+		t.Fatalf("%s failed: %s", name, result.Error())
+	}
+	if len(documents) != 100 {
+		t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 63, len(documents))
+	}
+
+	query.DbName = dbname
+	query.CollName = "table_not_found"
+	if result := client.QueryDocuments(query); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+
+	client.DeleteDatabase("db_not_found")
+	query.DbName = "db_not_found"
+	query.CollName = collname
+	if result := client.QueryDocuments(query); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", name, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	}
+}
+
 func TestRestClient_QueryDocumentsPkranges(t *testing.T) {
 	name := "TestRestClient_QueryDocumentsPkranges"
 	client := _newRestClient(t, name)
