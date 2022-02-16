@@ -1,10 +1,15 @@
 # gocosmos release notes
 
+## 2022-02-16 - v0.1.5
+
+- Fix a bug where no-parameterized query returns error.
+- Fix a bug where database or collection name contains upper-cased characters.
+
 ## 2021-07-14 - v0.1.4
 
 - REST client & Driver for `database/sql`:
   - Add parameter `InsecureSkipVerify=<true/false>` to connection string. This parameter is optional, default value is `false`.
-    If `true`, REST client will disable CA verification for https endoint (useful to run against test/dev env with local/docker Cosmos DB emulator).
+    If `true`, REST client will disable CA verification for https endpoint (useful to run against test/dev env with local/docker Cosmos DB emulator).
 
 ## 2020-12-27 - v0.1.3
 
