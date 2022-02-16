@@ -124,7 +124,13 @@ func (c *RestClient) buildJsonRequest(method, url string, params interface{}) *h
 
 func (c *RestClient) addAuthHeader(req *http.Request, method, resType, resId string) *http.Request {
 	now := time.Now().In(locGmt)
-	stringToSign := strings.ToLower(fmt.Sprintf("%s\n%s\n%s\n%s\n%s\n", method, resType, resId, now.Format(time.RFC1123), ""))
+	/*
+	 * M.A.I. 2022-02-16
+	 * The original statement had a single ToLower. In the resulting string the resId gets lowered when from MS Docs it should be left unaltered
+	 * I came across an error on a collection with a mixed case name...
+	 * stringToSign := strings.ToLower(fmt.Sprintf("%s\n%s\n%s\n%s\n%s\n", method, resType, resId, now.Format(time.RFC1123), ""))
+	 */
+	stringToSign := fmt.Sprintf("%s\n%s\n%s\n%s\n%s\n", strings.ToLower(method), strings.ToLower(resType), resId, strings.ToLower(now.Format(time.RFC1123)), "")
 	h := hmac.New(sha256.New, c.authKey)
 	h.Write([]byte(stringToSign))
 	signature := base64.StdEncoding.EncodeToString(h.Sum(nil))
@@ -543,7 +549,19 @@ func (c *RestClient) QueryDocuments(query QueryReq) *RespQueryDocs {
 
 	method := "POST"
 	url := c.endpoint + "/dbs/" + query.DbName + "/colls/" + query.CollName + "/docs"
-	req := c.buildJsonRequest(method, url, map[string]interface{}{"query": query.Query, "parameters": query.Params})
+
+	/*
+	 * M.A.I. 2022-02-16
+	 * In case of requests with no parameters the original form created a request with parameters set to nil. Apparently MS complaints about it.
+	 * Original form
+	 * req := c.buildJsonRequest(method, url, map[string]interface{}{"query": query.Query, "parameters": query.Params})
+	 */
+	requestBody := make(map[string]interface{}, 0)
+	requestBody["query"] = query.Query
+	if query.Params != nil {
+		requestBody["parameters"] = query.Params
+	}
+	req := c.buildJsonRequest(method, url, requestBody)
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+query.DbName+"/colls/"+query.CollName)
 	req.Header.Set("Content-Type", "application/query+json")
 	req.Header.Set("X-Ms-Documentdb-Isquery", "true")
