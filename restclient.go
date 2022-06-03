@@ -556,8 +556,10 @@ func (c *RestClient) QueryDocuments(query QueryReq) *RespQueryDocs {
 	 * Original form
 	 * req := c.buildJsonRequest(method, url, map[string]interface{}{"query": query.Query, "parameters": query.Params})
 	 */
+	queryWithoutHyphen := handleHyphenInTableName(query)
+	queryWithoutEscapeCharacter := removeEscapeCharacter(queryWithoutHyphen)
 	requestBody := make(map[string]interface{}, 0)
-	requestBody["query"] = query.Query
+	requestBody["query"] = queryWithoutEscapeCharacter
 	if query.Params != nil {
 		requestBody["parameters"] = query.Params
 	}
@@ -593,6 +595,17 @@ func (c *RestClient) QueryDocuments(query QueryReq) *RespQueryDocs {
 		result.CallErr = json.Unmarshal(result.RespBody, &result)
 	}
 	return result
+}
+
+func handleHyphenInTableName(query QueryReq) string {
+	tableName := query.CollName
+	tableName = strings.Replace(tableName, "-", "_", -1)
+	newQuery := strings.Replace(query.Query, query.CollName, tableName, -1)
+	return newQuery
+}
+
+func removeEscapeCharacter(query string) string {
+	return strings.Replace(query, "`", "", -1)
 }
 
 // ListDocsReq specifies a list documents request.

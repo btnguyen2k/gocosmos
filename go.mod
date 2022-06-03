@@ -1,4 +1,4 @@
-module github.com/btnguyen2k/gocosmos
+module github.com/AntonioJanael/gocosmos
 
 go 1.13
 
