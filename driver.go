@@ -13,6 +13,27 @@ import (
 )
 
 var idGen *olaf.Olaf
+var lock = &sync.Mutex{}
+var httpClientSingleton *http.Client
+
+func getHttpClientInstance() *http.Client {
+	if httpClientSingleton == nil {
+		lock.Lock()
+		defer lock.Unlock()
+		if httpClientSingleton == nil {
+			httpClientSingleton = httpClientFactory()
+		}
+	}
+	return httpClientSingleton
+}
+func httpClientFactory() *http.Client {
+	const timeoutMs = 10000
+	const insecureSkipVerify = true
+	return &http.Client{
+		Timeout:   time.Duration(timeoutMs) * time.Millisecond,
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: insecureSkipVerify}},
+	}
+}
 
 func _myCurrentIp() (string, error) {
 	if addrs, err := net.InterfaceAddrs(); err == nil {
@@ -82,7 +103,7 @@ type Driver struct {
 //
 // AutoId is added since v0.1.2
 func (d *Driver) Open(connStr string) (driver.Conn, error) {
-	restClient, err := NewRestClient(nil, connStr)
+	restClient, err := NewRestClient(getHttpClientInstance(), connStr)
 	if err != nil {
 		return nil, err
 	}

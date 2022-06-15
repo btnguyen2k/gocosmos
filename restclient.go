@@ -32,6 +32,8 @@ const (
 	settingInsecureSkipVerify = "INSECURESKIPVERIFY"
 )
 
+var clientLock = &sync.Mutex{}
+
 // NewRestClient constructs a new RestClient instance from the supplied connection string.
 //
 // httpClient is reused if supplied. Otherwise, a new http.Client instance is created.
@@ -42,6 +44,8 @@ const (
 // - AutoId is added since v0.1.2
 // - InsecureSkipVerify is added since v0.1.4
 func NewRestClient(httpClient *http.Client, connStr string) (*RestClient, error) {
+	clientLock.Lock()
+	defer clientLock.Unlock()
 	params := make(map[string]string)
 	parts := strings.Split(connStr, ";")
 	for _, part := range parts {
