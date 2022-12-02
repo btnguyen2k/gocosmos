@@ -1,5 +1,9 @@
 # gocosmos release notes
 
+## 2022-12-02 - v0.1.7
+
+- REST client: fix a bug where function `QueryDocuments` does not return all documents if the query is cross-partition.
+
 ## 2022-02-16 - v0.1.6
 
 - REST client & Driver for `database/sql`: fix a bug in function `ReplaceOfferForResource` caused by a change from v0.1.5.
