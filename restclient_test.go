@@ -1046,8 +1046,8 @@ func TestRestClient_ReplaceDocument(t *testing.T) {
 	}
 }
 
-func TestRestClient_ReplaceDocumentCrossPartition(t *testing.T) {
-	name := "TestRestClient_ReplaceDocumentCrossPartition"
+func TestRestClient_ReplaceDocumentCrossPartitions(t *testing.T) {
+	name := "TestRestClient_ReplaceDocumentCrossPartitions"
 	client := _newRestClient(t, name)
 
 	dbname := "mydb"
@@ -1295,40 +1295,233 @@ func TestRestClient_QueryDocuments(t *testing.T) {
 	}
 }
 
-func TestRestClient_QueryDocumentsCrossPartition(t *testing.T) {
-	name := "TestRestClient_QueryDocumentsCrossPartition"
-	client := _newRestClient(t, name)
+var dataLargeSet map[int][]map[string]interface{}
 
-	dbname := "mydb"
-	collname := "mytable"
-	client.DeleteDatabase(dbname)
-	client.CreateDatabase(DatabaseSpec{Id: dbname, MaxRu: 10000})
+func _initDataLarge(t *testing.T, testName string, client *RestClient, db, container string, numItem int) {
+	client.DeleteDatabase(db)
+	client.CreateDatabase(DatabaseSpec{Id: db, Ru: 20000})
 	client.CreateCollection(CollectionSpec{
-		DbName:           dbname,
-		CollName:         collname,
+		DbName:           db,
+		CollName:         container,
 		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/username"}, "kind": "Hash"},
 		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
+		Ru:               20000,
 	})
 	totalRu := 0.0
-	for i := 0; i < 100; i++ {
-		docInfo := map[string]interface{}{"id": fmt.Sprintf("%02d", i), "username": "user" + strconv.Itoa(i%4), "email": "user" + strconv.Itoa(i) + "@domain.com", "grade": i, "active": i%10 == 0}
-		if result := client.CreateDocument(DocumentSpec{DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user" + strconv.Itoa(i%4)}, DocumentData: docInfo}); result.Error() != nil {
-			t.Fatalf("%s failed: %s", name, result.Error())
+	randList := make([]int, numItem)
+	for i := 0; i < numItem; i++ {
+		randList[i] = i
+	}
+	rand.Shuffle(numItem, func(i, j int) {
+		randList[i], randList[j] = randList[j], randList[i]
+	})
+	dataLargeSet = make(map[int][]map[string]interface{})
+	for i := 0; i < numItem; i++ {
+		category := randList[i] % 4
+		docInfoList, ok := dataLargeSet[category]
+		if !ok {
+			docInfoList = make([]map[string]interface{}, 0)
+		}
+		username := "user" + strconv.Itoa(i%4)
+		docInfo := map[string]interface{}{
+			"id":       fmt.Sprintf("%05d", i),
+			"username": username,
+			"email":    "user" + strconv.Itoa(i) + "@domain.com",
+			"grade":    randList[i],
+			"category": category,
+			"active":   i%10 == 0,
+		}
+		dataLargeSet[category] = append(docInfoList, docInfo)
+		if result := client.CreateDocument(DocumentSpec{DbName: db, CollName: container, PartitionKeyValues: []interface{}{username}, DocumentData: docInfo}); result.Error() != nil {
+			t.Fatalf("%s failed: %s", testName, result.Error())
 		} else {
 			totalRu += result.RequestCharge
 		}
 	}
-	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
+	fmt.Printf("\t%s - total RU charged: %0.3f\n", testName+"/Insert", totalRu)
+}
 
-	query := QueryReq{DbName: dbname, CollName: collname, MaxItemCount: 10, CrossPartitionEnabled: true,
-		Query:  "SELECT * FROM c WHERE c.id>=@id",
-		Params: []interface{}{map[string]interface{}{"name": "@id", "value": "37"}},
+func TestRestClient_QueryDocumentsCrossPartitions(t *testing.T) {
+	testName := "TestRestClient_QueryDocumentsCrossPartitions"
+	client := _newRestClient(t, testName)
+
+	dbName := "mydb"
+	containerName := "mytable"
+	_initDataLarge(t, testName, client, dbName, containerName, 100)
+	if result := client.GetPkranges(dbName, containerName); result.Error() != nil {
+		t.Fatalf("%s failed: %s", testName, result.Error())
+	} else if result.Count < 2 {
+		t.Fatalf("%s failed: number of physical partitions (%d) is too low", testName, result.Count)
 	}
-	var result *RespQueryDocs
+
+	low, high := 20, 80
+	lowStr, highStr := fmt.Sprintf("%05d", low), fmt.Sprintf("%05d", high)
+	expectedNumDocs := int64(high - low)
+	query := QueryReq{DbName: dbName, CollName: containerName, CrossPartitionEnabled: true,
+		Query: "SELECT * FROM c WHERE c.id>=@low AND c.id<@high",
+		Params: []interface{}{
+			map[string]interface{}{"name": "@low", "value": lowStr},
+			map[string]interface{}{"name": "@high", "value": highStr},
+		},
+	}
+	if result := client.QueryDocuments(query); result.Error() != nil {
+		t.Fatalf("%s failed: %s", testName, result.Error())
+	} else {
+		totalRu := result.RequestCharge
+		fmt.Printf("\t%s - total RU charged: %0.3f\n", testName+"/Query", totalRu)
+		if totalRu <= 0 {
+			t.Fatalf("%s failed: invalid consumed RU (%.3f)", testName, totalRu)
+		}
+		if result.Count != expectedNumDocs || len(result.Documents) != int(expectedNumDocs) {
+			t.Fatalf("%s failed: <num-document> expected %#v but received (count: %#v/length: %#v)", testName, expectedNumDocs, result.Count, len(result.Documents))
+		}
+		for _, doc := range result.Documents {
+			if !(lowStr <= doc.Id() && doc.Id() < highStr) {
+				t.Fatalf("%s failed: check failed (%s <= %s < %s)", testName, lowStr, highStr, doc.Id())
+			}
+		}
+	}
+
+	client.DeleteCollection(dbName, "table_not_found")
+	query.DbName, query.CollName = dbName, "table_not_found"
+	if result := client.QueryDocuments(query); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", testName, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", testName, 404, result.StatusCode)
+	}
+
+	client.DeleteDatabase("db_not_found")
+	query.DbName, query.CollName = "db_not_found", containerName
+	if result := client.QueryDocuments(query); result.CallErr != nil {
+		t.Fatalf("%s failed: %s", testName, result.CallErr)
+	} else if result.StatusCode != 404 {
+		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", testName, 404, result.StatusCode)
+	}
+}
+
+// func TestRestClient_QueryDocumentsCrossPartitionsWithGroupby(t *testing.T) {
+// 	testName := "TestRestClient_QueryDocumentsCrossPartitionsWithOrdering"
+// 	client := _newRestClient(t, testName)
+//
+// 	dbName := "mydb"
+// 	containerName := "mytable"
+// 	_initDataLarge(t, testName, client, dbName, containerName, 100)
+// 	if result := client.GetPkranges(dbName, containerName); result.Error() != nil {
+// 		t.Fatalf("%s failed: %s", testName, result.Error())
+// 	} else if result.Count < 2 {
+// 		t.Fatalf("%s failed: number of physical partitions (%d) is too low", testName, result.Count)
+// 	}
+//
+// 	low, high := 20, 80
+// 	lowStr, highStr := fmt.Sprintf("%05d", low), fmt.Sprintf("%05d", high)
+// 	query := QueryReq{DbName: dbName, CollName: containerName, CrossPartitionEnabled: true, MaxItemCount: 2,
+// 		Query: "SELECT c.category, sum(c.grade) AS SumGrade FROM c WHERE c.id>=@low AND c.id<@high GROUP BY c.category",
+// 		Params: []interface{}{
+// 			map[string]interface{}{"name": "@low", "value": lowStr},
+// 			map[string]interface{}{"name": "@high", "value": highStr},
+// 		},
+// 	}
+// 	if result := client.QueryDocuments(query); result.Error() != nil {
+// 		t.Fatalf("%s failed: %s", testName, result.Error())
+// 	} else {
+// 		totalRu := result.RequestCharge
+// 		fmt.Printf("\t%s - total RU charged: %0.3f\n", testName+"/Query", totalRu)
+// 		if totalRu <= 0 {
+// 			t.Fatalf("%s failed: invalid consumed RU (%.3f)", testName, totalRu)
+// 		}
+// 		// for _, doc := range result.Documents {
+// 		// 	fmt.Printf("%#v\n", doc)
+// 		// }
+// 		if result.Count != 4 || len(result.Documents) != 4 {
+// 			t.Fatalf("%s failed: <num-document> expected %#v but received (count: %#v/length: %#v)", testName, 4, result.Count, len(result.Documents))
+// 		}
+// 	}
+// }
+
+// func TestRestClient_QueryDocumentsCrossPartitionsWithOrdering(t *testing.T) {
+// 	testName := "TestRestClient_QueryDocumentsCrossPartitionsWithOrdering"
+// 	client := _newRestClient(t, testName)
+//
+// 	dbName := "mydb"
+// 	containerName := "mytable"
+// 	_initDataLarge(t, testName, client, dbName, containerName, 100)
+// 	if result := client.GetPkranges(dbName, containerName); result.Error() != nil {
+// 		t.Fatalf("%s failed: %s", testName, result.Error())
+// 	} else if result.Count < 2 {
+// 		t.Fatalf("%s failed: number of physical partitions (%d) is too low", testName, result.Count)
+// 	}
+//
+// 	low, high := 20, 80
+// 	lowStr, highStr := fmt.Sprintf("%05d", low), fmt.Sprintf("%05d", high)
+// 	expectedNumDocs := int64(high - low)
+// 	query := QueryReq{DbName: dbName, CollName: containerName, CrossPartitionEnabled: true,
+// 		Query: "SELECT * FROM c WHERE c.id>=@low AND c.id<@high ORDER BY c.grade",
+// 		Params: []interface{}{
+// 			map[string]interface{}{"name": "@low", "value": lowStr},
+// 			map[string]interface{}{"name": "@high", "value": highStr},
+// 		},
+// 	}
+// 	if result := client.QueryDocuments(query); result.Error() != nil {
+// 		t.Fatalf("%s failed: %s", testName, result.Error())
+// 	} else {
+// 		totalRu := result.RequestCharge
+// 		fmt.Printf("\t%s - total RU charged: %0.3f\n", testName+"/Query", totalRu)
+// 		if totalRu <= 0 {
+// 			t.Fatalf("%s failed: invalid consumed RU (%.3f)", testName, totalRu)
+// 		}
+// 		if result.Count != expectedNumDocs || len(result.Documents) != int(expectedNumDocs) {
+// 			t.Fatalf("%s failed: <num-document> expected %#v but received (count: %#v/length: %#v)", testName, expectedNumDocs, result.Count, len(result.Documents))
+// 		}
+// 		var prevDoc DocInfo
+// 		for _, doc := range result.Documents {
+// 			// fmt.Printf("{id: %s, grade: %d}\n", doc.Id(), doc.GetAttrAsTypeUnsafe("grade", reddo.TypeInt))
+// 			if !(lowStr <= doc.Id() && doc.Id() < highStr) {
+// 				t.Fatalf("%s failed: check failed (%s <= %s < %s)", testName, lowStr, highStr, doc.Id())
+// 			}
+// 			if prevDoc != nil {
+// 				pv := prevDoc.GetAttrAsTypeUnsafe("grade", reddo.TypeInt).(int64)
+// 				pc := doc.GetAttrAsTypeUnsafe("grade", reddo.TypeInt).(int64)
+// 				// fmt.Printf("\t{id: %s, grade: %d} / {id: %s, grade: %d}\n", prevDoc.Id(), pv, doc.Id(), pc)
+// 				if pv > pc {
+// 					t.Fatalf("%s failed: not in order {id: %s, grade: %d} -> {id: %s, grade: %d}", testName, prevDoc.Id(), pv, doc.Id(), pc)
+// 				}
+// 			}
+// 			prevDoc = doc
+// 		}
+// 	}
+// }
+
+func TestRestClient_QueryDocumentsCrossPartitionsWithPaging(t *testing.T) {
+	testName := "TestRestClient_QueryDocumentsCrossPartitionsWithPaging"
+	client := _newRestClient(t, testName)
+
+	dbName := "mydb"
+	containerName := "mytable"
+	_initDataLarge(t, testName, client, dbName, containerName, 100)
+	if result := client.GetPkranges(dbName, containerName); result.Error() != nil {
+		t.Fatalf("%s failed: %s", testName, result.Error())
+	} else if result.Count < 2 {
+		t.Fatalf("%s failed: number of physical partitions (%d) is too low", testName, result.Count)
+	}
+
+	low, high := 20, 80
+	lowStr, highStr := fmt.Sprintf("%05d", low), fmt.Sprintf("%05d", high)
+	expectedNumDocs := int64(high - low)
+	query := QueryReq{DbName: dbName, CollName: containerName, CrossPartitionEnabled: true, MaxItemCount: 10,
+		Query: "SELECT * FROM c WHERE c.id>=@low AND c.id<@high",
+		Params: []interface{}{
+			map[string]interface{}{"name": "@low", "value": lowStr},
+			map[string]interface{}{"name": "@high", "value": highStr},
+		},
+	}
+	totalRu := 0.0
 	documents := make([]DocInfo, 0)
-	totalRu = 0.0
-	for result = client.QueryDocuments(query); result.Error() == nil; {
+	result := client.QueryDocuments(query)
+	for {
 		totalRu += result.RequestCharge
+		if result.Error() != nil {
+			t.Fatalf("%s failed: %s", testName, result.Error())
+		}
 		documents = append(documents, result.Documents...)
 		if result.ContinuationToken == "" {
 			break
@@ -1336,31 +1529,80 @@ func TestRestClient_QueryDocumentsCrossPartition(t *testing.T) {
 		query.ContinuationToken = result.ContinuationToken
 		result = client.QueryDocuments(query)
 	}
-	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
-	if result.Error() != nil {
-		t.Fatalf("%s failed: %s", name, result.Error())
+	fmt.Printf("\t%s - total RU charged: %0.3f\n", testName+"/Query", totalRu)
+	if totalRu <= 0 {
+		t.Fatalf("%s failed: invalid consumed RU (%.3f)", testName, totalRu)
 	}
-	if len(documents) != 63 {
-		t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 63, len(documents))
+	if result.Count != expectedNumDocs || len(result.Documents) != int(expectedNumDocs) {
+		t.Fatalf("%s failed: <num-document> expected %#v but received (count: %#v/length: %#v)", testName, expectedNumDocs, result.Count, len(result.Documents))
 	}
-
-	query.DbName = dbname
-	query.CollName = "table_not_found"
-	if result := client.QueryDocuments(query); result.CallErr != nil {
-		t.Fatalf("%s failed: %s", name, result.CallErr)
-	} else if result.StatusCode != 404 {
-		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
-	}
-
-	client.DeleteDatabase("db_not_found")
-	query.DbName = "db_not_found"
-	query.CollName = collname
-	if result := client.QueryDocuments(query); result.CallErr != nil {
-		t.Fatalf("%s failed: %s", name, result.CallErr)
-	} else if result.StatusCode != 404 {
-		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
+	for _, doc := range result.Documents {
+		if !(lowStr <= doc.Id() && doc.Id() < highStr) {
+			t.Fatalf("%s failed: check failed (%s <= %s < %s)", testName, lowStr, highStr, doc.Id())
+		}
 	}
 }
+
+// func TestRestClient_QueryDocumentsCrossPartitionsWithPagingAndOrdering(t *testing.T) {
+// 	testName := "TestRestClient_QueryDocumentsCrossPartitionsWithPagingAndOrdering"
+// 	client := _newRestClient(t, testName)
+//
+// 	dbName := "mydb"
+// 	containerName := "mytable"
+// 	_initDataLarge(t, testName, client, dbName, containerName, 100)
+// 	if result := client.GetPkranges(dbName, containerName); result.Error() != nil {
+// 		t.Fatalf("%s failed: %s", testName, result.Error())
+// 	} else if result.Count < 2 {
+// 		t.Fatalf("%s failed: number of physical partitions (%d) is too low", testName, result.Count)
+// 	}
+//
+// 	low, high := 20, 80
+// 	lowStr, highStr := fmt.Sprintf("%05d", low), fmt.Sprintf("%05d", high)
+// 	expectedNumDocs := int64(high - low)
+// 	query := QueryReq{DbName: dbName, CollName: containerName, CrossPartitionEnabled: true, MaxItemCount: 10,
+// 		Query: "SELECT * FROM c WHERE c.id>=@low AND c.id<@high ORDER BY c.grade DESC",
+// 		Params: []interface{}{
+// 			map[string]interface{}{"name": "@low", "value": lowStr},
+// 			map[string]interface{}{"name": "@high", "value": highStr},
+// 		},
+// 	}
+// 	totalRu := 0.0
+// 	documents := make([]DocInfo, 0)
+// 	result := client.QueryDocuments(query)
+// 	for {
+// 		totalRu += result.RequestCharge
+// 		if result.Error() != nil {
+// 			t.Fatalf("%s failed: %s", testName, result.Error())
+// 		}
+// 		documents = append(documents, result.Documents...)
+// 		if result.ContinuationToken == "" {
+// 			break
+// 		}
+// 		query.ContinuationToken = result.ContinuationToken
+// 		result = client.QueryDocuments(query)
+// 	}
+// 	fmt.Printf("\t%s - total RU charged: %0.3f\n", testName+"/Query", totalRu)
+// 	if totalRu <= 0 {
+// 		t.Fatalf("%s failed: invalid consumed RU (%.3f)", testName, totalRu)
+// 	}
+// 	if result.Count != expectedNumDocs || len(result.Documents) != int(expectedNumDocs) {
+// 		t.Fatalf("%s failed: <num-document> expected %#v but received (count: %#v/length: %#v)", testName, expectedNumDocs, result.Count, len(result.Documents))
+// 	}
+// 	var prevDoc DocInfo
+// 	for _, doc := range result.Documents {
+// 		if !(lowStr <= doc.Id() && doc.Id() < highStr) {
+// 			t.Fatalf("%s failed: check failed (%s <= %s < %s)", testName, lowStr, highStr, doc.Id())
+// 		}
+// 		if prevDoc != nil {
+// 			pv := prevDoc.GetAttrAsTypeUnsafe("grade", reddo.TypeInt).(int64)
+// 			pc := doc.GetAttrAsTypeUnsafe("grade", reddo.TypeInt).(int64)
+// 			if pv < pc {
+// 				t.Fatalf("%s failed: not in order {id: %s, grade: %d} -> {id: %s, grade: %d}", testName, prevDoc.Id(), pv, doc.Id(), pc)
+// 			}
+// 		}
+// 		prevDoc = doc
+// 	}
+// }
 
 func TestRestClient_QueryAllDocuments(t *testing.T) {
 	name := "TestRestClient_QueryDocuments"

@@ -30,6 +30,7 @@ const (
 	settingVersion            = "VERSION"
 	settingAutoId             = "AUTOID"
 	settingInsecureSkipVerify = "INSECURESKIPVERIFY"
+	defaultApiVersion         = "2018-12-31"
 )
 
 // NewRestClient constructs a new RestClient instance from the supplied connection string.
@@ -37,7 +38,7 @@ const (
 // httpClient is reused if supplied. Otherwise, a new http.Client instance is created.
 // connStr is expected to be in the following format:
 //     AccountEndpoint=<cosmosdb-restapi-endpoint>;AccountKey=<account-key>[;TimeoutMs=<timeout-in-ms>][;Version=<cosmosdb-api-version>][;AutoId=<true/false>][;InsecureSkipVerify=<true/false>]
-// If not supplied, default value for TimeoutMs is 10 seconds, Version is "2018-12-31", AutoId is true, and InsecureSkipVerify is false
+// If not supplied, default value for TimeoutMs is 10 seconds, Version is defaultApiVersion (which is "2018-12-31"), AutoId is true, and InsecureSkipVerify is false
 //
 // - AutoId is added since v0.1.2
 // - InsecureSkipVerify is added since v0.1.4
@@ -71,7 +72,7 @@ func NewRestClient(httpClient *http.Client, connStr string) (*RestClient, error)
 	}
 	apiVersion := params[settingVersion]
 	if apiVersion == "" {
-		apiVersion = "2018-12-31"
+		apiVersion = defaultApiVersion
 	}
 	autoId, err := strconv.ParseBool(params[settingAutoId])
 	if err != nil {
@@ -116,9 +117,9 @@ func (c *RestClient) buildJsonRequest(method, url string, params interface{}) *h
 		r = bytes.NewReader([]byte{})
 	}
 	req, _ := http.NewRequest(method, url, r)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set("X-Ms-Version", c.apiVersion)
+	req.Header.Set(httpHeaderContentType, "application/json")
+	req.Header.Set(httpHeaderAccept, "application/json")
+	req.Header.Set(restApiHeaderVersion, c.apiVersion)
 	return req
 }
 
@@ -136,8 +137,8 @@ func (c *RestClient) addAuthHeader(req *http.Request, method, resType, resId str
 	signature := base64.StdEncoding.EncodeToString(h.Sum(nil))
 	authHeader := "type=master&ver=1.0&sig=" + signature
 	authHeader = url.QueryEscape(authHeader)
-	req.Header.Set("Authorization", authHeader)
-	req.Header.Set("X-Ms-Date", now.Format(time.RFC1123))
+	req.Header.Set(httpHeaderAuthorization, authHeader)
+	req.Header.Set(restApiHeaderDate, now.Format(time.RFC1123))
 	return req
 }
 
@@ -153,12 +154,12 @@ func (c *RestClient) buildRestReponse(resp *gjrc.GjrcResponse) RestReponse {
 				result.RespHeader[strings.ToUpper(k)] = v[0]
 			}
 		}
-		if v, err := strconv.ParseFloat(result.RespHeader["X-MS-REQUEST-CHARGE"], 64); err == nil {
+		if v, err := strconv.ParseFloat(result.RespHeader[respHeaderRequestCharge], 64); err == nil {
 			result.RequestCharge = v
 		} else {
 			result.RequestCharge = -1
 		}
-		result.SessionToken = result.RespHeader["X-MS-SESSION-TOKEN"]
+		result.SessionToken = result.RespHeader[respHeaderSessionToken]
 		if result.StatusCode >= 400 {
 			result.ApiErr = fmt.Errorf("error executing Azure CosmosDB command; StatusCode=%d;Body=%s", result.StatusCode, result.RespBody)
 		}
@@ -183,10 +184,10 @@ func (c *RestClient) CreateDatabase(spec DatabaseSpec) *RespCreateDb {
 	req := c.buildJsonRequest(method, url, map[string]interface{}{"id": spec.Id})
 	req = c.addAuthHeader(req, method, "dbs", "")
 	if spec.Ru > 0 {
-		req.Header.Set("X-Ms-Offer-Throughput", strconv.Itoa(spec.Ru))
+		req.Header.Set(restApiHeaderOfferThroughput, strconv.Itoa(spec.Ru))
 	}
 	if spec.MaxRu > 0 {
-		req.Header.Set("X-Ms-Cosmos-Offer-Autopilot-Settings", fmt.Sprintf(`{"maxThroughput":%d}`, spec.MaxRu))
+		req.Header.Set(restApiHeaderOfferAutopilotSettings, fmt.Sprintf(`{"maxThroughput":%d}`, spec.MaxRu))
 	}
 
 	resp := c.client.Do(req)
@@ -273,18 +274,18 @@ func (c *RestClient) CreateCollection(spec CollectionSpec) *RespCreateColl {
 	url := c.endpoint + "/dbs/" + spec.DbName + "/colls"
 	params := map[string]interface{}{"id": spec.CollName, "partitionKey": spec.PartitionKeyInfo}
 	if spec.IndexingPolicy != nil {
-		params["indexingPolicy"] = spec.IndexingPolicy
+		params[restApiParamIndexingPolicy] = spec.IndexingPolicy
 	}
 	if spec.UniqueKeyPolicy != nil {
-		params["uniqueKeyPolicy"] = spec.UniqueKeyPolicy
+		params[restApiParamUniqueKeyPolicy] = spec.UniqueKeyPolicy
 	}
 	req := c.buildJsonRequest(method, url, params)
 	req = c.addAuthHeader(req, method, "colls", "dbs/"+spec.DbName)
 	if spec.Ru > 0 {
-		req.Header.Set("X-Ms-Offer-Throughput", strconv.Itoa(spec.Ru))
+		req.Header.Set(restApiHeaderOfferThroughput, strconv.Itoa(spec.Ru))
 	}
 	if spec.MaxRu > 0 {
-		req.Header.Set("X-Ms-Cosmos-Offer-Autopilot-Settings", fmt.Sprintf(`{"maxThroughput":%d}`, spec.MaxRu))
+		req.Header.Set(restApiHeaderOfferAutopilotSettings, fmt.Sprintf(`{"maxThroughput":%d}`, spec.MaxRu))
 	}
 
 	resp := c.client.Do(req)
@@ -305,22 +306,22 @@ func (c *RestClient) ReplaceCollection(spec CollectionSpec) *RespReplaceColl {
 	url := c.endpoint + "/dbs/" + spec.DbName + "/colls/" + spec.CollName
 	params := map[string]interface{}{"id": spec.CollName}
 	if spec.PartitionKeyInfo != nil {
-		params["partitionKey"] = spec.PartitionKeyInfo
+		params[restApiParamPartitionKey] = spec.PartitionKeyInfo
 	}
 	if spec.IndexingPolicy != nil {
-		params["indexingPolicy"] = spec.IndexingPolicy
+		params[restApiParamIndexingPolicy] = spec.IndexingPolicy
 	}
 	// The unique index cannot be modified. To change the unique index, remove the collection and re-create a new one.
 	// if spec.UniqueKeyPolicy != nil {
-	// 	params["uniqueKeyPolicy"] = spec.UniqueKeyPolicy
+	// 	params[restApiParamUniqueKeyPolicy] = spec.UniqueKeyPolicy
 	// }
 	req := c.buildJsonRequest(method, url, params)
 	req = c.addAuthHeader(req, method, "colls", "dbs/"+spec.DbName+"/colls/"+spec.CollName)
 	if spec.Ru > 0 {
-		req.Header.Set("X-Ms-Offer-Throughput", strconv.Itoa(spec.Ru))
+		req.Header.Set(restApiHeaderOfferThroughput, strconv.Itoa(spec.Ru))
 	}
 	if spec.MaxRu > 0 {
-		req.Header.Set("X-Ms-Cosmos-Offer-Autopilot-Settings", fmt.Sprintf(`{"maxThroughput":%d}`, spec.MaxRu))
+		req.Header.Set(restApiHeaderOfferAutopilotSettings, fmt.Sprintf(`{"maxThroughput":%d}`, spec.MaxRu))
 	}
 
 	resp := c.client.Do(req)
@@ -420,20 +421,20 @@ func (c *RestClient) CreateDocument(spec DocumentSpec) *RespCreateDoc {
 	method := "POST"
 	url := c.endpoint + "/dbs/" + spec.DbName + "/colls/" + spec.CollName + "/docs"
 	if c.autoId {
-		if id, ok := spec.DocumentData["id"].(string); !ok || strings.TrimSpace(id) == "" {
-			spec.DocumentData["id"] = strings.ToLower(idGen.Id128Hex())
+		if id, ok := spec.DocumentData[docFieldId].(string); !ok || strings.TrimSpace(id) == "" {
+			spec.DocumentData[docFieldId] = strings.ToLower(idGen.Id128Hex())
 		}
 	}
 	req := c.buildJsonRequest(method, url, spec.DocumentData)
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+spec.DbName+"/colls/"+spec.CollName)
 	if spec.IsUpsert {
-		req.Header.Set("X-Ms-Documentdb-Is-Upsert", "true")
+		req.Header.Set(restApiHeaderIsUpsert, "true")
 	}
 	if spec.IndexingDirective != "" {
-		req.Header.Set("x-ms-indexing-directive", spec.IndexingDirective)
+		req.Header.Set(restApiHeaderIndexingDirective, spec.IndexingDirective)
 	}
 	jsPkValues, _ := json.Marshal(spec.PartitionKeyValues)
-	req.Header.Set("X-Ms-Documentdb-PartitionKey", string(jsPkValues))
+	req.Header.Set(restApiHeaderPartitionKey, string(jsPkValues))
 
 	resp := c.client.Do(req)
 	result := &RespCreateDoc{RestReponse: c.buildRestReponse(resp)}
@@ -447,16 +448,16 @@ func (c *RestClient) CreateDocument(spec DocumentSpec) *RespCreateDoc {
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/replace-a-document.
 func (c *RestClient) ReplaceDocument(matchEtag string, spec DocumentSpec) *RespReplaceDoc {
-	id, _ := spec.DocumentData["id"].(string)
+	id, _ := spec.DocumentData[docFieldId].(string)
 	method := "PUT"
 	url := c.endpoint + "/dbs/" + spec.DbName + "/colls/" + spec.CollName + "/docs/" + id
 	req := c.buildJsonRequest(method, url, spec.DocumentData)
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+spec.DbName+"/colls/"+spec.CollName+"/docs/"+id)
 	if matchEtag != "" {
-		req.Header.Set("If-Match", matchEtag)
+		req.Header.Set(httpHeaderIfMatch, matchEtag)
 	}
 	jsPkValues, _ := json.Marshal(spec.PartitionKeyValues)
-	req.Header.Set("X-Ms-Documentdb-PartitionKey", string(jsPkValues))
+	req.Header.Set(restApiHeaderPartitionKey, string(jsPkValues))
 
 	resp := c.client.Do(req)
 	result := &RespReplaceDoc{RestReponse: c.buildRestReponse(resp)}
@@ -485,15 +486,15 @@ func (c *RestClient) GetDocument(r DocReq) *RespGetDoc {
 	req := c.buildJsonRequest(method, url, nil)
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+r.DbName+"/colls/"+r.CollName+"/docs/"+r.DocId)
 	jsPkValues, _ := json.Marshal(r.PartitionKeyValues)
-	req.Header.Set("X-Ms-Documentdb-PartitionKey", string(jsPkValues))
+	req.Header.Set(restApiHeaderPartitionKey, string(jsPkValues))
 	if r.NotMatchEtag != "" {
-		req.Header.Set("If-None-Match", r.NotMatchEtag)
+		req.Header.Set(httpHeaderIfNoneMatch, r.NotMatchEtag)
 	}
 	if r.ConsistencyLevel != "" {
-		req.Header.Set("X-Ms-Consistency-Level", r.ConsistencyLevel)
+		req.Header.Set(restApiHeaderConsistencyLevel, r.ConsistencyLevel)
 	}
 	if r.SessionToken != "" {
-		req.Header.Set("X-Ms-Session-Token", r.SessionToken)
+		req.Header.Set(restApiHeaderSessionToken, r.SessionToken)
 	}
 
 	resp := c.client.Do(req)
@@ -513,9 +514,9 @@ func (c *RestClient) DeleteDocument(r DocReq) *RespDeleteDoc {
 	req := c.buildJsonRequest(method, url, nil)
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+r.DbName+"/colls/"+r.CollName+"/docs/"+r.DocId)
 	jsPkValues, _ := json.Marshal(r.PartitionKeyValues)
-	req.Header.Set("X-Ms-Documentdb-PartitionKey", string(jsPkValues))
+	req.Header.Set(restApiHeaderPartitionKey, string(jsPkValues))
 	if r.MatchEtag != "" {
-		req.Header.Set("If-Match", r.MatchEtag)
+		req.Header.Set(httpHeaderIfMatch, r.MatchEtag)
 	}
 
 	resp := c.client.Do(req)
@@ -535,21 +536,66 @@ type QueryReq struct {
 	SessionToken          string // string token used with session level consistency
 }
 
+func (c *RestClient) queryDocumentsForPkRange(baseReq *http.Request, pkRangeId string) *RespQueryDocs {
+	req := baseReq.Clone(baseReq.Context())
+	req.Header.Set(restApiHeaderPartitionKeyRangeId, pkRangeId)
+	var result *RespQueryDocs
+	for {
+		resp := c.client.Do(req)
+		tempResult := &RespQueryDocs{RestReponse: c.buildRestReponse(resp)}
+		if tempResult.CallErr == nil {
+			tempResult.ContinuationToken = tempResult.RespHeader[respHeaderContinuation]
+			tempResult.CallErr = json.Unmarshal(tempResult.RespBody, &tempResult)
+			tempResult.Count = int64(len(tempResult.Documents))
+		}
+		if result != nil {
+			tempResult.Count += result.Count
+			tempResult.RequestCharge += result.RequestCharge
+			tempResult.Documents = append(result.Documents, tempResult.Documents...)
+		}
+		result = tempResult
+		if result.CallErr != nil || tempResult.ContinuationToken == "" {
+			break
+		}
+		req.Header.Set(restApiHeaderContinuation, tempResult.ContinuationToken)
+	}
+	return result
+}
+
+func (c *RestClient) queryDocumentsCrossPartitions(query QueryReq, req *http.Request) *RespQueryDocs {
+	resultPkranges := c.GetPkranges(query.DbName, query.CollName)
+	if resultPkranges.Error() != nil {
+		return &RespQueryDocs{RestReponse: resultPkranges.RestReponse}
+	}
+	req.Header.Set(restApiHeaderEnableCrossPartitionQuery, "true")
+	req.Header.Set(restApiHeaderParallelizeCrossPartitionQuery, "true")
+	var result *RespQueryDocs
+	for _, pkrange := range resultPkranges.Pkranges {
+		tempResult := c.queryDocumentsForPkRange(req, pkrange.Id)
+		if result != nil {
+			tempResult.Count += result.Count
+			tempResult.RequestCharge += result.RequestCharge
+			tempResult.Documents = append(result.Documents, tempResult.Documents...)
+		}
+		result = tempResult
+		if result.CallErr != nil {
+			break
+		}
+	}
+	return result
+}
+
 // QueryDocuments invokes CosmosDB API to query a collection for documents.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/query-documents.
+//
+// TODO
+// - [x] (v0.1.7) simple cross-partition queries
+// - [x] (v0.1.7) simple cross-partition queries with paging
+// - [ ] cross-partition queries with ordering (+paging)
+// - [ ] cross-partition queries with group-by (+paging)
 func (c *RestClient) QueryDocuments(query QueryReq) *RespQueryDocs {
-	var resultPkranges *RespGetPkranges
-	if query.CrossPartitionEnabled {
-		resultPkranges = c.GetPkranges(query.DbName, query.CollName)
-		if resultPkranges.Error() != nil {
-			return &RespQueryDocs{RestReponse: resultPkranges.RestReponse}
-		}
-	}
-
-	method := "POST"
-	url := c.endpoint + "/dbs/" + query.DbName + "/colls/" + query.CollName + "/docs"
-
+	method, url := "POST", c.endpoint+"/dbs/"+query.DbName+"/colls/"+query.CollName+"/docs"
 	/*
 	 * M.A.I. 2022-02-16
 	 * In case of requests with no parameters the original form created a request with parameters set to nil. Apparently MS complaints about it.
@@ -557,40 +603,36 @@ func (c *RestClient) QueryDocuments(query QueryReq) *RespQueryDocs {
 	 * req := c.buildJsonRequest(method, url, map[string]interface{}{"query": query.Query, "parameters": query.Params})
 	 */
 	requestBody := make(map[string]interface{}, 0)
-	requestBody["query"] = query.Query
+	requestBody[restApiParamQuery] = query.Query
 	if query.Params != nil {
-		requestBody["parameters"] = query.Params
+		requestBody[restApiParamParameters] = query.Params
 	}
 	req := c.buildJsonRequest(method, url, requestBody)
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+query.DbName+"/colls/"+query.CollName)
-	req.Header.Set("Content-Type", "application/query+json")
-	req.Header.Set("X-Ms-Documentdb-Isquery", "true")
+	req.Header.Set(httpHeaderContentType, "application/query+json")
+	req.Header.Set(restApiHeaderIsQuery, "true")
 	if query.MaxItemCount > 0 {
-		req.Header.Set("X-Ms-Max-Item-Count", strconv.Itoa(query.MaxItemCount))
+		req.Header.Set(restApiHeaderPageSize, strconv.Itoa(query.MaxItemCount))
 	}
 	if query.ContinuationToken != "" {
-		req.Header.Set("X-Ms-Continuation", query.ContinuationToken)
-	}
-	if query.CrossPartitionEnabled {
-		req.Header.Set("X-Ms-Documentdb-Query-EnableCrossPartition", "true")
-		if len(resultPkranges.Pkranges) > 0 {
-			// TODO: what if there are 2 pk ranges or more?
-			req.Header.Set("X-Ms-Documentdb-Query-ParallelizeCrossPartitionQuery", "true")
-			req.Header.Set("X-Ms-Documentdb-PartitionkeyRangeid", resultPkranges.Pkranges[0].Id)
-		}
+		req.Header.Set(restApiHeaderContinuation, query.ContinuationToken)
 	}
 	if query.ConsistencyLevel != "" {
-		req.Header.Set("X-Ms-Consistency-Level", query.ConsistencyLevel)
+		req.Header.Set(restApiHeaderConsistencyLevel, query.ConsistencyLevel)
 	}
 	if query.SessionToken != "" {
-		req.Header.Set("X-Ms-Session-Token", query.SessionToken)
+		req.Header.Set(restApiHeaderSessionToken, query.SessionToken)
 	}
 
+	if query.CrossPartitionEnabled {
+		return c.queryDocumentsCrossPartitions(query, req)
+	}
 	resp := c.client.Do(req)
 	result := &RespQueryDocs{RestReponse: c.buildRestReponse(resp)}
 	if result.CallErr == nil {
-		result.ContinuationToken = result.RespHeader["X-MS-CONTINUATION"]
+		result.ContinuationToken = result.RespHeader[respHeaderContinuation]
 		result.CallErr = json.Unmarshal(result.RespBody, &result)
+		result.Count = int64(len(result.Documents))
 	}
 	return result
 }
@@ -615,29 +657,29 @@ func (c *RestClient) ListDocuments(r ListDocsReq) *RespListDocs {
 	req := c.buildJsonRequest(method, url, nil)
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+r.DbName+"/colls/"+r.CollName)
 	if r.MaxItemCount > 0 {
-		req.Header.Set("X-Ms-Max-Item-Count", strconv.Itoa(r.MaxItemCount))
+		req.Header.Set(restApiHeaderPageSize, strconv.Itoa(r.MaxItemCount))
 	}
 	if r.ContinuationToken != "" {
-		req.Header.Set("X-Ms-Continuation", r.ContinuationToken)
+		req.Header.Set(restApiHeaderContinuation, r.ContinuationToken)
 	}
 	if r.ConsistencyLevel != "" {
-		req.Header.Set("X-Ms-Consistency-Level", r.ConsistencyLevel)
+		req.Header.Set(restApiHeaderConsistencyLevel, r.ConsistencyLevel)
 	}
 	if r.SessionToken != "" {
-		req.Header.Set("X-Ms-Session-Token", r.SessionToken)
+		req.Header.Set(restApiHeaderSessionToken, r.SessionToken)
 	}
 	if r.NotMatchEtag != "" {
-		req.Header.Set("If-None-Match", r.NotMatchEtag)
+		req.Header.Set(httpHeaderIfNoneMatch, r.NotMatchEtag)
 	}
 	if r.PartitionKeyRangeId != "" {
-		req.Header.Set("X-Ms-Documentdb-PartitionKeyRangeId", r.PartitionKeyRangeId)
+		req.Header.Set(restApiHeaderPartitionKeyRangeId, r.PartitionKeyRangeId)
 	}
 
 	resp := c.client.Do(req)
 	result := &RespListDocs{RestReponse: c.buildRestReponse(resp)}
 	if result.CallErr == nil {
-		result.ContinuationToken = result.RespHeader["X-MS-CONTINUATION"]
-		result.Etag = result.RespHeader["ETAG"]
+		result.ContinuationToken = result.RespHeader[respHeaderContinuation]
+		result.Etag = result.RespHeader[respHeaderEtag]
 		result.CallErr = json.Unmarshal(result.RespBody, &result)
 	}
 	return result
@@ -670,13 +712,13 @@ func (c *RestClient) QueryOffers(query string) *RespQueryOffers {
 	url := c.endpoint + "/offers"
 	req := c.buildJsonRequest(method, url, map[string]interface{}{"query": query})
 	req = c.addAuthHeader(req, method, "offers", "")
-	req.Header.Set("Content-Type", "application/query+json")
-	req.Header.Set("X-Ms-Documentdb-Isquery", "true")
+	req.Header.Set(httpHeaderContentType, "application/query+json")
+	req.Header.Set(restApiHeaderIsQuery, "true")
 
 	resp := c.client.Do(req)
 	result := &RespQueryOffers{RestReponse: c.buildRestReponse(resp)}
 	if result.CallErr == nil {
-		result.ContinuationToken = result.RespHeader["X-MS-CONTINUATION"]
+		result.ContinuationToken = result.RespHeader[respHeaderContinuation]
 		result.CallErr = json.Unmarshal(result.RespBody, &result)
 	}
 	return result
@@ -691,7 +733,7 @@ func (c *RestClient) buildReplaceOfferContentAndHeaders(currentOffer OfferInfo, 
 	if ru > 0 && maxru <= 0 {
 		if currentOffer.IsAutopilot() {
 			// change from auto-pilot to manual provisioning
-			headers["X-Ms-Cosmos-Migrate-Offer-To-Manual-Throughput"] = "true"
+			headers[restApiHeaderMigrateToManualThroughput] = "true"
 			return contentDisableAutopilotThroughput, headers
 		}
 		return contentManualThroughput, headers
@@ -699,15 +741,15 @@ func (c *RestClient) buildReplaceOfferContentAndHeaders(currentOffer OfferInfo, 
 	if ru <= 0 && maxru > 0 {
 		if !currentOffer.IsAutopilot() {
 			// change from manual to auto-pilot provisioning
-			headers["X-Ms-Cosmos-Migrate-Offer-To-Autopilot"] = "true"
+			headers[restApiHeaderMigrateToAutopilotThroughput] = "true"
 			return contentDisableManualThroughput, headers
 		}
 		return contentAutopilotThroughput, headers
 	}
 	// if we reach here, ru<=0 and maxru<=0
 	if !currentOffer.IsAutopilot() {
-		// change from auto-pilot to manual provisioning
-		headers["X-Ms-Cosmos-Migrate-Offer-To-Autopilot"] = "true"
+		// change from manual to auto-pilot provisioning
+		headers[restApiHeaderMigrateToAutopilotThroughput] = "true"
 		return contentDisableManualThroughput, headers
 	}
 	return nil, headers
@@ -745,7 +787,7 @@ func (c *RestClient) ReplaceOfferForResource(rid string, ru, maxru int) *RespRep
 		if content == nil {
 			return &RespReplaceOffer{RestReponse: getResult.RestReponse, OfferInfo: getResult.OfferInfo}
 		}
-		params["content"] = content
+		params[restApiParamContent] = content
 		req := c.buildJsonRequest(method, url, params)
 		/*
 		 * [btnguyen2k] 2022-02-16
@@ -760,7 +802,7 @@ func (c *RestClient) ReplaceOfferForResource(rid string, ru, maxru int) *RespRep
 		resp := c.client.Do(req)
 		result := &RespReplaceOffer{RestReponse: c.buildRestReponse(resp)}
 		if result.CallErr == nil {
-			if (headers["X-Ms-Cosmos-Migrate-Offer-To-Autopilot"] == "true" && maxru > 0) || (headers["X-Ms-Cosmos-Migrate-Offer-To-Manual-Throughput"] == "true" && ru > 0) {
+			if (headers[restApiHeaderMigrateToAutopilotThroughput] == "true" && maxru > 0) || (headers[restApiHeaderMigrateToManualThroughput] == "true" && ru > 0) {
 				return c.ReplaceOfferForResource(rid, ru, maxru)
 			}
 			result.CallErr = json.Unmarshal(result.RespBody, &result.OfferInfo)
