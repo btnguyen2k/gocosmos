@@ -3,5 +3,5 @@ package gocosmos
 
 const (
 	// Version of package gocosmos.
-	Version = "0.1.7"
+	Version = "0.1.8"
 )

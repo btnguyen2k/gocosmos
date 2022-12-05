@@ -1,5 +1,12 @@
 # gocosmos release notes
 
+## 2022-12-02 - v0.1.8
+
+- REST client: rewrite `RestClient.QueryDocuments`. TODO:
+  - [x] (v0.1.7+) simple cross-partition queries (+paging)
+  - [-] cross-partition queries with ordering (+paging) / partial supported if number of pkrange == 1
+  - [-] cross-partition queries with group-by (+paging) / partial supported if number of pkrange == 1
+
 ## 2022-12-02 - v0.1.7
 
 - REST client: fix a bug where function `QueryDocuments` does not return all documents if the query is cross-partition.
