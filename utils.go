@@ -22,8 +22,11 @@ const (
 	restApiHeaderEnableCrossPartitionQuery      = "x-ms-documentdb-query-enablecrosspartition"
 	restApiHeaderParallelizeCrossPartitionQuery = "x-ms-documentdb-query-parallelizecrosspartitionquery"
 	restApiHeaderIsQuery                        = "x-ms-documentdb-isquery"
+	restApiHeaderIsQueryPlanRequest             = "x-ms-cosmos-is-query-plan-request"
 	restApiHeaderMigrateToManualThroughput      = "x-ms-cosmos-migrate-offer-to-manual-throughput"
 	restApiHeaderMigrateToAutopilotThroughput   = "x-ms-cosmos-migrate-offer-to-autopilot"
+	restApiHeaderSupportedQueryFeatures         = "x-ms-cosmos-supported-query-features"
+	restApiHeaderPopulateMetrics                = "x-ms-documentdb-populatequerymetrics"
 
 	restApiParamIndexingPolicy  = "indexingPolicy"
 	restApiParamUniqueKeyPolicy = "uniqueKeyPolicy"
