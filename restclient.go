@@ -541,32 +541,6 @@ type QueryReq struct {
 	SessionToken          string // string token used with session level consistency
 }
 
-// func (c *RestClient) queryDocumentsForPkRange(baseReq *http.Request, pkRangeId string) *RespQueryDocs {
-// 	req := baseReq.Clone(baseReq.Context())
-// 	req.Header.Set(restApiHeaderPartitionKeyRangeId, pkRangeId)
-// 	var result *RespQueryDocs
-// 	for {
-// 		resp := c.client.Do(req)
-// 		tempResult := &RespQueryDocs{RestReponse: c.buildRestReponse(resp)}
-// 		if tempResult.CallErr == nil {
-// 			tempResult.ContinuationToken = tempResult.RespHeader[respHeaderContinuation]
-// 			tempResult.CallErr = json.Unmarshal(tempResult.RespBody, &tempResult)
-// 			tempResult.Count = int64(len(tempResult.Documents))
-// 		}
-// 		if result != nil {
-// 			tempResult.Count += result.Count
-// 			tempResult.RequestCharge += result.RequestCharge
-// 			tempResult.Documents = append(result.Documents, tempResult.Documents...)
-// 		}
-// 		result = tempResult
-// 		if result.CallErr != nil || tempResult.ContinuationToken == "" {
-// 			break
-// 		}
-// 		req.Header.Set(restApiHeaderContinuation, tempResult.ContinuationToken)
-// 	}
-// 	return result
-// }
-
 func (c *RestClient) buildQueryRequest(query QueryReq) *http.Request {
 	method, url := "POST", c.endpoint+"/dbs/"+query.DbName+"/colls/"+query.CollName+"/docs"
 	requestBody := make(map[string]interface{}, 0)
@@ -602,6 +576,10 @@ func (c *RestClient) buildQueryRequest(query QueryReq) *http.Request {
 
 // queryAndMergeCrossPartitions queries documents from multiple partition-range-ids, then merges them to built the final result.
 func (c *RestClient) queryAndMergeCrossPartitions(query QueryReq, pkranges *RespGetPkranges, queryPlan *RespQueryPlan) *RespQueryDocs {
+	queryRewritten := queryPlan.QueryInfo.RewrittenQuery != ""
+	if queryRewritten {
+		query.Query = queryPlan.QueryInfo.RewrittenQuery
+	}
 	var result *RespQueryDocs
 	for _, pkrange := range pkranges.Pkranges {
 		query.PkRangeId = pkrange.Id
@@ -612,13 +590,22 @@ func (c *RestClient) queryAndMergeCrossPartitions(query QueryReq, pkranges *Resp
 		if result == nil {
 			result = pkresult
 		} else {
-			if queryPlan.QueryInfo.DistinctType != "None" {
-				result = result.MergeDistinct(pkresult)
+			if queryPlan.IsDistinctQuery() {
+				result = result.MergeDistinct(queryPlan, pkresult)
+			}
+			if queryPlan.IsGroupByQuery() {
+				result = result.MergeGroupBy(queryPlan, pkresult)
 			}
 		}
 		if query.MaxItemCount > 0 && result.Count >= query.MaxItemCount {
 			// honor MaxItemCount setting
 			break
+		}
+	}
+	if queryRewritten && queryPlan.IsGroupByQuery() {
+		flattenDocs := result.Documents.FlattenGroupBy(queryPlan)
+		for i := range result.Documents {
+			result.Documents[i] = flattenDocs[i]
 		}
 	}
 	return result
@@ -1037,11 +1024,38 @@ type QueriesDocs []interface{}
 func (docs QueriesDocs) AsDocInfoSlice() []DocInfo {
 	result := make([]DocInfo, len(docs))
 	for i, doc := range docs {
-		if docInfo, ok := doc.(map[string]interface{}); ok {
+		switch docInfo := doc.(type) {
+		case DocInfo:
 			result[i] = docInfo
-		} else {
+		case map[string]interface{}:
+			result[i] = docInfo
+		default:
 			return nil
 		}
+	}
+	return result
+}
+
+// FlattenGroupBy transforms result from a rewritten group-by query to []DocInfo.
+func (docs QueriesDocs) FlattenGroupBy(queryPlan *RespQueryPlan) []DocInfo {
+	result := make([]DocInfo, len(docs))
+	for i, doc := range docs.AsDocInfoSlice() {
+		payload := doc["payload"].(map[string]interface{})
+		docDest := DocInfo{}
+		for k, v := range queryPlan.QueryInfo.GroupByAliasToAggregateType {
+			docDest[k] = payload[k]
+			if strings.ToUpper(v) == "AVERAGE" {
+				docDest[k] = 0.0
+				count, _ := reddo.ToFloat(payload[k].(map[string]interface{})["item"].(map[string]interface{})["count"])
+				if count != 0.0 {
+					sum, _ := reddo.ToFloat(payload[k].(map[string]interface{})["item"].(map[string]interface{})["sum"])
+					docDest[k] = sum / count
+				}
+			} else if v != "" {
+				docDest[k] = payload[k].(map[string]interface{})["item"]
+			}
+		}
+		result[i] = docDest
 	}
 	return result
 }
@@ -1172,11 +1186,12 @@ type RespQueryDocs struct {
 // MergeDistinct merges result from another "SELECT DISTINCT" query.
 //
 // Available since v0.1.9
-func (r *RespQueryDocs) MergeDistinct(other *RespQueryDocs) *RespQueryDocs {
+func (r *RespQueryDocs) MergeDistinct(_ *RespQueryPlan, other *RespQueryDocs) *RespQueryDocs {
+	r.RequestCharge += other.RequestCharge
+
+	itemSet := make(map[string]bool)
 	// CRC32 + MD5 hashing is fast (is MD5 + SHA1 better?)
 	hf1, hf2 := checksum.Crc32HashFunc, checksum.Md5HashFunc
-	r.RequestCharge += other.RequestCharge
-	itemSet := make(map[string]bool)
 	for _, doc := range r.Documents {
 		key := fmt.Sprintf("%x:%x", checksum.Checksum(hf1, doc), checksum.Checksum(hf2, doc))
 		itemSet[key] = true
@@ -1186,6 +1201,63 @@ func (r *RespQueryDocs) MergeDistinct(other *RespQueryDocs) *RespQueryDocs {
 		key := fmt.Sprintf("%x:%x", checksum.Checksum(hf1, otherDoc), checksum.Checksum(hf2, otherDoc))
 		if !itemSet[key] {
 			itemSet[key] = true
+			r.Documents = append(r.Documents, otherDoc)
+			r.Count++
+		}
+	}
+	return r
+}
+
+// MergeGroupBy merges result from another "SELECT ... GROUP BY" query.
+//
+// This function assumes the rewritten query was executed and each returned document has the following structure: `{"groupByItems": [...], payload: {...}}`.
+//
+// Available since v0.1.9
+func (r *RespQueryDocs) MergeGroupBy(queryPlan *RespQueryPlan, other *RespQueryDocs) *RespQueryDocs {
+	r.RequestCharge += other.RequestCharge
+	for _, otherDoc := range other.Documents.AsDocInfoSlice() {
+		merged := false
+		for _, myDoc := range r.Documents.AsDocInfoSlice() {
+			if reflect.DeepEqual(myDoc["groupByItems"], otherDoc["groupByItems"]) {
+				myPayload := myDoc["payload"].(map[string]interface{})
+				otherPayload := otherDoc["payload"].(map[string]interface{})
+				for k, v := range queryPlan.QueryInfo.GroupByAliasToAggregateType {
+					v = strings.ToUpper(v)
+					switch v {
+					case "COUNT":
+						myVal, _ := reddo.ToInt(myPayload[k].(map[string]interface{})["item"])
+						otherVal, _ := reddo.ToInt(otherPayload[k].(map[string]interface{})["item"])
+						myPayload[k].(map[string]interface{})["item"] = myVal + otherVal
+						myDoc["payload"] = myPayload
+					case "SUM":
+						myVal, _ := reddo.ToFloat(myPayload[k].(map[string]interface{})["item"])
+						otherVal, _ := reddo.ToFloat(otherPayload[k].(map[string]interface{})["item"])
+						myPayload[k].(map[string]interface{})["item"] = myVal + otherVal
+						myDoc["payload"] = myPayload
+					case "MAX", "MIN":
+						myVal, _ := reddo.ToFloat(myPayload[k].(map[string]interface{})["item"])
+						otherVal, _ := reddo.ToFloat(otherPayload[k].(map[string]interface{})["item"])
+						if v == "MAX" && otherVal > myVal {
+							myPayload[k].(map[string]interface{})["item"] = otherVal
+							myDoc["payload"] = myPayload
+						} else if v == "MIN" && otherVal < myVal {
+							myPayload[k].(map[string]interface{})["item"] = otherVal
+							myDoc["payload"] = myPayload
+						}
+					case "AVERAGE":
+						mySum, _ := reddo.ToFloat(myPayload[k].(map[string]interface{})["item"].(map[string]interface{})["sum"])
+						myCount, _ := reddo.ToInt(myPayload[k].(map[string]interface{})["item"].(map[string]interface{})["count"])
+						otherSum, _ := reddo.ToFloat(otherPayload[k].(map[string]interface{})["item"].(map[string]interface{})["sum"])
+						otherCount, _ := reddo.ToInt(otherPayload[k].(map[string]interface{})["item"].(map[string]interface{})["count"])
+						myPayload[k].(map[string]interface{})["item"] = map[string]interface{}{"sum": mySum + otherSum, "count": myCount + otherCount}
+						myDoc["payload"] = myPayload
+					}
+				}
+				merged = true
+				break
+			}
+		}
+		if !merged {
 			r.Documents = append(r.Documents, otherDoc)
 			r.Count++
 		}
@@ -1218,6 +1290,20 @@ type RespQueryPlan struct {
 		HasSelectValue              bool              `json:"hasSelectValue"`
 		DCountInfo                  typDCountInfo     `json:"dCountInfo"`
 	} `json:"queryInfo"`
+}
+
+// IsDistinctQuery tests if duplicates are eliminated in the query's projection.
+//
+// Available v0.1.9
+func (qp *RespQueryPlan) IsDistinctQuery() bool {
+	return strings.ToUpper(qp.QueryInfo.DistinctType) != "NONE"
+}
+
+// IsGroupByQuery tests if "group-by" aggregation is in the query's projection.
+//
+// Available v0.1.9
+func (qp *RespQueryPlan) IsGroupByQuery() bool {
+	return len(qp.QueryInfo.GroupByAliasToAggregateType) > 0
 }
 
 // RespListDocs captures the response from ListDocuments call.

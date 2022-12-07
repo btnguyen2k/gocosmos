@@ -1344,7 +1344,7 @@ func _testRestClientQueryPlan(t *testing.T, testName string, client *RestClient,
 		{name: "GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "sum", rewrittenSql: true},
 		{name: "GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "min", rewrittenSql: true},
 		{name: "GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "max", rewrittenSql: true},
-		{name: "GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "avg", rewrittenSql: true},
+		{name: "GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "average", rewrittenSql: true},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -1442,6 +1442,9 @@ func _verifyDistinct(t *testing.T, testName string, testCase queryTestCase, quer
 	if testCase.distinctQuery == 0 {
 		return
 	}
+	if len(queryResult.Documents) == 0 {
+		t.Fatalf("%s failed: empty query result", testName)
+	}
 	finalSet := make(map[string]bool)
 	for _, doc := range queryResult.Documents {
 		js, _ := json.Marshal(doc)
@@ -1456,13 +1459,17 @@ func _verifyOrderBy(t *testing.T, testName string, testCase queryTestCase, query
 	if !testCase.withOrder {
 		return
 	}
+	docList := queryResult.Documents.AsDocInfoSlice()
+	if len(docList) == 0 {
+		t.Fatalf("%s failed: empty/invalid query result", testName)
+	}
 	var prevDoc DocInfo
-	for _, doc := range queryResult.Documents.AsDocInfoSlice() {
+	for _, doc := range docList {
 		if prevDoc != nil {
 			pv := prevDoc.GetAttrAsTypeUnsafe("grade", reddo.TypeInt).(int64)
 			pc := doc.GetAttrAsTypeUnsafe("grade", reddo.TypeInt).(int64)
 			odir := strings.ToUpper(testCase.orderDirection)
-			if (odir == "DESC" && pv < pc) || (odir != "DESC" && pv > pc) {
+			if (odir == "DESC" && pv < pc) || pv > pc {
 				t.Fatalf("%s failed: out of order {id: %#v, grade: %#v} -> {id: %#v, grade: %#v}", testName, prevDoc.Id(), pv, doc.Id(), pc)
 			}
 		}
@@ -1475,6 +1482,8 @@ func _verifyGroupBy(t *testing.T, testName string, testCase queryTestCase, parti
 		return
 	}
 
+	countPerCat, sumPerCat := make(map[int]int), make(map[int]int)
+	minPerCat, maxPerCat := make(map[int]int), make(map[int]int)
 	countPerPartitionPerCat, sumPerPartitionPerCat := make(map[string]map[int]int), make(map[string]map[int]int)
 	minPerPartitionPerCat, maxPerPartitionPerCat := make(map[string]map[int]int), make(map[string]map[int]int)
 	for i := 0; i < numLogicalPartitions; i++ {
@@ -1488,6 +1497,16 @@ func _verifyGroupBy(t *testing.T, testName string, testCase queryTestCase, parti
 			username := docInfo.GetAttrAsTypeUnsafe("username", reddo.TypeString).(string)
 			category := docInfo.GetAttrAsTypeUnsafe("category", reddo.TypeInt).(int64)
 			grade := docInfo.GetAttrAsTypeUnsafe("grade", reddo.TypeInt).(int64)
+
+			countPerCat[int(category)]++
+			sumPerCat[int(category)] += int(grade)
+			if minPerCat[int(category)] == 0 || minPerCat[int(category)] > int(grade) {
+				minPerCat[int(category)] = int(grade)
+			}
+			if maxPerCat[int(category)] < int(grade) {
+				maxPerCat[int(category)] = int(grade)
+			}
+
 			countPerPartitionPerCat[username][int(category)]++
 			sumPerPartitionPerCat[username][int(category)] += int(grade)
 			if minPerPartitionPerCat[username][int(category)] == 0 || minPerPartitionPerCat[username][int(category)] > int(grade) {
@@ -1499,28 +1518,51 @@ func _verifyGroupBy(t *testing.T, testName string, testCase queryTestCase, parti
 		}
 	}
 
-	for _, doc := range queryResult.Documents.AsDocInfoSlice() {
+	docList := queryResult.Documents.AsDocInfoSlice()
+	if len(docList) == 0 {
+		t.Fatalf("%s failed: empty/invalid query result", testName)
+	}
+	for _, doc := range docList {
 		category := doc.GetAttrAsTypeUnsafe("Category", reddo.TypeInt).(int64)
 		value := doc.GetAttrAsTypeUnsafe("Value", reddo.TypeInt).(int64)
 		switch strings.ToUpper(testCase.groupBy) {
 		case "COUNT":
-			if expected := countPerPartitionPerCat[partition][int(category)]; int(value) != expected {
+			expected := countPerCat[int(category)]
+			if partition != "" {
+				expected = countPerPartitionPerCat[partition][int(category)]
+			}
+			if int(value) != expected {
 				t.Fatalf("%s failed: <group-by aggregation %#v> expected %#v but received  %#v", testName, testCase.groupBy, expected, value)
 			}
 		case "SUM":
-			if expected := sumPerPartitionPerCat[partition][int(category)]; int(value) != expected {
+			expected := sumPerCat[int(category)]
+			if partition != "" {
+				expected = sumPerPartitionPerCat[partition][int(category)]
+			}
+			if int(value) != expected {
 				t.Fatalf("%s failed: <group-by aggregation %#v> expected %#v but received  %#v", testName, testCase.groupBy, expected, value)
 			}
 		case "MIN":
-			if expected := minPerPartitionPerCat[partition][int(category)]; int(value) != expected {
+			expected := minPerCat[int(category)]
+			if partition != "" {
+				expected = minPerPartitionPerCat[partition][int(category)]
+			}
+			if int(value) != expected {
 				t.Fatalf("%s failed: <group-by aggregation %#v> expected %#v but received  %#v", testName, testCase.groupBy, expected, value)
 			}
 		case "MAX":
-			if expected := maxPerPartitionPerCat[partition][int(category)]; int(value) != expected {
+			expected := maxPerCat[int(category)]
+			if partition != "" {
+				expected = maxPerPartitionPerCat[partition][int(category)]
+			}
+			if int(value) != expected {
 				t.Fatalf("%s failed: <group-by aggregation %#v> expected %#v but received  %#v", testName, testCase.groupBy, expected, value)
 			}
-		case "AVG":
-			expected := sumPerPartitionPerCat[partition][int(category)] / countPerPartitionPerCat[partition][int(category)]
+		case "AVG", "AVERAGE":
+			expected := sumPerCat[int(category)] / countPerCat[int(category)]
+			if partition != "" {
+				expected = sumPerPartitionPerCat[partition][int(category)] / countPerPartitionPerCat[partition][int(category)]
+			}
 			if int(value) != expected {
 				t.Fatalf("%s failed: <group-by aggregation %#v> expected %#v but received  %#v", testName, testCase.groupBy, expected, value)
 			}
@@ -1530,16 +1572,22 @@ func _verifyGroupBy(t *testing.T, testName string, testCase queryTestCase, parti
 	}
 }
 
-func _testRestClientQueryDocumentsPkValue(t *testing.T, testName string, client *RestClient, dbname, collname string) {
-	low, high := 123, 987
+func _countPerPartition(low, high int, dataList []DocInfo) map[string]int {
 	lowStr, highStr := fmt.Sprintf("%05d", low), fmt.Sprintf("%05d", high)
-	countPerPartition := make(map[string]int)
+	result := make(map[string]int)
 	for _, docInfo := range dataList {
 		if lowStr <= docInfo.Id() && docInfo.Id() < highStr {
 			username := docInfo.GetAttrAsTypeUnsafe("username", reddo.TypeString).(string)
-			countPerPartition[username]++
+			result[username]++
 		}
 	}
+	return result
+}
+
+func _testRestClientQueryDocumentsPkValue(t *testing.T, testName string, client *RestClient, dbname, collname string) {
+	low, high := 123, 987
+	lowStr, highStr := fmt.Sprintf("%05d", low), fmt.Sprintf("%05d", high)
+	countPerPartition := _countPerPartition(low, high, dataList)
 	var testCases = []queryTestCase{
 		{name: "NoLimit_Bare", query: "SELECT * FROM c WHERE @low<=c.id AND c.id<@high"},
 		{name: "Limit_Bare", query: "SELECT * FROM c WHERE @low<=c.id AND c.id<@high", maxItemCount: 7},
@@ -1553,7 +1601,7 @@ func _testRestClientQueryDocumentsPkValue(t *testing.T, testName string, client 
 		{name: "NoLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "sum"},
 		{name: "NoLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "min"},
 		{name: "NoLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "max"},
-		{name: "NoLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "avg"},
+		{name: "NoLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "average"},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -1563,23 +1611,17 @@ func _testRestClientQueryDocumentsPkValue(t *testing.T, testName string, client 
 					map[string]interface{}{"name": "@high", "value": highStr},
 				},
 			}
-			totalExpected := high - low
 			if testCase.maxItemCount > 0 {
 				query.MaxItemCount = testCase.maxItemCount
-				totalExpected = numLogicalPartitions * testCase.maxItemCount
-			} else if testCase.distinctQuery != 0 {
-				totalExpected = numLogicalPartitions * testCase.numDistincts
 			}
-			totalItems := 0
 			for i := 0; i < numLogicalPartitions; i++ {
 				username := "user" + strconv.Itoa(i)
 				query.PkValue = username
 				expected := testCase.maxItemCount
 				if testCase.maxItemCount <= 0 {
+					expected = countPerPartition[username]
 					if testCase.distinctQuery != 0 {
 						expected = testCase.numDistincts
-					} else {
-						expected = countPerPartition[username]
 					}
 				}
 				if testCase.withGroupBy {
@@ -1592,13 +1634,9 @@ func _testRestClientQueryDocumentsPkValue(t *testing.T, testName string, client 
 				if len(result.Documents) != expected || result.Count != expected {
 					t.Fatalf("%s failed: <num-document> expected %#v but received (len: %#v / count: %#v)", testName+"/"+testCase.name+"/Query/pk="+username, expected, len(result.Documents), result.Count)
 				}
-				totalItems += result.Count
 				_verifyDistinct(t, testName+"/"+testCase.name+"/Query/pk="+username, testCase, result)
 				_verifyOrderBy(t, testName+"/"+testCase.name+"/Query/pk="+username, testCase, result)
 				_verifyGroupBy(t, testName+"/"+testCase.name+"/Query/pk="+username, testCase, username, lowStr, highStr, result)
-			}
-			if !testCase.withGroupBy && totalItems != totalExpected {
-				t.Fatalf("%s failed: <total-num-document> expected %#v but received  %#v", testName+"/"+testCase.name+"/Query", totalExpected, totalItems)
 			}
 		})
 	}
@@ -1671,9 +1709,6 @@ func _testRestClientQueryDocumentsPkrangeid(t *testing.T, testName string, clien
 				if result.Error() != nil {
 					t.Fatalf("%s failed: %s", testName+"/"+testCase.name+"/Query/pkrangeid="+pkrange.Id, result.Error())
 				}
-				if expected := testCase.maxItemCount; expected > 0 && (result.Count != expected || len(result.Documents) != expected) {
-					t.Fatalf("%s failed: <num-document> expected %#v but received (len: %#v / count: %#v)", testName+"/"+testCase.name+"/Query/pkrangeid="+pkrange.Id, expected, len(result.Documents), result.Count)
-				}
 				totalItems += result.Count
 				_verifyDistinct(t, testName+"/"+testCase.name+"/Query/pkrangeid="+pkrange.Id, testCase, result)
 				_verifyOrderBy(t, testName+"/"+testCase.name+"/Query/pkrangeid="+pkrange.Id, testCase, result)
@@ -1729,11 +1764,11 @@ func _testRestClientQueryDocumentsCrossPartition(t *testing.T, testName string, 
 		{name: "Limit_DistinctDoc", query: "SELECT DISTINCT c.username FROM c", distinctQuery: -1, maxItemCount: numLogicalPartitions/2 + 1},
 		// {name: "NoLimit_OrderAsc", query: "SELECT * FROM c WHERE @low<=c.id AND c.id<@high ORDER BY c.grade", withOrder: true, orderDirection: "asc"},
 		// {name: "Limit_OrderDesc", query: "SELECT * FROM c WHERE @low<=c.id AND c.id<@high ORDER BY c.grade DESC", maxItemCount: 11, withOrder: true, orderDirection: "desc"},
-		// {name: "NoLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "count"},
-		// {name: "NoLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "sum"},
-		// {name: "NoLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "min"},
-		// {name: "NoLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "max"},
-		// {name: "NoLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "avg"},
+		{name: "NoLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "count"},
+		{name: "NoLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "sum"},
+		{name: "NoLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "min"},
+		{name: "NoLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "max"},
+		{name: "NoLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "average"},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -1750,6 +1785,9 @@ func _testRestClientQueryDocumentsCrossPartition(t *testing.T, testName string, 
 			} else if testCase.distinctQuery != 0 {
 				expected = testCase.numDistincts
 			}
+			if testCase.withGroupBy {
+				expected = numCategories
+			}
 			result := client.QueryDocuments(query)
 			if result.Error() != nil {
 				t.Fatalf("%s failed: %s", testName+"/"+testCase.name+"/Query", result.Error())
@@ -1758,20 +1796,8 @@ func _testRestClientQueryDocumentsCrossPartition(t *testing.T, testName string, 
 				t.Fatalf("%s failed: <num-document> expected %#v but received (len: %#v / count: %#v)", testName+"/"+testCase.name+"/Query", expected, len(result.Documents), result.Count)
 			}
 			_verifyDistinct(t, testName+"/"+testCase.name+"/Query", testCase, result)
-			// if testCase.withOrder {
-			// 	var prevDoc DocInfo
-			// 	for _, doc := range result.Documents.AsDocInfoSlice() {
-			// 		if prevDoc != nil {
-			// 			pv := prevDoc.GetAttrAsTypeUnsafe("grade", reddo.TypeInt).(int64)
-			// 			pc := doc.GetAttrAsTypeUnsafe("grade", reddo.TypeInt).(int64)
-			// 			odir := strings.ToUpper(testCase.orderDirection)
-			// 			if (odir == "DESC" && pv < pc) || (odir != "DESC" && pv > pc) {
-			// 				t.Fatalf("%s failed: out of order {id: %#v, grade: %#v} -> {id: %#v, grade: %#v}", testName+"/"+testCase.name+"/Query", prevDoc.Id(), pv, doc.Id(), pc)
-			// 			}
-			// 		}
-			// 		prevDoc = doc
-			// 	}
-			// }
+			_verifyOrderBy(t, testName, testCase, result)
+			_verifyGroupBy(t, testName, testCase, "", lowStr, highStr, result)
 		})
 	}
 }
