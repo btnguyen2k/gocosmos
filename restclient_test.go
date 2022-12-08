@@ -1469,7 +1469,7 @@ func _verifyOrderBy(t *testing.T, testName string, testCase queryTestCase, query
 			pv := prevDoc.GetAttrAsTypeUnsafe("grade", reddo.TypeInt).(int64)
 			pc := doc.GetAttrAsTypeUnsafe("grade", reddo.TypeInt).(int64)
 			odir := strings.ToUpper(testCase.orderDirection)
-			if (odir == "DESC" && pv < pc) || pv > pc {
+			if (odir == "DESC" && pv < pc) || (odir != "DESC" && pv > pc) {
 				t.Fatalf("%s failed: out of order {id: %#v, grade: %#v} -> {id: %#v, grade: %#v}", testName, prevDoc.Id(), pv, doc.Id(), pc)
 			}
 		}
@@ -1762,8 +1762,8 @@ func _testRestClientQueryDocumentsCrossPartition(t *testing.T, testName string, 
 		{name: "NoLimit_DistinctDoc", query: "SELECT DISTINCT c.username FROM c", distinctQuery: -1, numDistincts: numLogicalPartitions},
 		{name: "Limit_DistinctValue", query: "SELECT DISTINCT VALUE c.category FROM c", distinctQuery: 1, maxItemCount: numCategories/2 + 1},
 		{name: "Limit_DistinctDoc", query: "SELECT DISTINCT c.username FROM c", distinctQuery: -1, maxItemCount: numLogicalPartitions/2 + 1},
-		// {name: "NoLimit_OrderAsc", query: "SELECT * FROM c WHERE @low<=c.id AND c.id<@high ORDER BY c.grade", withOrder: true, orderDirection: "asc"},
-		// {name: "Limit_OrderDesc", query: "SELECT * FROM c WHERE @low<=c.id AND c.id<@high ORDER BY c.grade DESC", maxItemCount: 11, withOrder: true, orderDirection: "desc"},
+		{name: "NoLimit_OrderAsc", query: "SELECT * FROM c WHERE @low<=c.id AND c.id<@high ORDER BY c.grade", withOrder: true, orderDirection: "asc"},
+		{name: "Limit_OrderDesc", query: "SELECT * FROM c WHERE @low<=c.id AND c.id<@high ORDER BY c.grade DESC", maxItemCount: 11, withOrder: true, orderDirection: "desc"},
 		{name: "NoLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "count"},
 		{name: "NoLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "sum"},
 		{name: "NoLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "min"},

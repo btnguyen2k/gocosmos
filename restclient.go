@@ -578,7 +578,7 @@ func (c *RestClient) buildQueryRequest(query QueryReq) *http.Request {
 func (c *RestClient) queryAndMergeCrossPartitions(query QueryReq, pkranges *RespGetPkranges, queryPlan *RespQueryPlan) *RespQueryDocs {
 	queryRewritten := queryPlan.QueryInfo.RewrittenQuery != ""
 	if queryRewritten {
-		query.Query = queryPlan.QueryInfo.RewrittenQuery
+		query.Query = strings.ReplaceAll(queryPlan.QueryInfo.RewrittenQuery, "{documentdb-formattableorderbyquery-filter}", "true")
 	}
 	var result *RespQueryDocs
 	for _, pkrange := range pkranges.Pkranges {
@@ -596,16 +596,26 @@ func (c *RestClient) queryAndMergeCrossPartitions(query QueryReq, pkranges *Resp
 			if queryPlan.IsGroupByQuery() {
 				result = result.MergeGroupBy(queryPlan, pkresult)
 			}
+			if queryPlan.IsOrderByQuery() {
+				result = result.MergeOrderBy(queryPlan, pkresult)
+			}
 		}
 		if query.MaxItemCount > 0 && result.Count >= query.MaxItemCount {
 			// honor MaxItemCount setting
 			break
 		}
 	}
-	if queryRewritten && queryPlan.IsGroupByQuery() {
-		flattenDocs := result.Documents.FlattenGroupBy(queryPlan)
-		for i := range result.Documents {
-			result.Documents[i] = flattenDocs[i]
+	if queryRewritten {
+		if queryPlan.IsGroupByQuery() {
+			flattenDocs := result.Documents.FlattenGroupBy(queryPlan)
+			for i := range result.Documents {
+				result.Documents[i] = flattenDocs[i]
+			}
+		} else if queryPlan.IsOrderByQuery() {
+			flattenDocs := result.Documents.FlattenOrderBy(queryPlan)
+			for i := range result.Documents {
+				result.Documents[i] = flattenDocs[i]
+			}
 		}
 	}
 	return result
@@ -1036,6 +1046,15 @@ func (docs QueriesDocs) AsDocInfoSlice() []DocInfo {
 	return result
 }
 
+// FlattenOrderBy transforms result from a rewritten order-by query to []DocInfo.
+func (docs QueriesDocs) FlattenOrderBy(queryPlan *RespQueryPlan) []DocInfo {
+	result := make([]DocInfo, len(docs))
+	for i, doc := range docs.AsDocInfoSlice() {
+		result[i] = doc["payload"].(map[string]interface{})
+	}
+	return result
+}
+
 // FlattenGroupBy transforms result from a rewritten group-by query to []DocInfo.
 func (docs QueriesDocs) FlattenGroupBy(queryPlan *RespQueryPlan) []DocInfo {
 	result := make([]DocInfo, len(docs))
@@ -1265,6 +1284,43 @@ func (r *RespQueryDocs) MergeGroupBy(queryPlan *RespQueryPlan, other *RespQueryD
 	return r
 }
 
+// MergeOrderBy merges result from another "SELECT ... ORDER BY" query.
+//
+// This function assumes the rewritten query was executed and each returned document has the following structure: `{"orderByItems": [...], payload: {...}}`.
+//
+// Available since v0.1.9
+func (r *RespQueryDocs) MergeOrderBy(queryPlan *RespQueryPlan, other *RespQueryDocs) *RespQueryDocs {
+	r.RequestCharge += other.RequestCharge
+	r.Count += other.Count
+	r.Documents = append(r.Documents, other.Documents...)
+	sort.Slice(r.Documents, func(i, j int) bool {
+		iOrderByItems := r.Documents[i].(map[string]interface{})["orderByItems"].([]interface{})
+		jOrderByItems := r.Documents[j].(map[string]interface{})["orderByItems"].([]interface{})
+		for index, odir := range queryPlan.QueryInfo.OrderBy {
+			odir = strings.ToUpper(odir)
+			iItem := iOrderByItems[index].(map[string]interface{})["item"]
+			jItem := jOrderByItems[index].(map[string]interface{})["item"]
+			if iItem == jItem {
+				continue
+			}
+
+			istr, iok := iItem.(string)
+			jstr, jok := jItem.(string)
+			if iok && jok {
+				return (odir == "DESCENDING" && istr > jstr) || (odir != "DESCENDING" && istr < jstr)
+			}
+
+			ifloat, iok := iItem.(float64)
+			jfloat, jok := jItem.(float64)
+			if iok && jok {
+				return (odir == "DESCENDING" && ifloat > jfloat) || (odir != "DESCENDING" && ifloat < jfloat)
+			}
+		}
+		return false
+	})
+	return r
+}
+
 type typDCountInfo struct {
 	DCountAlias string `json:"dCountAlias"`
 }
@@ -1304,6 +1360,13 @@ func (qp *RespQueryPlan) IsDistinctQuery() bool {
 // Available v0.1.9
 func (qp *RespQueryPlan) IsGroupByQuery() bool {
 	return len(qp.QueryInfo.GroupByAliasToAggregateType) > 0
+}
+
+// IsOrderByQuery tests if "order-by" clause is in the query's projection.
+//
+// Available v0.1.9
+func (qp *RespQueryPlan) IsOrderByQuery() bool {
+	return len(qp.QueryInfo.OrderByExpressions) > 0
 }
 
 // RespListDocs captures the response from ListDocuments call.
