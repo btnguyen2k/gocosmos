@@ -580,29 +580,60 @@ func (c *RestClient) queryAndMergeCrossPartitions(query QueryReq, pkranges *Resp
 	if queryRewritten {
 		query.Query = strings.ReplaceAll(queryPlan.QueryInfo.RewrittenQuery, "{documentdb-formattableorderbyquery-filter}", "true")
 	}
-	var result *RespQueryDocs
-	for _, pkrange := range pkranges.Pkranges {
-		query.PkRangeId = pkrange.Id
-		pkresult := c.queryDocumentsAsIs(query, true)
-		if pkresult.Error() != nil {
-			return pkresult
+
+	var cctResult, cctQuery = make(map[string]string), make(map[string]string)
+	if err := json.Unmarshal([]byte(query.ContinuationToken), &cctQuery); err != nil || query.ContinuationToken == "" {
+		cctQuery = make(map[string]string)
+		for _, pkrange := range pkranges.Pkranges {
+			cctQuery[pkrange.Id] = ""
 		}
+	}
+	for k, v := range cctQuery {
+		cctResult[k] = v
+	}
+
+	var result *RespQueryDocs
+	for i, pkrange := range pkranges.Pkranges {
+		query.PkRangeId = pkrange.Id
+		if continuationToken, ok := cctQuery[pkrange.Id]; !ok {
+			// all documents from this pk-range had been queried
+			continue
+		} else {
+			query.ContinuationToken = continuationToken
+		}
+		pkresult := c.queryDocumentsAsIs(query, true)
 		if result == nil {
 			result = pkresult
 		} else {
-			if queryPlan.IsDistinctQuery() {
-				result = result.MergeDistinct(queryPlan, pkresult)
-			}
-			if queryPlan.IsGroupByQuery() {
-				result = result.MergeGroupBy(queryPlan, pkresult)
-			}
-			if queryPlan.IsOrderByQuery() {
-				result = result.MergeOrderBy(queryPlan, pkresult)
-			}
+			result.RequestCharge += pkresult.RequestCharge
+			result.RestReponse = pkresult.RestReponse
 		}
-		if query.MaxItemCount > 0 && result.Count >= query.MaxItemCount {
-			// honor MaxItemCount setting
+		if result.Error() != nil {
 			break
+		}
+		if pkresult.ContinuationToken == "" {
+			delete(cctResult, pkrange.Id)
+		} else {
+			cctResult[pkrange.Id] = pkresult.ContinuationToken
+		}
+		if i > 0 && queryPlan.IsDistinctQuery() {
+			result = result.MergeDistinct(queryPlan, pkresult)
+		}
+		if i > 0 && queryPlan.IsGroupByQuery() {
+			result = result.MergeGroupBy(queryPlan, pkresult)
+		}
+		if i > 0 && queryPlan.IsOrderByQuery() {
+			result = result.MergeOrderBy(queryPlan, pkresult)
+		}
+
+		if query.MaxItemCount > 0 {
+			// honor MaxItemCount setting
+			if (queryPlan.IsDistinctQuery() || queryPlan.IsOrderByQuery()) && result.Count >= query.MaxItemCount {
+				break
+			}
+			if result.Count >= query.MaxItemCount*pkranges.Count {
+				break
+			}
 		}
 	}
 	if queryRewritten {
@@ -617,6 +648,10 @@ func (c *RestClient) queryAndMergeCrossPartitions(query QueryReq, pkranges *Resp
 				result.Documents[i] = flattenDocs[i]
 			}
 		}
+	}
+	if len(cctResult) > 0 {
+		js, _ := json.Marshal(cctResult)
+		result.ContinuationToken = string(js)
 	}
 	return result
 }
@@ -1206,8 +1241,6 @@ type RespQueryDocs struct {
 //
 // Available since v0.1.9
 func (r *RespQueryDocs) MergeDistinct(_ *RespQueryPlan, other *RespQueryDocs) *RespQueryDocs {
-	r.RequestCharge += other.RequestCharge
-
 	itemSet := make(map[string]bool)
 	// CRC32 + MD5 hashing is fast (is MD5 + SHA1 better?)
 	hf1, hf2 := checksum.Crc32HashFunc, checksum.Md5HashFunc
@@ -1233,7 +1266,6 @@ func (r *RespQueryDocs) MergeDistinct(_ *RespQueryPlan, other *RespQueryDocs) *R
 //
 // Available since v0.1.9
 func (r *RespQueryDocs) MergeGroupBy(queryPlan *RespQueryPlan, other *RespQueryDocs) *RespQueryDocs {
-	r.RequestCharge += other.RequestCharge
 	for _, otherDoc := range other.Documents.AsDocInfoSlice() {
 		merged := false
 		for _, myDoc := range r.Documents.AsDocInfoSlice() {
@@ -1290,7 +1322,6 @@ func (r *RespQueryDocs) MergeGroupBy(queryPlan *RespQueryPlan, other *RespQueryD
 //
 // Available since v0.1.9
 func (r *RespQueryDocs) MergeOrderBy(queryPlan *RespQueryPlan, other *RespQueryDocs) *RespQueryDocs {
-	r.RequestCharge += other.RequestCharge
 	r.Count += other.Count
 	r.Documents = append(r.Documents, other.Documents...)
 	sort.Slice(r.Documents, func(i, j int) bool {
