@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
+	"sync"
 	"testing"
 )
 
@@ -75,16 +76,17 @@ func _initDataLargeRU(t *testing.T, testName string, client *RestClient, db, con
 /*----------------------------------------------------------------------*/
 
 func _initDataFamilies(t *testing.T, testName string, client *RestClient, db, container string) {
-	docs := make([]map[string]interface{}, 0)
-	err := json.Unmarshal([]byte(_testDataFamilies), &docs)
+	dataMapFamilies = make(map[string]DocInfo)
+	dataListFamilies = make([]DocInfo, 0)
+	err := json.Unmarshal([]byte(_testDataFamilies), &dataListFamilies)
 	if err != nil {
 		t.Fatalf("%s failed: %s", testName, err)
 	}
-	for _, doc := range docs {
-		var docInfo DocInfo = doc
-		if result := client.CreateDocument(DocumentSpec{DbName: db, CollName: container, PartitionKeyValues: []interface{}{doc["id"]}, DocumentData: docInfo}); result.Error() != nil {
+	for _, doc := range dataListFamilies {
+		if result := client.CreateDocument(DocumentSpec{DbName: db, CollName: container, PartitionKeyValues: []interface{}{doc["id"]}, DocumentData: doc}); result.Error() != nil {
 			t.Fatalf("%s failed: %s", testName, result.Error())
 		}
+		dataMapFamilies[doc.Id()] = doc
 	}
 }
 
@@ -114,14 +116,13 @@ func _initDataFamliesLargeRU(t *testing.T, testName string, client *RestClient, 
 }
 
 func _initDataVolcano(t *testing.T, testName string, client *RestClient, db, container string) {
-	docs := make([]map[string]interface{}, 0)
-	err := json.Unmarshal([]byte(_testDataVolcano), &docs)
+	dataListVolcano = make([]DocInfo, 0)
+	err := json.Unmarshal([]byte(_testDataVolcano), &dataListVolcano)
 	if err != nil {
 		t.Fatalf("%s failed: %s", testName, err)
 	}
-	for _, doc := range docs {
-		var docInfo DocInfo = doc
-		if result := client.CreateDocument(DocumentSpec{DbName: db, CollName: container, PartitionKeyValues: []interface{}{doc["id"]}, DocumentData: docInfo}); result.Error() != nil {
+	for _, doc := range dataListVolcano {
+		if result := client.CreateDocument(DocumentSpec{DbName: db, CollName: container, PartitionKeyValues: []interface{}{doc["id"]}, DocumentData: doc}); result.Error() != nil {
 			t.Fatalf("%s failed: %s", testName, result.Error())
 		}
 	}
@@ -150,6 +151,14 @@ func _initDataVolcanoLargeRU(t *testing.T, testName string, client *RestClient, 
 		Ru:               20000,
 	})
 	_initDataVolcano(t, testName, client, db, container)
+}
+
+var dataListFamilies, dataListVolcano []DocInfo
+var dataMapFamilies map[string]DocInfo
+
+func _toJson(data interface{}) string {
+	js, _ := json.Marshal(data)
+	return string(js)
 }
 
 const _testDataFamilies = `
@@ -229,6 +238,7 @@ const _testDataFamilies = `
   }
 ]
 `
+
 const _testDataVolcano = `
 [
   {
@@ -28456,3 +28466,70 @@ const _testDataVolcano = `
     "PK": "tJA1"
   }]
 `
+
+/*----------------------------------------------------------------------*/
+
+func _initDataNutrition(t *testing.T, testName string, client *RestClient, db, container string) {
+	// _testDataNutrition, err := os.ReadFile("data_test_nutrition.json")
+	// if err != nil {
+	// 	t.Fatalf("%s failed: %s", testName, err)
+	// }
+	dataListNutrition := make([]DocInfo, 0)
+	err := json.Unmarshal([]byte(_testDataNutrition), &dataListNutrition)
+	if err != nil {
+		t.Fatalf("%s failed: %s", testName, err)
+	}
+	numWorkers := 8
+	wg := &sync.WaitGroup{}
+	wg.Add(numWorkers)
+	for id := 0; id < numWorkers; id++ {
+		go func(id int, wg *sync.WaitGroup) {
+			defer wg.Done()
+			low := id * len(dataListNutrition) / numWorkers
+			high := low + len(dataListNutrition)/numWorkers
+			if high > len(dataListNutrition) {
+				high = len(dataListNutrition)
+			}
+			for i := low; i < high; i++ {
+				doc := dataListNutrition[i]
+				if result := client.CreateDocument(DocumentSpec{DbName: db, CollName: container, PartitionKeyValues: []interface{}{doc["id"]}, DocumentData: doc}); result.Error() != nil {
+					t.Fatalf("%s failed: (%#v) %s", testName, id, result.Error())
+				}
+			}
+		}(id, wg)
+	}
+	// for _, doc := range dataListNutrition {
+	// 	go func(wg *sync.WaitGroup, doc DocInfo) {
+	// 		defer wg.Done()
+	// 		if result := client.CreateDocument(DocumentSpec{DbName: db, CollName: container, PartitionKeyValues: []interface{}{doc["id"]}, DocumentData: doc}); result.Error() != nil {
+	// 			t.Fatalf("%s failed: %s", testName, result.Error())
+	// 		}
+	// 	}(wg, doc)
+	// }
+	wg.Wait()
+}
+
+func _initDataNutritionSmallRU(t *testing.T, testName string, client *RestClient, db, container string) {
+	client.DeleteDatabase(db)
+	client.CreateDatabase(DatabaseSpec{Id: db, Ru: 400})
+	client.CreateCollection(CollectionSpec{
+		DbName:           db,
+		CollName:         container,
+		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/id"}, "kind": "Hash"},
+		Ru:               400,
+	})
+	_initDataNutrition(t, testName, client, db, container)
+}
+
+func _initDataNutritionLargeRU(t *testing.T, testName string, client *RestClient, db, container string) {
+	client.DeleteDatabase(db)
+	client.CreateDatabase(DatabaseSpec{Id: db, Ru: 20000})
+	client.CreateCollection(CollectionSpec{
+		DbName:           db,
+		CollName:         container,
+		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/id"}, "kind": "Hash"},
+		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
+		Ru:               20000,
+	})
+	_initDataNutrition(t, testName, client, db, container)
+}

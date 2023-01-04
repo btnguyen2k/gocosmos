@@ -10,8 +10,8 @@ func TestRestClient_CreateCollection(t *testing.T) {
 	name := "TestRestClient_CreateCollection"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	collspecList := []CollectionSpec{
 		{DbName: dbname, CollName: collname, PartitionKeyInfo: map[string]interface{}{"paths": []string{"/id"}, "kind": "Hash"}},
 		{DbName: dbname, CollName: collname, Ru: 400, PartitionKeyInfo: map[string]interface{}{"paths": []string{"/id"}, "kind": "Hash"}},
@@ -69,10 +69,10 @@ func TestRestClient_ChangeOfferCollection(t *testing.T) {
 	name := "TestRestClient_ChangeOfferCollection"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
+	dbname := testDb
+	collname := testTable
 	client.DeleteDatabase(dbname)
 	client.CreateDatabase(DatabaseSpec{Id: dbname})
-	collname := "mytable"
 	collspec := CollectionSpec{DbName: dbname, CollName: collname, PartitionKeyInfo: map[string]interface{}{"paths": []string{"/id"}, "kind": "Hash"}}
 
 	var collInfo CollInfo
@@ -166,10 +166,10 @@ func TestRestClient_ChangeOfferCollectionInvalid(t *testing.T) {
 	name := "TestRestClient_ChangeOfferCollectionInvalid"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
+	dbname := testDb
+	collname := testTable
 	client.DeleteDatabase(dbname)
 	client.CreateDatabase(DatabaseSpec{Id: dbname})
-	collname := "mytable"
 	collspec := CollectionSpec{DbName: dbname, CollName: collname, PartitionKeyInfo: map[string]interface{}{"paths": []string{"/id"}, "kind": "Hash"}}
 
 	var collInfo CollInfo
@@ -201,8 +201,8 @@ func TestRestClient_CreateCollectionIndexingPolicy(t *testing.T) {
 	name := "TestRestClient_CreateCollectionIndexingPolicy"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	collSpec := CollectionSpec{
 		DbName: dbname, CollName: collname,
 		IndexingPolicy:   map[string]interface{}{"indexingMode": "consistent", "automatic": true},
@@ -218,8 +218,8 @@ func TestRestClient_ReplaceCollection(t *testing.T) {
 	name := "TestRestClient_ReplaceCollection"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	client.DeleteDatabase(dbname)
 	client.CreateDatabase(DatabaseSpec{Id: dbname})
 	client.CreateCollection(CollectionSpec{DbName: dbname, CollName: collname, PartitionKeyInfo: map[string]interface{}{"paths": []string{"/id"}, "kind": "Hash"}})
@@ -246,6 +246,7 @@ func TestRestClient_ReplaceCollection(t *testing.T) {
 		}
 	}
 
+	client.DeleteCollection(dbname, "table_not_found")
 	if result := client.ReplaceCollection(CollectionSpec{
 		DbName:           dbname,
 		CollName:         "table_not_found",
@@ -272,8 +273,8 @@ func TestRestClient_DeleteCollection(t *testing.T) {
 	name := "TestRestClient_DeleteCollection"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
-	collname := "mycoll"
+	dbname := testDb
+	collname := testTable
 	client.CreateDatabase(DatabaseSpec{Id: dbname})
 	client.CreateCollection(CollectionSpec{
 		DbName:           dbname,
@@ -301,8 +302,8 @@ func TestRestClient_GetCollection(t *testing.T) {
 	name := "TestRestClient_GetCollection"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	client.DeleteDatabase(dbname)
 	client.CreateDatabase(DatabaseSpec{Id: dbname})
 	client.CreateCollection(CollectionSpec{
@@ -321,6 +322,7 @@ func TestRestClient_GetCollection(t *testing.T) {
 		t.Fatalf("%s failed: invalid collinfo returned %#v", name, result.CollInfo)
 	}
 
+	client.DeleteCollection(dbname, "table_not_found")
 	if result := client.GetCollection(dbname, "table_not_found"); result.CallErr != nil {
 		t.Fatalf("%s failed: %s", name, result.CallErr)
 	} else if result.StatusCode != 404 {
@@ -339,7 +341,7 @@ func TestRestClient_ListCollection(t *testing.T) {
 	name := "TestRestClient_ListCollection"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
+	dbname := testDb
 	client.DeleteDatabase(dbname)
 	client.CreateDatabase(DatabaseSpec{Id: dbname})
 	collnames := map[string]int{"table1": 1, "table3": 1, "table5": 1, "table4": 1, "table2": 1}

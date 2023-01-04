@@ -27,6 +27,7 @@ const (
 	restApiHeaderMigrateToAutopilotThroughput   = "x-ms-cosmos-migrate-offer-to-autopilot"
 	restApiHeaderSupportedQueryFeatures         = "x-ms-cosmos-supported-query-features"
 	restApiHeaderPopulateMetrics                = "x-ms-documentdb-populatequerymetrics"
+	restApiHeaderIncremental                    = "A-IM"
 
 	restApiParamIndexingPolicy  = "indexingPolicy"
 	restApiParamUniqueKeyPolicy = "uniqueKeyPolicy"

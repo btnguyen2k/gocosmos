@@ -3,6 +3,8 @@ package gocosmos
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,6 +17,7 @@ import (
 type queryTestCase struct {
 	name                  string
 	query                 string
+	expectedNumItems      int
 	maxItemCount          int
 	distinctQuery         int // 0=non distinct, 1=distinct values, other: distinct docs
 	distinctField         string
@@ -32,8 +35,8 @@ type queryTestCase struct {
 
 func TestRestClient_QueryDocuments_DbOrTableNotExists(t *testing.T) {
 	testName := "TestRestClient_QueryDocuments_DbOrTableNotExists"
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	client := _newRestClient(t, testName)
 	_initDataSmallRU(t, testName, client, dbname, collname, 0)
 	client.DeleteDatabase("db_not_exists")
@@ -274,8 +277,8 @@ func _testRestClientQueryDocumentsPkValue(t *testing.T, testName string, client 
 func TestRestClient_QueryDocuments_PkValue_SmallRU(t *testing.T) {
 	testName := "TestRestClient_QueryDocuments_PkValue_SmallRU"
 	client := _newRestClient(t, testName)
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	_initDataSmallRU(t, testName, client, dbname, collname, 1000)
 	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
 		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
@@ -288,8 +291,8 @@ func TestRestClient_QueryDocuments_PkValue_SmallRU(t *testing.T) {
 func TestRestClient_QueryDocuments_PkValue_LargeRU(t *testing.T) {
 	testName := "TestRestClient_QueryDocuments_PkValue_LargeRU"
 	client := _newRestClient(t, testName)
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	_initDataLargeRU(t, testName, client, dbname, collname, 1000)
 	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
 		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
@@ -352,8 +355,8 @@ func _testRestClientQueryDocumentsPkrangeid(t *testing.T, testName string, clien
 func TestRestClient_QueryDocuments_Pkrangeid_SmallRU(t *testing.T) {
 	testName := "TestRestClient_QueryDocuments_Pkrangeid_SmallRU"
 	client := _newRestClient(t, testName)
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	_initDataSmallRU(t, testName, client, dbname, collname, 1000)
 	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
 		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
@@ -366,8 +369,8 @@ func TestRestClient_QueryDocuments_Pkrangeid_SmallRU(t *testing.T) {
 func TestRestClient_QueryDocuments_Pkrangeid_LargeRU(t *testing.T) {
 	testName := "TestRestClient_QueryDocuments_Pkrangeid_LargeRU"
 	client := _newRestClient(t, testName)
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	_initDataLargeRU(t, testName, client, dbname, collname, 1000)
 	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
 		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
@@ -395,6 +398,7 @@ func _testRestClientQueryDocumentsCrossPartitions(t *testing.T, testName string,
 		{name: "NoLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "max"},
 		{name: "NoLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "average"},
 		{name: "Limit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: numCategories/2 + 1, withGroupBy: true, groupBy: "count"},
+		// {name: "Limit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: numCategories/2 + 1, withGroupBy: true, groupBy: "sum"},
 	}
 	params := []interface{}{map[string]interface{}{"name": "@low", "value": lowStr}, map[string]interface{}{"name": "@high", "value": highStr}}
 	for _, testCase := range testCases {
@@ -426,8 +430,8 @@ func _testRestClientQueryDocumentsCrossPartitions(t *testing.T, testName string,
 func TestRestClient_QueryDocuments_CrossPartitions_SmallRU(t *testing.T) {
 	testName := "TestRestClient_QueryDocuments_CrossPartitions_SmallRU"
 	client := _newRestClient(t, testName)
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	_initDataSmallRU(t, testName, client, dbname, collname, 1000)
 	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
 		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
@@ -440,8 +444,8 @@ func TestRestClient_QueryDocuments_CrossPartitions_SmallRU(t *testing.T) {
 func TestRestClient_QueryDocuments_CrossPartitions_LargeRU(t *testing.T) {
 	testName := "TestRestClient_QueryDocuments_CrossPartitions_LargeRU"
 	client := _newRestClient(t, testName)
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	_initDataLargeRU(t, testName, client, dbname, collname, 1000)
 	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
 		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
@@ -453,89 +457,85 @@ func TestRestClient_QueryDocuments_CrossPartitions_LargeRU(t *testing.T) {
 
 /*----------------------------------------------------------------------*/
 
-// func _testRestClientQueryDocumentsContinuation(t *testing.T, testName string, client *RestClient, dbname, collname string) {
-// 	pkranges := client.GetPkranges(dbname, collname)
-// 	if pkranges.Error() != nil {
-// 		t.Fatalf("%s failed: %s", testName+"/GetPkranges", pkranges.Error())
-// 	}
-// 	low, high := 123, 987
-// 	lowStr, highStr := fmt.Sprintf("%05d", low), fmt.Sprintf("%05d", high)
-//
-// 	/*
-// 		which does not work with cross-partition continuation:
-// 		- ORDER BY + maxItemCount
-// 	*/
-// 	var testCases = []queryTestCase{
-// 		{name: "Bare", query: "SELECT * FROM c WHERE @low<=c.id AND c.id<@high", maxItemCount: 7},
-// 		{name: "DistinctValue", query: "SELECT DISTINCT VALUE c.username FROM c", maxItemCount: 3, distinctQuery: 1, numDistincts: numLogicalPartitions},
-// 		{name: "DistinctDoc", query: "SELECT DISTINCT c.category FROM c", maxItemCount: 3, distinctQuery: -1, numDistincts: numCategories},
-// 		// {name: "GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: 3, withGroupBy: true, groupBy: "count"},
-// 		// {name: "GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "sum"},
-// 		// {name: "GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "min"},
-// 		// {name: "GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "max"},
-// 		// {name: "GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "average"},
-// 	}
-// 	for _, testCase := range testCases {
-// 		t.Run(testCase.name, func(t *testing.T) {
-// 			query := QueryReq{DbName: dbname, CollName: collname, Query: testCase.query, MaxItemCount: testCase.maxItemCount, CrossPartitionEnabled: true,
-// 				Params: []interface{}{
-// 					map[string]interface{}{"name": "@low", "value": lowStr},
-// 					map[string]interface{}{"name": "@high", "value": highStr},
-// 				},
-// 			}
-// 			expectedNumItems := high - low
-// 			if testCase.distinctQuery != 0 {
-// 				expectedNumItems = testCase.numDistincts
-// 			}
-// 			var result *RespQueryDocs
-// 			for {
-// 				tempResult := client.QueryDocuments(query)
-// 				if tempResult.Error() != nil {
-// 					t.Fatalf("%s failed: %s", testName+"/"+testCase.name+"/Query", tempResult.Error())
-// 				}
-// 				if tempResult.Count > testCase.maxItemCount*pkranges.Count || len(tempResult.Documents) > testCase.maxItemCount*pkranges.Count {
-// 					t.Fatalf("%s failed: <num-document> expected not exceeding %#v but received (len: %#v / count: %#v)", testName+"/"+testCase.name, testCase.maxItemCount*pkranges.Count, len(tempResult.Documents), tempResult.Count)
-// 				}
-// 				if result == nil {
-// 					result = tempResult
-// 				} else {
-// 					result.Documents = append(result.Documents, tempResult.Documents...)
-// 					result.Count += tempResult.Count
-// 				}
-// 				query.ContinuationToken = tempResult.ContinuationToken
-// 				if tempResult.ContinuationToken == "" {
-// 					break
-// 				}
-// 			}
-// 			if len(result.Documents) != expectedNumItems {
-// 				t.Fatalf("%s failed: <num-document> expectedNumItems %#v but received %#v", testName+"/"+testCase.name, expectedNumItems, len(result.Documents))
-// 			}
-// 			_verifyDistinct(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name, testCase, result)
-// 			_verifyOrderBy(t, testName+"/"+testCase.name, testCase, result)
-// 			// _verifyGroupBy(t, testName, testCase, "", lowStr, highStr, result)
-// 		})
-// 	}
-// }
-//
-// func TestRestClient_QueryDocuments_Continuation_SmallRU(t *testing.T) {
-// 	testName := "TestRestClient_QueryDocuments_Continuation_SmallRU"
-// 	client := _newRestClient(t, testName)
-// 	dbname := "mydb"
-// 	collname := "mytable"
-// 	_initDataSmallRU(t, testName, client, dbname, collname, 1000)
-// 	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
-// 		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
-// 	} else if result.Count != 1 {
-// 		t.Fatalf("%s failed: <num-partition> expected to be %#v but received %#v", testName+"/GetPkranges", 1, result.Count)
-// 	}
-// 	_testRestClientQueryDocumentsContinuation(t, testName, client, dbname, collname)
-// }
-//
+func _testRestClientQueryDocumentsContinuation(t *testing.T, testName string, client *RestClient, dbname, collname string) {
+	pkranges := client.GetPkranges(dbname, collname)
+	if pkranges.Error() != nil {
+		t.Fatalf("%s failed: %s", testName+"/GetPkranges", pkranges.Error())
+	}
+	low, high := 123, 987
+	lowStr, highStr := fmt.Sprintf("%05d", low), fmt.Sprintf("%05d", high)
+
+	// only "bare" query is working with cross-partition continuation!
+	// amongst GROUP BY queries, only count(x) obeys maxItemCount; count(c.field)/sum/min/max/avg do NOT!
+	var testCases = []queryTestCase{
+		{name: "Bare", query: "SELECT * FROM c WHERE @low<=c.id AND c.id<@high", maxItemCount: 7},
+		{name: "OrderBy", query: "SELECT * FROM c WHERE @low<=c.id AND c.id<@high ORDER BY c.grade DESC", maxItemCount: 7, withOrder: true, orderDirection: "desc"},
+		{name: "DistinctValue", query: "SELECT DISTINCT VALUE c.username FROM c", maxItemCount: 3, distinctQuery: 1, numDistincts: numLogicalPartitions},
+		{name: "DistinctDoc", query: "SELECT DISTINCT c.category FROM c", maxItemCount: 3, distinctQuery: -1, numDistincts: numCategories},
+		{name: "GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: 3, withGroupBy: true, groupBy: "count", numDistincts: numCategories},
+		// {name: "GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: 3, withGroupBy: true, groupBy: "sum", numDistincts: numCategories},
+		// {name: "GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: 3, withGroupBy: true, groupBy: "min", numDistincts: numCategories},
+		// {name: "GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: 3, withGroupBy: true, groupBy: "max", numDistincts: numCategories},
+		// {name: "GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: 3, withGroupBy: true, groupBy: "average", numDistincts: numCategories},
+	}
+	params := []interface{}{map[string]interface{}{"name": "@low", "value": lowStr}, map[string]interface{}{"name": "@high", "value": highStr}}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			query := QueryReq{DbName: dbname, CollName: collname, Query: testCase.query, MaxItemCount: testCase.maxItemCount, CrossPartitionEnabled: true, Params: params}
+			expectedNumItems := high - low
+			if testCase.distinctQuery != 0 || testCase.withGroupBy {
+				expectedNumItems = testCase.numDistincts
+			}
+			var result *RespQueryDocs
+			for {
+				tempResult := client.QueryDocuments(query)
+				if tempResult.Error() != nil {
+					t.Fatalf("%s failed: %s", testName+"/"+testCase.name+"/Query", tempResult.Error())
+				}
+				if tempResult.Count > testCase.maxItemCount || len(tempResult.Documents) > testCase.maxItemCount {
+					t.Fatalf("%s failed: <num-document> expected not exceeding %#v but received (len: %#v / count: %#v)", testName+"/"+testCase.name, testCase.maxItemCount, len(tempResult.Documents), tempResult.Count)
+				}
+				if result == nil {
+					result = tempResult
+				} else {
+					result.Documents = append(result.Documents, tempResult.Documents...)
+					result.Count += tempResult.Count
+				}
+				query.ContinuationToken = tempResult.ContinuationToken
+				if tempResult.ContinuationToken == "" {
+					break
+				}
+			}
+			if len(result.Documents) != expectedNumItems || result.Count != expectedNumItems {
+				t.Fatalf("%s failed: <num-document> expectedNumItems %#v but received (len: %#v / count: %#v)", testName+"/"+testCase.name, expectedNumItems, len(result.Documents), result.Count)
+			}
+			testCase.maxItemCount = -1
+			_verifyDistinct(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name, testCase, result)
+			_verifyOrderBy(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name, testCase, result)
+			_verifyGroupBy(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name, testCase, "", lowStr, highStr, result)
+		})
+	}
+}
+
+func TestRestClient_QueryDocuments_Continuation_SmallRU(t *testing.T) {
+	testName := "TestRestClient_QueryDocuments_Continuation_SmallRU"
+	client := _newRestClient(t, testName)
+	dbname := testDb
+	collname := testTable
+	_initDataSmallRU(t, testName, client, dbname, collname, 1000)
+	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
+		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
+	} else if result.Count != 1 {
+		t.Fatalf("%s failed: <num-partition> expected to be %#v but received %#v", testName+"/GetPkranges", 1, result.Count)
+	}
+	_testRestClientQueryDocumentsContinuation(t, testName, client, dbname, collname)
+}
+
 // func TestRestClient_QueryDocuments_Continuation_LargeRU(t *testing.T) {
 // 	testName := "TestRestClient_QueryDocuments_Continuation_LargeRU"
 // 	client := _newRestClient(t, testName)
-// 	dbname := "mydb"
-// 	collname := "mytable"
+// 	dbname := testDb
+// 	collname := testTable
 // 	_initDataLargeRU(t, testName, client, dbname, collname, 1000)
 // 	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
 // 		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
@@ -545,369 +545,160 @@ func TestRestClient_QueryDocuments_CrossPartitions_LargeRU(t *testing.T) {
 // 	_testRestClientQueryDocumentsContinuation(t, testName, client, dbname, collname)
 // }
 
-// func TestRestClient_QueryAllDocuments(t *testing.T) {
-// 	name := "TestRestClient_QueryDocuments"
-// 	client := _newRestClient(t, name)
-//
-// 	dbname := "mydb"
-// 	collname := "mytable"
-// 	client.DeleteDatabase(dbname)
-// 	client.CreateDatabase(DatabaseSpec{Id: dbname, MaxRu: 10000})
-// 	client.CreateCollection(CollectionSpec{
-// 		DbName:           dbname,
-// 		CollName:         collname,
-// 		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/username"}, "kind": "Hash"},
-// 		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
-// 	})
-// 	totalRu := 0.0
-// 	var sessionToken string
-// 	for i := 0; i < 100; i++ {
-// 		docInfo := map[string]interface{}{"id": fmt.Sprintf("%02d", i), "username": "user", "email": "user" + strconv.Itoa(i) + "@domain.com", "grade": i, "active": i%10 == 0}
-// 		if result := client.CreateDocument(DocumentSpec{DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"}, DocumentData: docInfo}); result.Error() != nil {
-// 			t.Fatalf("%s failed: %s", name, result.Error())
-// 		} else {
-// 			totalRu += result.RequestCharge
-// 			sessionToken = result.SessionToken
-// 		}
+/*----------------------------------------------------------------------*/
+
+type customQueryTestCase struct {
+	name, query        string
+	expectedResultJson string
+	ordering           bool
+	nonDocResult       bool
+	compareField       string
+}
+
+func _testRestClientQueryDocumentsCustomDataset(t *testing.T, testName string, testCases []customQueryTestCase, client *RestClient, dbname, collname string) {
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			query := QueryReq{DbName: dbname, CollName: collname, Query: testCase.query, CrossPartitionEnabled: true}
+			result := client.QueryDocuments(query)
+			if result.Error() != nil {
+				t.Fatalf("%s failed: %s", testName+"/"+testCase.name, result.Error())
+			}
+			var expectedResult []interface{}
+			json.Unmarshal([]byte(testCase.expectedResultJson), &expectedResult)
+			if result.Count != len(expectedResult) || len(result.Documents) != len(expectedResult) {
+				t.Fatalf("%s failed: <num-documents> expected to be %#v but received (count: %#v / len: %#v)", testName+"/"+testCase.name, len(expectedResult), result.Count, len(result.Documents))
+			}
+			resultDocs := result.Documents
+			if !testCase.ordering {
+				sort.Slice(resultDocs, func(i, j int) bool {
+					if !testCase.nonDocResult {
+						var doci, docj = resultDocs.AsDocInfoAt(i), resultDocs.AsDocInfoAt(j)
+						stri := doci.GetAttrAsTypeUnsafe(testCase.compareField, reddo.TypeString).(string)
+						strj := docj.GetAttrAsTypeUnsafe(testCase.compareField, reddo.TypeString).(string)
+						return stri < strj
+					}
+					stri, _ := json.Marshal(resultDocs[i])
+					strj, _ := json.Marshal(resultDocs[j])
+					return string(stri) < string(strj)
+				})
+				sort.Slice(expectedResult, func(i, j int) bool {
+					if !testCase.nonDocResult {
+						var doci DocInfo = expectedResult[i].(map[string]interface{})
+						var docj DocInfo = expectedResult[j].(map[string]interface{})
+						stri := doci.GetAttrAsTypeUnsafe(testCase.compareField, reddo.TypeString).(string)
+						strj := docj.GetAttrAsTypeUnsafe(testCase.compareField, reddo.TypeString).(string)
+						return stri < strj
+					}
+					stri, _ := json.Marshal(expectedResult[i])
+					strj, _ := json.Marshal(expectedResult[j])
+					return string(stri) < string(strj)
+				})
+			}
+			for i, doc := range resultDocs {
+				myDoc := doc.(interface{})
+				if !testCase.nonDocResult {
+					docInfo := resultDocs.AsDocInfoAt(i)
+					myDoc = docInfo.RemoveSystemAttrs().AsMap()
+				}
+				expected := expectedResult[i]
+				if !reflect.DeepEqual(myDoc, expected) {
+					t.Fatalf("%s failed: result\n%#v\ndoes not match expected one\n%#v", testName+"/"+testCase.name, myDoc, expected)
+				}
+			}
+		})
+	}
+}
+
+func _testRestClientQueryDocumentsDatasetFamilies(t *testing.T, testName string, client *RestClient, dbname, collname string) {
+	var testCases = []customQueryTestCase{
+		// ref: https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/query/getting-started
+		// ref: https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/query/select
+		// ref: https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/query/from
+		// ref: https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/query/order-by
+		// ref: https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/query/group-by
+		// ref: https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/query/offset-limit
+		{name: "QuerySingleDoc", compareField: "id", query: `SELECT * FROM Families f WHERE f.id = "AndersenFamily"`, expectedResultJson: _toJson([]DocInfo{dataMapFamilies["AndersenFamily"]})},
+		{name: "QuerySingleAttr", compareField: "id", query: `SELECT f.address FROM Families f WHERE f.id = "AndersenFamily"`, expectedResultJson: `[{"address":{"state":"WA","county":"King","city":"Seattle"}}]`},
+		{name: "QuerySubAttrs", compareField: "id", query: `SELECT {"Name":f.id, "City":f.address.city} AS Family FROM Families f WHERE f.address.city = f.address.state`, expectedResultJson: `[{"Family":{"Name":"WakefieldFamily","City":"NY"}}]`},
+		{name: "QuerySubItems1", nonDocResult: true, query: `SELECT * FROM Families.children`, expectedResultJson: `[[{"firstName":"Henriette Thaulow","gender":"female","grade":5,"pets":[{"givenName":"Fluffy"}]}],[{"familyName":"Merriam","gender":"female","givenName":"Jesse","grade":1,"pets":[{"givenName":"Goofy"},{"givenName":"Shadow"}]},{"familyName":"Miller","gender":"female","givenName":"Lisa","grade":8}]]`},
+		{name: "QuerySubItems2", nonDocResult: true, query: `SELECT * FROM Families.address.state`, expectedResultJson: `["WA","NY"]`},
+		{name: "QuerySingleAttrWithOrderBy", compareField: "id", ordering: true, query: `SELECT c.givenName FROM Families f JOIN c IN f.children WHERE f.id = 'WakefieldFamily' ORDER BY f.address.city ASC`, expectedResultJson: `[{"givenName":"Jesse"},{"givenName":"Lisa"}]`},
+		{name: "QuerySubAttrsWithOrderByAsc", compareField: "id", ordering: true, query: `SELECT f.id, f.address.city FROM Families f ORDER BY f.address.city`, expectedResultJson: `[{"id":"WakefieldFamily","city":"NY"},{"id":"AndersenFamily","city":"Seattle"}]`},
+		{name: "QuerySubAttrsWithOrderByDesc", compareField: "id", ordering: true, query: `SELECT f.id, f.creationDate FROM Families f ORDER BY f.creationDate DESC`, expectedResultJson: `[{"id":"AndersenFamily","creationDate":1431620472},{"id":"WakefieldFamily","creationDate":1431620462}]`},
+		{name: "QuerySubAttrsWithOrderByMissingField", compareField: "id", ordering: true, query: `SELECT f.id, f.lastName FROM Families f ORDER BY f.lastName`, expectedResultJson: `[{"id":"WakefieldFamily"},{"id":"AndersenFamily","lastName":"Andersen"}]`},
+		{name: "QueryGroupBy", compareField: "id", query: `SELECT COUNT(UniqueLastNames) FROM (SELECT AVG(f.age) FROM f GROUP BY f.lastName) AS UniqueLastNames`, expectedResultJson: `[{"$1":2}]`},
+		{name: "QueryOffsetLimitWithOrderBy", compareField: "id", query: `SELECT f.id, f.address.city FROM Families f ORDER BY f.address.city OFFSET 1 LIMIT 1`, expectedResultJson: `[{"id":"AndersenFamily","city":"Seattle"}]`},
+		// without ORDER BY, the returned result is un-deterministic
+		// {name: "QueryOffsetLimitWithoutOrderBy", query: `SELECT f.id, f.address.city FROM Families f OFFSET 1 LIMIT 1`, expectedResultJson: `[{"id":"AndersenFamily","city":"Seattle"}]`},
+	}
+	_testRestClientQueryDocumentsCustomDataset(t, testName, testCases, client, dbname, collname)
+}
+
+func TestRestClient_QueryDocuments_DatasetFamilies_SmallRU(t *testing.T) {
+	testName := "TestRestClient_QueryDocuments_DatasetFamilies_SmallRU"
+	client := _newRestClient(t, testName)
+	dbname := testDb
+	collname := testTable
+	_initDataFamliesSmallRU(t, testName, client, dbname, collname)
+	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
+		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
+	} else if result.Count != 1 {
+		t.Fatalf("%s failed: <num-partition> expected to be %#v but received %#v", testName+"/GetPkranges", 1, result.Count)
+	}
+	_testRestClientQueryDocumentsDatasetFamilies(t, testName, client, dbname, collname)
+}
+
+func TestRestClient_QueryDocuments_DatasetFamilies_LargeRU(t *testing.T) {
+	testName := "TestRestClient_QueryDocuments_DatasetFamilies_LargeRU"
+	client := _newRestClient(t, testName)
+	dbname := testDb
+	collname := testTable
+	_initDataFamliesLargeRU(t, testName, client, dbname, collname)
+	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
+		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
+	} else if result.Count < 2 {
+		t.Fatalf("%s failed: <num-partition> expected to be larger than %#v but received %#v", testName+"/GetPkranges", 1, result.Count)
+	}
+	_testRestClientQueryDocumentsDatasetFamilies(t, testName, client, dbname, collname)
+}
+
+// func _testRestClientQueryDocumentsDatasetNutrition(t *testing.T, testName string, client *RestClient, dbname, collname string) {
+// 	var testCases = []customQueryTestCase{
+// 		// ref: https://learn.microsoft.com/en-us/azure/cosmos-db/nosql/query/group-by
+// 		{name: "Count", query: `SELECT COUNT(1) AS foodGroupCount FROM Food f`, expectedResultJson: `[{"foodGroupCount": 8608}]`},
+// 		{name: "QueryGroupBy1", compareField: "foodGroupCount",
+// 			query:              "SELECT COUNT(1) AS foodGroupCount, UPPER(f.foodGroup) AS upperFoodGroup FROM Food f GROUP BY UPPER(f.foodGroup)",
+// 			expectedResultJson: `[{"foodGroupCount":64,"upperFoodGroup":"SPICES AND HERBS"},{"foodGroupCount":108,"upperFoodGroup":"RESTAURANT FOODS"},{"foodGroupCount":112,"upperFoodGroup":"MEALS, ENTREES, AND SIDE DISHES"},{"foodGroupCount":133,"upperFoodGroup":"NUT AND SEED PRODUCTS"},{"foodGroupCount":165,"upperFoodGroup":"AMERICAN INDIAN/ALASKA NATIVE FOODS"},{"foodGroupCount":171,"upperFoodGroup":"SNACKS"},{"foodGroupCount":183,"upperFoodGroup":"CEREAL GRAINS AND PASTA"},{"foodGroupCount":219,"upperFoodGroup":"FATS AND OILS"},{"foodGroupCount":244,"upperFoodGroup":"SAUSAGES AND LUNCHEON MEATS"},{"foodGroupCount":263,"upperFoodGroup":"DAIRY AND EGG PRODUCTS"},{"foodGroupCount":265,"upperFoodGroup":"FINFISH AND SHELLFISH PRODUCTS"},{"foodGroupCount":315,"upperFoodGroup":"BEVERAGES"},{"foodGroupCount":342,"upperFoodGroup":"PORK PRODUCTS"},{"foodGroupCount":346,"upperFoodGroup":"FRUITS AND FRUIT JUICES"},{"foodGroupCount":346,"upperFoodGroup":"SWEETS"},{"foodGroupCount":362,"upperFoodGroup":"BABY FOODS"},{"foodGroupCount":363,"upperFoodGroup":"BREAKFAST CEREALS"},{"foodGroupCount":370,"upperFoodGroup":"FAST FOODS"},{"foodGroupCount":389,"upperFoodGroup":"LEGUMES AND LEGUME PRODUCTS"},{"foodGroupCount":390,"upperFoodGroup":"POULTRY PRODUCTS"},{"foodGroupCount":438,"upperFoodGroup":"LAMB, VEAL, AND GAME PRODUCTS"},{"foodGroupCount":451,"upperFoodGroup":"SOUPS, SAUCES, AND GRAVIES"},{"foodGroupCount":796,"upperFoodGroup":"BAKED PRODUCTS"},{"foodGroupCount":827,"upperFoodGroup":"VEGETABLES AND VEGETABLE PRODUCTS"},{"foodGroupCount":946,"upperFoodGroup":"BEEF PRODUCTS"}]`},
+// 		// TODO
+// 		// {name: "QueryGroupBy2", compareField: "foodGroupCount", query: `SELECT COUNT(1) AS foodGroupCount, ARRAY_CONTAINS(f.tags, {name: 'orange'}) AS containsOrangeTag, f.version BETWEEN 0 AND 2 AS correctVersion FROM Food f GROUP BY ARRAY_CONTAINS(f.tags, {name: 'orange'}), f.version BETWEEN 0 AND 2`, expectedResultJson: `[{"foodGroupCount":10,"containsOrangeTag":true,"correctVersion":true},{"foodGroupCount":8598,"containsOrangeTag":false,"correctVersion":true}]`},
 // 	}
-// 	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
-//
-// 	query := QueryReq{DbName: dbname, CollName: collname, MaxItemCount: 10, ConsistencyLevel: "Session", SessionToken: sessionToken,
-// 		Query:                 "SELECT * FROM c",
-// 		CrossPartitionEnabled: true,
-// 	}
-// 	var result *RespQueryDocs
-// 	documents := make([]DocInfo, 0)
-// 	totalRu = 0.0
-// 	for result = client.QueryDocuments(query); result.Error() == nil; {
-// 		totalRu += result.RequestCharge
-// 		documents = append(documents, result.Documents...)
-// 		if result.ContinuationToken == "" {
-// 			break
-// 		}
-// 		query.ContinuationToken = result.ContinuationToken
-// 		result = client.QueryDocuments(query)
-// 	}
-// 	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
-// 	if result.Error() != nil {
-// 		t.Fatalf("%s failed: %s", name, result.Error())
-// 	}
-// 	if len(documents) != 100 {
-// 		t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 63, len(documents))
-// 	}
-//
-// 	query.DbName = dbname
-// 	query.CollName = "table_not_found"
-// 	if result := client.QueryDocuments(query); result.CallErr != nil {
-// 		t.Fatalf("%s failed: %s", name, result.CallErr)
-// 	} else if result.StatusCode != 404 {
-// 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
-// 	}
-//
-// 	client.DeleteDatabase("db_not_found")
-// 	query.DbName = "db_not_found"
-// 	query.CollName = collname
-// 	if result := client.QueryDocuments(query); result.CallErr != nil {
-// 		t.Fatalf("%s failed: %s", name, result.CallErr)
-// 	} else if result.StatusCode != 404 {
-// 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
-// 	}
+// 	_testRestClientQueryDocumentsCustomDataset(t, testName, testCases, client, dbname, collname)
 // }
 //
-// func TestRestClient_QueryDocumentsPkranges(t *testing.T) {
-// 	name := "TestRestClient_QueryDocumentsPkranges"
-// 	client := _newRestClient(t, name)
-//
-// 	dbname := "mydb"
-// 	collname := "mytable"
-// 	client.DeleteDatabase(dbname)
-// 	client.CreateDatabase(DatabaseSpec{Id: dbname, MaxRu: 10000})
-// 	client.CreateCollection(CollectionSpec{
-// 		DbName:           dbname,
-// 		CollName:         collname,
-// 		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/username"}, "kind": "Hash"},
-// 		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
-// 	})
-// 	totalRu := 0.0
-// 	var wait sync.WaitGroup
-// 	n := 100
-// 	d := 16
-// 	wait.Add(n)
-// 	for i := 0; i < n; i++ {
-// 		go func(i int) {
-// 			id := fmt.Sprintf("%04d", i)
-// 			username := "user" + fmt.Sprintf("%02x", i%d)
-// 			email := "user" + strconv.Itoa(i) + "@domain.com"
-// 			if result := client.CreateDocument(DocumentSpec{DbName: dbname, CollName: collname,
-// 				PartitionKeyValues: []interface{}{username},
-// 				DocumentData:       map[string]interface{}{"id": id, "username": username, "email": email, "index": i},
-// 			}); result.Error() != nil {
-// 				t.Fatalf("%s failed: %s", name, result.Error())
-// 			} else {
-// 				totalRu += result.RequestCharge
-// 			}
-// 			wait.Done()
-// 		}(i)
+// func TestRestClient_QueryDocuments_DatasetNutrition_SmallRU(t *testing.T) {
+// 	testName := "TestRestClient_QueryDocuments_DatasetNutrition_SmallRU"
+// 	client := _newRestClient(t, testName)
+// 	dbname := testDb
+// 	collname := testTable
+// 	_initDataNutritionSmallRU(t, testName, client, dbname, collname)
+// 	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
+// 		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
+// 	} else if result.Count != 1 {
+// 		t.Fatalf("%s failed: <num-partition> expected to be %#v but received %#v", testName+"/GetPkranges", 1, result.Count)
 // 	}
-// 	wait.Wait()
-// 	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
-//
-// 	{
-// 		query := QueryReq{DbName: dbname, CollName: collname, MaxItemCount: 10, CrossPartitionEnabled: true,
-// 			Query:  "SELECT * FROM c WHERE c.id>=@id ORDER BY c.id OFFSET 5 LIMIT 3",
-// 			Params: []interface{}{map[string]interface{}{"name": "@id", "value": "0037"}},
-// 		}
-// 		var result *RespQueryDocs
-// 		documents := make([]DocInfo, 0)
-// 		totalRu = 0.0
-// 		for result = client.QueryDocuments(query); result.Error() == nil; {
-// 			totalRu += result.RequestCharge
-// 			documents = append(documents, result.Documents...)
-// 			if result.ContinuationToken == "" {
-// 				break
-// 			}
-// 			query.ContinuationToken = result.ContinuationToken
-// 			result = client.QueryDocuments(query)
-// 		}
-// 		fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
-// 		if result.Error() != nil {
-// 			t.Fatalf("%s failed: %s", name, result.Error())
-// 		}
-// 		if len(documents) != 3 {
-// 			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 3, len(documents))
-// 		}
-// 		if documents[0].Id() != "0042" || documents[1].Id() != "0043" || documents[2].Id() != "0044" {
-// 			t.Fatalf("%s failed: <documents> not in correct order", name)
-// 		}
-// 	}
-//
-// 	{
-// 		query := QueryReq{DbName: dbname, CollName: collname, MaxItemCount: 10, CrossPartitionEnabled: true,
-// 			Query:  "SELECT c.username, sum(c.index) FROM c WHERE c.id<@id GROUP BY c.username",
-// 			Params: []interface{}{map[string]interface{}{"name": "@id", "value": "0123"}},
-// 		}
-// 		var result *RespQueryDocs
-// 		documents := make([]DocInfo, 0)
-// 		totalRu = 0.0
-// 		for result = client.QueryDocuments(query); result.Error() == nil; {
-// 			totalRu += result.RequestCharge
-// 			documents = append(documents, result.Documents...)
-// 			if result.ContinuationToken == "" {
-// 				break
-// 			}
-// 			query.ContinuationToken = result.ContinuationToken
-// 			result = client.QueryDocuments(query)
-// 		}
-// 		fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
-// 		if result.Error() != nil {
-// 			t.Fatalf("%s failed: %s", name, result.Error())
-// 		}
-// 		if len(documents) != d {
-// 			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, d, len(documents))
-// 		}
-// 	}
+// 	_testRestClientQueryDocumentsDatasetNutrition(t, testName, client, dbname, collname)
 // }
 //
-// func TestRestClient_ListDocuments(t *testing.T) {
-// 	name := "TestRestClient_ListDocuments"
-// 	client := _newRestClient(t, name)
-//
-// 	dbname := "mydb"
-// 	collname := "mytable"
-// 	client.DeleteDatabase(dbname)
-// 	client.CreateDatabase(DatabaseSpec{Id: dbname, MaxRu: 10000})
-// 	client.CreateCollection(CollectionSpec{
-// 		DbName:           dbname,
-// 		CollName:         collname,
-// 		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/username"}, "kind": "Hash"},
-// 		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
-// 	})
-// 	totalRu := 0.0
-//
-// 	// if result := client.GetCollection(dbname, collname); result.Error() != nil {
-// 	// 	t.Fatalf("%s failed: %s", name, result.Error())
-// 	// } else {
-// 	// 	fmt.Println("\tCollection etag:", result.Etag, result.Ts)
-// 	// }
-//
-// 	for i := 0; i < 100; i++ {
-// 		docInfo := map[string]interface{}{"id": fmt.Sprintf("%02d", i), "username": "user", "email": "user" + strconv.Itoa(i) + "@domain.com", "grade": i, "active": i%10 == 0}
-// 		if result := client.CreateDocument(DocumentSpec{DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user"}, DocumentData: docInfo}); result.Error() != nil {
-// 			t.Fatalf("%s failed: %s", name, result.Error())
-// 		} else {
-// 			totalRu += result.RequestCharge
-// 		}
+// func TestRestClient_QueryDocuments_DatasetNutrition_LargeRU(t *testing.T) {
+// 	testName := "TestRestClient_QueryDocuments_DatasetNutrition_LargeRU"
+// 	client := _newRestClient(t, testName)
+// 	dbname := testDb
+// 	collname := testTable
+// 	_initDataNutritionLargeRU(t, testName, client, dbname, collname)
+// 	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
+// 		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
+// 	} else if result.Count < 2 {
+// 		t.Fatalf("%s failed: <num-partition> expected to be larger than %#v but received %#v", testName+"/GetPkranges", 1, result.Count)
 // 	}
-// 	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
-//
-// 	// var collEtag string
-// 	// if result := client.GetCollection(dbname, collname); result.Error() != nil {
-// 	// 	t.Fatalf("%s failed: %s", name, result.Error())
-// 	// } else {
-// 	// 	collEtag = result.Etag
-// 	// 	fmt.Println("\tCollection etag:", result.Etag, result.Ts)
-// 	// }
-//
-// 	var sessionToken string
-// 	rand.Seed(time.Now().UnixNano())
-// 	removed := make(map[int]bool)
-// 	for i := 0; i < 5; i++ {
-// 		id := rand.Intn(100)
-// 		removed[id] = true
-// 		result := client.DeleteDocument(DocReq{DbName: dbname, CollName: collname, DocId: fmt.Sprintf("%02d", id), PartitionKeyValues: []interface{}{"user"}})
-// 		if result.Error() != nil && result.StatusCode != 404 {
-// 			t.Fatalf("%s failed: %s", name, result.Error())
-// 		} else {
-// 			sessionToken = result.SessionToken
-// 		}
-//
-// 		id = rand.Intn(100)
-// 		if !removed[id] {
-// 			doc := DocumentSpec{
-// 				DbName:             dbname,
-// 				CollName:           collname,
-// 				IsUpsert:           true,
-// 				PartitionKeyValues: []interface{}{"user"},
-// 				DocumentData:       map[string]interface{}{"id": fmt.Sprintf("%02d", id), "username": "user", "email": "user" + strconv.Itoa(id) + "@domain.com", "grade": id, "active": i%10 == 0, "extra": time.Now()},
-// 			}
-// 			result := client.ReplaceDocument("", doc)
-// 			if result.Error() != nil && result.Error() != ErrNotFound {
-// 				t.Fatalf("%s failed: %s", name, result.Error())
-// 			} else {
-// 				sessionToken = result.SessionToken
-// 			}
-// 		}
-// 	}
-// 	// if result := client.GetCollection(dbname, collname); result.Error() != nil {
-// 	// 	t.Fatalf("%s failed: %s", name, result.Error())
-// 	// } else {
-// 	// 	fmt.Println("\tCollection etag:", result.Etag, result.Ts)
-// 	// }
-//
-// 	req := ListDocsReq{DbName: dbname, CollName: collname, MaxItemCount: 10, ConsistencyLevel: "Session", SessionToken: sessionToken}
-// 	var result *RespListDocs
-// 	documents := make([]DocInfo, 0)
-// 	totalRu = 0.0
-// 	for result = client.ListDocuments(req); result.Error() == nil; {
-// 		totalRu += result.RequestCharge
-// 		documents = append(documents, result.Documents...)
-// 		if result.ContinuationToken == "" {
-// 			break
-// 		}
-// 		req.ContinuationToken = result.ContinuationToken
-// 		result = client.ListDocuments(req)
-// 	}
-// 	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
-// 	if result.Error() != nil {
-// 		t.Fatalf("%s failed: %s", name, result.Error())
-// 	}
-// 	if len(documents) != 100-len(removed) {
-// 		fmt.Printf("Removed: %#v\n", removed)
-// 		t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 100-len(removed), len(documents))
-// 	}
-//
-// 	req.DbName = dbname
-// 	req.CollName = "table_not_found"
-// 	if result := client.ListDocuments(req); result.CallErr != nil {
-// 		t.Fatalf("%s failed: %s", name, result.CallErr)
-// 	} else if result.StatusCode != 404 {
-// 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
-// 	}
-//
-// 	client.DeleteDatabase("db_not_found")
-// 	req.DbName = "db_not_found"
-// 	req.CollName = collname
-// 	if result := client.ListDocuments(req); result.CallErr != nil {
-// 		t.Fatalf("%s failed: %s", name, result.CallErr)
-// 	} else if result.StatusCode != 404 {
-// 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
-// 	}
-// }
-//
-// func TestRestClient_ListDocumentsCrossPartition(t *testing.T) {
-// 	name := "TestRestClient_ListDocumentsCrossPartition"
-// 	client := _newRestClient(t, name)
-//
-// 	dbname := "mydb"
-// 	collname := "mytable"
-// 	client.DeleteDatabase(dbname)
-// 	client.CreateDatabase(DatabaseSpec{Id: dbname, MaxRu: 10000})
-// 	client.CreateCollection(CollectionSpec{
-// 		DbName:           dbname,
-// 		CollName:         collname,
-// 		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/username"}, "kind": "Hash"},
-// 		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
-// 	})
-// 	totalRu := 0.0
-// 	for i := 0; i < 100; i++ {
-// 		docInfo := map[string]interface{}{"id": fmt.Sprintf("%02d", i), "username": "user" + strconv.Itoa(i%4), "email": "user" + strconv.Itoa(i) + "@domain.com", "grade": i, "active": i%10 == 0}
-// 		if result := client.CreateDocument(DocumentSpec{DbName: dbname, CollName: collname, PartitionKeyValues: []interface{}{"user" + strconv.Itoa(i%4)}, DocumentData: docInfo}); result.Error() != nil {
-// 			t.Fatalf("%s failed: %s", name, result.Error())
-// 		} else {
-// 			totalRu += result.RequestCharge
-// 		}
-// 	}
-// 	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Insert", totalRu)
-//
-// 	rand.Seed(time.Now().UnixNano())
-// 	removed := make(map[int]bool)
-// 	for i := 0; i < 5; i++ {
-// 		id := rand.Intn(100)
-// 		removed[id] = true
-// 		result := client.DeleteDocument(DocReq{DbName: dbname, CollName: collname, DocId: fmt.Sprintf("%02d", id), PartitionKeyValues: []interface{}{"user" + strconv.Itoa(id%4)}})
-// 		if result.Error() != nil && result.StatusCode != 404 {
-// 			t.Fatalf("%s failed: %s", name, result.Error())
-// 		}
-//
-// 		id = rand.Intn(100)
-// 		if !removed[id] {
-// 			doc := DocumentSpec{
-// 				DbName:             dbname,
-// 				CollName:           collname,
-// 				IsUpsert:           true,
-// 				PartitionKeyValues: []interface{}{"user" + strconv.Itoa(id%4)},
-// 				DocumentData:       map[string]interface{}{"id": fmt.Sprintf("%02d", id), "username": "user" + strconv.Itoa(id%4), "email": "user" + strconv.Itoa(id) + "@domain.com", "grade": id, "active": i%10 == 0, "extra": time.Now()},
-// 			}
-// 			client.ReplaceDocument("", doc)
-// 		}
-// 	}
-//
-// 	req := ListDocsReq{DbName: dbname, CollName: collname, MaxItemCount: 10}
-// 	var result *RespListDocs
-// 	documents := make([]DocInfo, 0)
-// 	totalRu = 0.0
-// 	for result = client.ListDocuments(req); result.Error() == nil; {
-// 		totalRu += result.RequestCharge
-// 		documents = append(documents, result.Documents...)
-// 		if result.ContinuationToken == "" {
-// 			break
-// 		}
-// 		req.ContinuationToken = result.ContinuationToken
-// 		result = client.ListDocuments(req)
-// 	}
-// 	fmt.Printf("\t%s - total RU charged: %0.3f\n", name+"/Query", totalRu)
-// 	if result.Error() != nil {
-// 		t.Fatalf("%s failed: %s", name, result.Error())
-// 	}
-// 	if len(documents) != 100-len(removed) {
-// 		fmt.Printf("Removed: %#v\n", removed)
-// 		t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 100-len(removed), len(documents))
-// 	}
-//
-// 	req.DbName = dbname
-// 	req.CollName = "table_not_found"
-// 	if result := client.ListDocuments(req); result.CallErr != nil {
-// 		t.Fatalf("%s failed: %s", name, result.CallErr)
-// 	} else if result.StatusCode != 404 {
-// 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
-// 	}
-//
-// 	client.DeleteDatabase("db_not_found")
-// 	req.DbName = "db_not_found"
-// 	req.CollName = collname
-// 	if result := client.ListDocuments(req); result.CallErr != nil {
-// 		t.Fatalf("%s failed: %s", name, result.CallErr)
-// 	} else if result.StatusCode != 404 {
-// 		t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 404, result.StatusCode)
-// 	}
+// 	_testRestClientQueryDocumentsDatasetNutrition(t, testName, client, dbname, collname)
 // }

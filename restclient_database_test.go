@@ -10,7 +10,7 @@ func TestRestClient_CreateDatabase(t *testing.T) {
 	name := "TestRestClient_CreateDatabase"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
+	dbname := testDb
 	dbspecList := []DatabaseSpec{
 		{Id: dbname},
 		{Id: dbname, Ru: 400},
@@ -54,7 +54,7 @@ func TestRestClient_ChangeOfferDatabase(t *testing.T) {
 	name := "TestRestClient_ChangeOfferDatabase"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
+	dbname := testDb
 	dbspec := DatabaseSpec{Id: dbname, Ru: 400}
 	client.DeleteDatabase(dbname)
 	var dbInfo DbInfo
@@ -148,8 +148,9 @@ func TestRestClient_ChangeOfferDatabaseInvalid(t *testing.T) {
 	name := "TestRestClient_ChangeOfferDatabaseInvalid"
 	client := _newRestClient(t, name)
 
-	client.DeleteDatabase("mydb")
-	dbspec := DatabaseSpec{Id: "mydb"}
+	dbname := testDb
+	client.DeleteDatabase(dbname)
+	dbspec := DatabaseSpec{Id: dbname}
 	var dbInfo DbInfo
 	if result := client.CreateDatabase(dbspec); result.Error() != nil {
 		t.Fatalf("%s failed: %s", name, result.Error())
@@ -190,7 +191,7 @@ func TestRestClient_DeleteDatabase(t *testing.T) {
 	name := "TestRestClient_DeleteDatabase"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
+	dbname := testDb
 	client.CreateDatabase(DatabaseSpec{Id: dbname, Ru: 400, MaxRu: 0})
 	if result := client.DeleteDatabase(dbname); result.Error() != nil {
 		t.Fatalf("%s failed: %s", name, result.Error())
@@ -206,7 +207,7 @@ func TestRestClient_GetDatabase(t *testing.T) {
 	name := "TestRestClient_GetDatabase"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
+	dbname := testDb
 	client.CreateDatabase(DatabaseSpec{Id: dbname, Ru: 400, MaxRu: 0})
 	client.DeleteDatabase("db_not_found")
 	if result := client.GetDatabase(dbname); result.Error() != nil {
@@ -227,20 +228,28 @@ func TestRestClient_ListDatabases(t *testing.T) {
 	name := "TestRestClient_ListDatabases"
 	client := _newRestClient(t, name)
 
-	dbnames := map[string]int{"db1": 1, "db3": 1, "db5": 1, "db4": 1, "db2": 1}
-	for dbname := range dbnames {
+	dbnames := []string{"db1", "db2", "db3", "db4", "db5"}
+	defer func() {
+		for _, dbname := range dbnames {
+			client.DeleteDatabase(dbname)
+		}
+	}()
+	dbnamesMap := make(map[string]int)
+	for _, dbname := range dbnames {
+		dbnamesMap[dbname] = 1
 		client.CreateDatabase(DatabaseSpec{Id: dbname, Ru: 400, MaxRu: 0})
 	}
+
 	if result := client.ListDatabases(); result.Error() != nil {
 		t.Fatalf("%s failed: %s", name, result.Error())
-	} else if int(result.Count) < len(dbnames) {
+	} else if int(result.Count) < len(dbnamesMap) {
 		t.Fatalf("%s failed: number of returned databases %#v", name, result.Count)
 	} else {
 		for _, db := range result.Databases {
-			delete(dbnames, db.Id)
+			delete(dbnamesMap, db.Id)
 		}
-		if len(dbnames) != 0 {
-			t.Fatalf("%s failed: databases not returned %#v", name, dbnames)
+		if len(dbnamesMap) != 0 {
+			t.Fatalf("%s failed: databases not returned %#v", name, dbnamesMap)
 		}
 	}
 }

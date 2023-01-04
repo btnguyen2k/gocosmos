@@ -12,8 +12,8 @@ func TestRestClient_CreateDocument(t *testing.T) {
 	name := "TestRestClient_CreateDocument"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	client.DeleteDatabase(dbname)
 	client.CreateDatabase(DatabaseSpec{Id: dbname})
 	client.CreateCollection(CollectionSpec{
@@ -101,8 +101,8 @@ func TestRestClient_CreateDocumentNoId(t *testing.T) {
 	name := "TestRestClient_CreateDocumentNoId"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	client.DeleteDatabase(dbname)
 	client.CreateDatabase(DatabaseSpec{Id: dbname})
 	client.CreateCollection(CollectionSpec{
@@ -136,8 +136,8 @@ func TestRestClient_UpsertDocument(t *testing.T) {
 	name := "TestRestClient_UpsertDocument"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	client.DeleteDatabase(dbname)
 	client.CreateDatabase(DatabaseSpec{Id: dbname})
 	client.CreateCollection(CollectionSpec{
@@ -215,8 +215,8 @@ func TestRestClient_UpsertDocumentNoId(t *testing.T) {
 	name := "TestRestClient_UpsertDocumentNoId"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	client.DeleteDatabase(dbname)
 	client.CreateDatabase(DatabaseSpec{Id: dbname})
 	client.CreateCollection(CollectionSpec{
@@ -251,8 +251,8 @@ func TestRestClient_ReplaceDocument(t *testing.T) {
 	name := "TestRestClient_ReplaceDocument"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	client.DeleteDatabase(dbname)
 	client.CreateDatabase(DatabaseSpec{Id: dbname})
 	client.CreateCollection(CollectionSpec{
@@ -350,8 +350,8 @@ func TestRestClient_ReplaceDocumentCrossPartitions(t *testing.T) {
 	name := "TestRestClient_ReplaceDocumentCrossPartitions"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	client.DeleteDatabase(dbname)
 	client.CreateDatabase(DatabaseSpec{Id: dbname})
 	client.CreateCollection(CollectionSpec{
@@ -390,8 +390,8 @@ func TestRestClient_GetDocument(t *testing.T) {
 	name := "TestRestClient_GetDocument"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	client.DeleteDatabase(dbname)
 	client.CreateDatabase(DatabaseSpec{Id: dbname})
 	client.CreateCollection(CollectionSpec{
@@ -471,8 +471,8 @@ func TestRestClient_DeleteDocument(t *testing.T) {
 	name := "TestRestClient_DeleteDocument"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	client.DeleteDatabase(dbname)
 	client.CreateDatabase(DatabaseSpec{Id: dbname})
 	client.CreateCollection(CollectionSpec{

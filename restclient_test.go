@@ -4,8 +4,12 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 	"testing"
+)
+
+const (
+	testDb    = "mydb"
+	testTable = "mytable"
 )
 
 func TestNewRestClient(t *testing.T) {
@@ -49,29 +53,13 @@ func TestRestClient_GetPkranges(t *testing.T) {
 	name := "TestRestClient_GetPkranges"
 	client := _newRestClient(t, name)
 
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	client.DeleteDatabase(dbname)
 	client.CreateDatabase(DatabaseSpec{Id: dbname, MaxRu: 10000})
 	client.CreateCollection(CollectionSpec{DbName: dbname, CollName: collname,
 		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/username"}, "kind": "Hash"},
 	})
-	var wait sync.WaitGroup
-	n := 1000
-	d := 16
-	wait.Add(n)
-	for i := 0; i < n; i++ {
-		go func(i int) {
-			id := fmt.Sprintf("%04d", i)
-			username := "user" + fmt.Sprintf("%02x", i%d)
-			client.CreateDocument(DocumentSpec{DbName: dbname, CollName: collname,
-				PartitionKeyValues: []interface{}{username},
-				DocumentData:       map[string]interface{}{"id": id, "username": username, "index": i},
-			})
-			wait.Done()
-		}(i)
-	}
-	wait.Wait()
 
 	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
 		t.Fatalf("%s failed: %s", name, result.Error())
@@ -79,6 +67,7 @@ func TestRestClient_GetPkranges(t *testing.T) {
 		t.Fatalf("%s failed: invalid number of pk ranges %#v", name, len(result.Pkranges))
 	}
 
+	client.DeleteCollection(dbname, "table_not_found")
 	if result := client.GetPkranges(dbname, "table_not_found"); result.CallErr != nil {
 		t.Fatalf("%s failed: %s", name, result.CallErr)
 	} else if result.StatusCode != 404 {
@@ -143,8 +132,8 @@ func _testRestClientQueryPlan(t *testing.T, testName string, client *RestClient,
 func TestRestClient_QueryPlan_SmallRU(t *testing.T) {
 	testName := "TestRestClient_QueryPlan_SmallRU"
 	client := _newRestClient(t, testName)
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	_initDataSmallRU(t, testName, client, dbname, collname, 1000)
 	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
 		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
@@ -157,8 +146,8 @@ func TestRestClient_QueryPlan_SmallRU(t *testing.T) {
 func TestRestClient_QueryPlan_LargeRU(t *testing.T) {
 	testName := "TestRestClient_QueryPlan_LargeRU"
 	client := _newRestClient(t, testName)
-	dbname := "mydb"
-	collname := "mytable"
+	dbname := testDb
+	collname := testTable
 	_initDataLargeRU(t, testName, client, dbname, collname, 1000)
 	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
 		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
