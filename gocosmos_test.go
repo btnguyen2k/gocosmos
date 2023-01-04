@@ -143,12 +143,14 @@ func Test_Query_CreateDatabase(t *testing.T) {
 func Test_Exec_CreateDatabase(t *testing.T) {
 	name := "Test_Query_CreateDatabase"
 	db := _openDb(t, name)
+	dbname := "dbtemp"
+	defer db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname))
 
-	db.Exec("DROP DATABASE IF EXISTS dbtemp")
-	db.Exec("DROP DATABASE IF EXISTS dbtemp1")
+	// clean up
+	db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname))
 
 	// first creation should be successful
-	result, err := db.Exec("CREATE DATABASE dbtemp WITH ru=400")
+	result, err := db.Exec(fmt.Sprintf("CREATE DATABASE %s WITH ru=400", dbname))
 	if err != nil {
 		t.Fatalf("%s failed: %s", name, err)
 	}
@@ -162,24 +164,16 @@ func Test_Exec_CreateDatabase(t *testing.T) {
 	}
 
 	// second creation should return ErrConflict
-	_, err = db.Exec("CREATE DATABASE dbtemp WITH ru=400")
+	_, err = db.Exec(fmt.Sprintf("CREATE DATABASE %s WITH ru=400", dbname))
 	if err != ErrConflict {
 		t.Fatalf("%s failed: expected ErrConflict but received %#v", name, err)
 	}
 
-	// third creation should be successful with "IF NOT EXISTS"
-	result, err = db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp WITH maxru=4000")
-	if err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
-	if id, err := result.LastInsertId(); id != 0 && err == nil {
-		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
-	}
-	if numRows, err := result.RowsAffected(); numRows != 0 || err != nil {
-		t.Fatalf("%s failed: expected RowsAffected=0/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
-	}
+	// clean up
+	db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname))
 
-	result, err = db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp1 WITH maxru=4000")
+	// first creation should be successful
+	result, err = db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s WITH maxru=4000", dbname))
 	if err != nil {
 		t.Fatalf("%s failed: %s", name, err)
 	}
@@ -188,6 +182,18 @@ func Test_Exec_CreateDatabase(t *testing.T) {
 	}
 	if numRows, err := result.RowsAffected(); numRows != 1 || err != nil {
 		t.Fatalf("%s failed: expected RowsAffected=1/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
+	}
+
+	// second creation should be successful with "IF NOT EXISTS"
+	result, err = db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s WITH maxru=4000", dbname))
+	if err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+	if id, err := result.LastInsertId(); id != 0 && err == nil {
+		t.Fatalf("%s failed: expected LastInsertId=0/err!=nil but received LastInsertId=%d/err=%s", name, id, err)
+	}
+	if numRows, err := result.RowsAffected(); numRows != 0 || err != nil {
+		t.Fatalf("%s failed: expected RowsAffected=0/err=nil but received RowsAffected=%d/err=%s", name, numRows, err)
 	}
 }
 
@@ -207,6 +213,7 @@ func Test_Exec_AlterDatabase(t *testing.T) {
 	db.Exec("DROP DATABASE IF EXISTS db_not_found")
 	db.Exec("DROP DATABASE IF EXISTS dbtemp")
 	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp WITH ru=400")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
 
 	result, err := db.Exec("ALTER DATABASE dbtemp WITH ru=500")
 	if err != nil {
@@ -239,6 +246,7 @@ func Test_Exec_AlterDatabaseNoOffer(t *testing.T) {
 
 	db.Exec("DROP DATABASE IF EXISTS dbtemp")
 	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
 
 	_, err := db.Exec("ALTER DATABASE dbtemp WITH maxru=6000")
 	if err != ErrNotFound {
@@ -293,9 +301,12 @@ func Test_Query_ListDatabases(t *testing.T) {
 	name := "Test_Query_ListDatabases"
 	db := _openDb(t, name)
 
-	db.Exec("CREATE DATABASE dbtemp")
-	db.Exec("CREATE DATABASE dbtemp2")
-	db.Exec("CREATE DATABASE dbtemp1")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp1")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp2")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp1")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp2")
 
 	dbRows, err := db.Query("LIST DATABASES")
 	if err != nil {
@@ -356,6 +367,7 @@ func Test_Exec_CreateCollection(t *testing.T) {
 	db.Exec("DROP DATABASE IF EXISTS db_not_exists")
 	db.Exec("DROP DATABASE IF EXISTS dbtemp")
 	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
 
 	// first creation should be successful
 	result, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/id WITH ru=400")
@@ -411,8 +423,9 @@ func Test_Exec_CreateCollectionDefaultDb(t *testing.T) {
 	dbName := "mydefaultdb"
 	db := _openDefaultDb(t, name, dbName)
 
-	db.Exec("DROP DATABASE IF EXISTS " + dbName)
-	db.Exec("CREATE DATABASE IF NOT EXISTS " + dbName)
+	db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
+	db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbName))
+	defer db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
 
 	// first creation should be successful
 	result, err := db.Exec("CREATE COLLECTION tbltemp WITH pk=/id WITH ru=400")
@@ -463,6 +476,7 @@ func Test_Exec_AlterCollection(t *testing.T) {
 	db.Exec("DROP DATABASE IF EXISTS db_not_exists")
 	db.Exec("DROP DATABASE IF EXISTS dbtemp")
 	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
 	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/id")
 
 	result, err := db.Exec("ALTER COLLECTION dbtemp.tbltemp WITH ru=500")
@@ -503,8 +517,9 @@ func Test_Exec_AlterCollectionDefaultDb(t *testing.T) {
 	dbName := "mydefaultdb"
 	db := _openDefaultDb(t, name, dbName)
 
-	db.Exec("DROP DATABASE IF EXISTS " + dbName)
-	db.Exec("CREATE DATABASE IF NOT EXISTS " + dbName)
+	db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
+	db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbName))
+	defer db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbName))
 	db.Exec("CREATE COLLECTION tbltemp WITH pk=/id")
 
 	result, err := db.Exec("ALTER COLLECTION tbltemp WITH ru=500")
@@ -553,7 +568,9 @@ func Test_Exec_DropCollection(t *testing.T) {
 	name := "Test_Exec_DropCollection"
 	db := _openDb(t, name)
 
+	db.Exec("DROP DATABASE IF EXISTS dbtemp")
 	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
 	db.Exec("CREATE COLLECTION IF NOT EXISTS dbtemp.tbltemp WITH pk=/id")
 
 	// first drop should be successful
@@ -588,7 +605,9 @@ func Test_Query_ListCollections(t *testing.T) {
 	name := "Test_Query_ListCollections"
 	db := _openDb(t, name)
 
-	db.Exec("CREATE DATABASE dbtemp")
+	db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
 	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/a")
 	db.Exec("CREATE TABLE dbtemp.tbltemp2 WITH pk=/b")
 	db.Exec("CREATE COLLECTION dbtemp.tbltemp1 WITH pk=/c")
@@ -652,15 +671,10 @@ func Test_Exec_Insert(t *testing.T) {
 	name := "Test_Exec_Insert"
 	db := _openDb(t, name)
 
-	if _, err := db.Exec("DROP DATABASE IF EXISTS db_not_exists"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
-	if _, err := db.Exec("DROP DATABASE IF EXISTS dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
-	if _, err := db.Exec("CREATE DATABASE dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
+	db.Exec("DROP DATABASE IF EXISTS db_not_exists")
+	db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
 	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
 		t.Fatalf("%s failed: %s", name, err)
 	}
@@ -699,15 +713,10 @@ func Test_Exec_InsertPlaceholder(t *testing.T) {
 	name := "Test_Exec_InsertPlaceholder"
 	db := _openDb(t, name)
 
-	if _, err := db.Exec("DROP DATABASE IF EXISTS db_not_exists"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
-	if _, err := db.Exec("DROP DATABASE IF EXISTS dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
-	if _, err := db.Exec("CREATE DATABASE dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
+	db.Exec("DROP DATABASE IF EXISTS db_not_exists")
+	db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
 	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
 		t.Fatalf("%s failed: %s", name, err)
 	}
@@ -754,15 +763,10 @@ func Test_Exec_Upsert(t *testing.T) {
 	name := "Test_Exec_Upsert"
 	db := _openDb(t, name)
 
-	if _, err := db.Exec("DROP DATABASE IF EXISTS db_not_exists"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
-	if _, err := db.Exec("DROP DATABASE IF EXISTS dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
-	if _, err := db.Exec("CREATE DATABASE dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
+	db.Exec("DROP DATABASE IF EXISTS db_not_exists")
+	db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
 	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
 		t.Fatalf("%s failed: %s", name, err)
 	}
@@ -816,15 +820,10 @@ func Test_Exec_UpsertPlaceholder(t *testing.T) {
 	name := "Test_Exec_UpsertPlaceholder"
 	db := _openDb(t, name)
 
-	if _, err := db.Exec("DROP DATABASE IF EXISTS db_not_exists"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
-	if _, err := db.Exec("DROP DATABASE IF EXISTS dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
-	if _, err := db.Exec("CREATE DATABASE dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
+	db.Exec("DROP DATABASE IF EXISTS db_not_exists")
+	db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
 	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
 		t.Fatalf("%s failed: %s", name, err)
 	}
@@ -882,10 +881,14 @@ func Test_Exec_Delete(t *testing.T) {
 	name := "Test_Exec_Delete"
 	db := _openDb(t, name)
 
-	db.Exec("DROP DATABASE db_not_exists")
-	db.Exec("DROP DATABASE dbtemp")
-	db.Exec("CREATE DATABASE dbtemp")
-	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
+	db.Exec("DROP DATABASE IF EXISTS db_not_exists")
+	db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
+
 	db.Exec(`INSERT INTO dbtemp.tbltemp (id,username,email) VALUES (:1,@2,$3)`, "1", "user", "user@domain1.com", "user")
 	db.Exec(`INSERT INTO dbtemp.tbltemp (id,username,email) VALUES (:1,@2,$3)`, "2", "user", "user@domain2.com", "user")
 	db.Exec(`INSERT INTO dbtemp.tbltemp (id,username,email) VALUES (:1,@2,$3)`, "3", "user", "user@domain3.com", "user")
@@ -964,10 +967,13 @@ func Test_Query_Select(t *testing.T) {
 	name := "Test_Query_Select"
 	db := _openDb(t, name)
 
-	db.Exec("DROP DATABASE db_not_exists")
-	db.Exec("DROP DATABASE dbtemp")
-	db.Exec("CREATE DATABASE dbtemp WITH maxru=10000")
-	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
+	db.Exec("DROP DATABASE IF EXISTS db_not_exists")
+	db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
 
 	for i := 0; i < 100; i++ {
 		id := fmt.Sprintf("%02d", i)
@@ -1060,10 +1066,13 @@ func Test_Query_SelectLongList(t *testing.T) {
 	name := "Test_Query_SelectLongList"
 	db := _openDb(t, name)
 
-	db.Exec("DROP DATABASE db_not_exists")
-	db.Exec("DROP DATABASE dbtemp")
-	db.Exec("CREATE DATABASE dbtemp WITH maxru=10000")
-	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
+	db.Exec("DROP DATABASE IF EXISTS db_not_exists")
+	db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
 
 	for i := 0; i < 1000; i++ {
 		id := fmt.Sprintf("%03d", i)
@@ -1112,10 +1121,13 @@ func Test_Query_SelectPlaceholder(t *testing.T) {
 	name := "Test_Query_SelectPlaceholder"
 	db := _openDb(t, name)
 
-	db.Exec("DROP DATABASE db_not_exists")
-	db.Exec("DROP DATABASE dbtemp")
-	db.Exec("CREATE DATABASE dbtemp WITH maxru=10000")
-	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
+	db.Exec("DROP DATABASE IF EXISTS db_not_exists")
+	db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
 
 	for i := 0; i < 100; i++ {
 		id := fmt.Sprintf("%02d", i)
@@ -1204,9 +1216,12 @@ func Test_Query_SelectPkranges(t *testing.T) {
 	name := "Test_Query_SelectPkranges"
 	db := _openDb(t, name)
 
-	db.Exec("DROP DATABASE dbtemp")
-	db.Exec("CREATE DATABASE dbtemp WITH maxru=10000")
-	db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email")
+	db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
+		t.Fatalf("%s failed: %s", name, err)
+	}
 
 	var wait sync.WaitGroup
 	n := 1000
@@ -1306,15 +1321,10 @@ func Test_Exec_Update(t *testing.T) {
 	name := "Test_Exec_Update"
 	db := _openDb(t, name)
 
-	if _, err := db.Exec("DROP DATABASE IF EXISTS db_not_exists"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
-	if _, err := db.Exec("DROP DATABASE IF EXISTS dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
-	if _, err := db.Exec("CREATE DATABASE dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
+	db.Exec("DROP DATABASE IF EXISTS db_not_exists")
+	db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
 	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
 		t.Fatalf("%s failed: %s", name, err)
 	}
@@ -1370,15 +1380,10 @@ func Test_Exec_UpdatePlaceholder(t *testing.T) {
 	name := "Test_Exec_UpdatePlaceholder"
 	db := _openDb(t, name)
 
-	if _, err := db.Exec("DROP DATABASE IF EXISTS db_not_exists"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
-	if _, err := db.Exec("DROP DATABASE IF EXISTS dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
-	if _, err := db.Exec("CREATE DATABASE dbtemp"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
+	db.Exec("DROP DATABASE IF EXISTS db_not_exists")
+	db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
+	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
 	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
 		t.Fatalf("%s failed: %s", name, err)
 	}

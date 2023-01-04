@@ -1,6 +1,12 @@
 # gocosmos release notes
 
-## 2022-12-02 - v0.1.8
+## 2023-01-04 - v0.1.9
+
+- Update `RestClient`
+  - `QueryDocuments`: better support cross-partition queries.
+  - `ListDocuments`: support fetching change feed.
+
+## 2022-12-04 - v0.1.8
 
 - REST client: rewrite `RestClient.QueryDocuments`. TODO:
   - [x] (v0.1.7+) simple cross-partition queries (+paging)

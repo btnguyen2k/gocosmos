@@ -70,21 +70,22 @@ func _parseValue(input string, separator rune) (value interface{}, leftOver stri
 // StmtInsert implements "INSERT" operation.
 //
 // Syntax:
-//     INSERT|UPSERT INTO <db-name>.<collection-name> (<field-list>) VALUES (<value-list>)
 //
-//     - values are comma separated.
-//     - a value is either:
-//       - a placeholder (e.g. :1, @2 or $3)
-//       - a null
-//       - a number
-//       - a boolean (true/false)
-//       - a string (inside double quotes) that must be a valid JSON, e.g.
-//         - a string value in JSON (include the double quotes): "\"a string\""
-//         - a number value in JSON (include the double quotes): "123"
-//         - a boolean value in JSON (include the double quotes): "true"
-//         - a null value in JSON (include the double quotes): "null"
-//         - a map value in JSON (include the double quotes): "{\"key\":\"value\"}"
-//         - a list value in JSON (include the double quotes): "[1,true,null,\"string\"]"
+//	INSERT|UPSERT INTO <db-name>.<collection-name> (<field-list>) VALUES (<value-list>)
+//
+//	- values are comma separated.
+//	- a value is either:
+//	  - a placeholder (e.g. :1, @2 or $3)
+//	  - a null
+//	  - a number
+//	  - a boolean (true/false)
+//	  - a string (inside double quotes) that must be a valid JSON, e.g.
+//	    - a string value in JSON (include the double quotes): "\"a string\""
+//	    - a number value in JSON (include the double quotes): "123"
+//	    - a boolean value in JSON (include the double quotes): "true"
+//	    - a null value in JSON (include the double quotes): "null"
+//	    - a map value in JSON (include the double quotes): "{\"key\":\"value\"}"
+//	    - a list value in JSON (include the double quotes): "[1,true,null,\"string\"]"
 //
 // CosmosDB automatically creates a few extra fields for the insert document.
 // See https://docs.microsoft.com/en-us/azure/cosmos-db/account-databases-containers-items#properties-of-an-item.
@@ -202,7 +203,8 @@ func (r *ResultInsert) RowsAffected() (int64, error) {
 // StmtDelete implements "DELETE" operation.
 //
 // Syntax:
-//     DELETE FROM <db-name>.<collection-name> WHERE id=<id-value>
+//
+//	DELETE FROM <db-name>.<collection-name> WHERE id=<id-value>
 //
 // - Currently DELETE only removes one document specified by id.
 //
@@ -315,15 +317,16 @@ func (r *ResultDelete) RowsAffected() (int64, error) {
 // The "SELECT" query follows CosmosDB's SQL grammar (https://docs.microsoft.com/en-us/azure/cosmos-db/sql-query-select) with a few extensions:
 //
 // Syntax:
-//     SELECT [CROSS PARTITION] ... FROM <collection/table-name> ... WITH database|db=<db-name> [WITH collection|table=<collection/table-name>] [WITH cross_partition=true]
 //
-//     - (extension) If the collection is partitioned, specify "CROSS PARTITION" to allow execution across multiple partitions.
-//       This clause is not required if query is to be executed on a single partition.
-//       Cross-partition execution can also be enabled using WITH cross_partition=true.
-//     - (extension) Use "WITH database=<db-name>" (or "WITH db=<db-name>") to specify the database on which the query is to be executed.
-//     - (extension) Use "WITH collection=<coll-name>" (or "WITH table=<coll-name>") to specify the collection/table on which the query is to be executed.
-//       If not specified, collection/table name is extracted from the "FROM <collection/table-name>" clause.
-//     - (extension) Use placeholder syntax @i, $i or :i (where i denotes the i-th parameter, the first parameter is 1)
+//	SELECT [CROSS PARTITION] ... FROM <collection/table-name> ... WITH database|db=<db-name> [WITH collection|table=<collection/table-name>] [WITH cross_partition=true]
+//
+//	- (extension) If the collection is partitioned, specify "CROSS PARTITION" to allow execution across multiple partitions.
+//	  This clause is not required if query is to be executed on a single partition.
+//	  Cross-partition execution can also be enabled using WITH cross_partition=true.
+//	- (extension) Use "WITH database=<db-name>" (or "WITH db=<db-name>") to specify the database on which the query is to be executed.
+//	- (extension) Use "WITH collection=<coll-name>" (or "WITH table=<coll-name>") to specify the collection/table on which the query is to be executed.
+//	  If not specified, collection/table name is extracted from the "FROM <collection/table-name>" clause.
+//	- (extension) Use placeholder syntax @i, $i or :i (where i denotes the i-th parameter, the first parameter is 1)
 type StmtSelect struct {
 	*Stmt
 	isCrossPartition bool
@@ -399,7 +402,9 @@ func (s *StmtSelect) Query(args []driver.Value) (driver.Rows, error) {
 	documents := make([]DocInfo, 0)
 	var restResult *RespQueryDocs
 	for restResult = s.conn.restClient.QueryDocuments(query); restResult.Error() == nil; restResult = s.conn.restClient.QueryDocuments(query) {
-		documents = append(documents, restResult.Documents...)
+		// FIXME restResult.Documents is no longer slice of DocInfo
+		// documents = append(documents, restResult.Documents...)
+		documents = append(documents, restResult.Documents.AsDocInfoSlice()...)
 		if restResult.ContinuationToken == "" {
 			break
 		}
@@ -474,21 +479,22 @@ func (r *ResultSelect) Next(dest []driver.Value) error {
 // StmtUpdate implements "UPDATE" operation.
 //
 // Syntax:
-//     UPDATE <db-name>.<collection-name> SET <field-name>=<value>[,<field-name>=<value>]*, WHERE id=<id-value>
 //
-//     - <id-value> is treated as a string. `WHERE id=abc` has the same effect as `WHERE id="abc"`.
-//     - <value> is either:
-//       - a placeholder (e.g. :1, @2 or $3)
-//       - a null
-//       - a number
-//       - a boolean (true/false)
-//       - a string (inside double quotes) that must be a valid JSON, e.g.
-//         - a string value in JSON (include the double quotes): "\"a string\""
-//         - a number value in JSON (include the double quotes): "123"
-//         - a boolean value in JSON (include the double quotes): "true"
-//         - a null value in JSON (include the double quotes): "null"
-//         - a map value in JSON (include the double quotes): "{\"key\":\"value\"}"
-//         - a list value in JSON (include the double quotes): "[1,true,null,\"string\"]"
+//	UPDATE <db-name>.<collection-name> SET <field-name>=<value>[,<field-name>=<value>]*, WHERE id=<id-value>
+//
+//	- <id-value> is treated as a string. `WHERE id=abc` has the same effect as `WHERE id="abc"`.
+//	- <value> is either:
+//	  - a placeholder (e.g. :1, @2 or $3)
+//	  - a null
+//	  - a number
+//	  - a boolean (true/false)
+//	  - a string (inside double quotes) that must be a valid JSON, e.g.
+//	    - a string value in JSON (include the double quotes): "\"a string\""
+//	    - a number value in JSON (include the double quotes): "123"
+//	    - a boolean value in JSON (include the double quotes): "true"
+//	    - a null value in JSON (include the double quotes): "null"
+//	    - a map value in JSON (include the double quotes): "{\"key\":\"value\"}"
+//	    - a list value in JSON (include the double quotes): "[1,true,null,\"string\"]"
 //
 // Currently UPDATE only updates one document specified by id.
 type StmtUpdate struct {

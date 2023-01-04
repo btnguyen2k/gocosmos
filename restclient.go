@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -18,6 +19,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/btnguyen2k/consu/checksum"
 	"github.com/btnguyen2k/consu/gjrc"
 	"github.com/btnguyen2k/consu/reddo"
 	"github.com/btnguyen2k/consu/semita"
@@ -100,12 +102,12 @@ func NewRestClient(httpClient *http.Client, connStr string) (*RestClient, error)
 	}, nil
 }
 
-// RestClient is REST-based client for Azure CosmosDB
+// RestClient is REST-based client for Azure Cosmos DB
 type RestClient struct {
 	client     *gjrc.Gjrc
-	endpoint   string            // Azure CosmosDB endpoint
+	endpoint   string            // Azure Cosmos DB endpoint
 	authKey    []byte            // Account key to authenticate
-	apiVersion string            // Azure CosmosDB API version
+	apiVersion string            // Azure Cosmos DB API version
 	autoId     bool              // if true and value for 'id' field is not specified, CreateDocument
 	params     map[string]string // parsed parameters
 }
@@ -152,7 +154,6 @@ func (c *RestClient) buildRestReponse(resp *gjrc.GjrcResponse) RestReponse {
 		result.RespHeader = make(map[string]string)
 		for k, v := range resp.HttpResponse().Header {
 			if len(v) > 0 {
-				// result.RespHeader[k] = v[0]
 				result.RespHeader[strings.ToUpper(k)] = v[0]
 			}
 		}
@@ -163,19 +164,19 @@ func (c *RestClient) buildRestReponse(resp *gjrc.GjrcResponse) RestReponse {
 		}
 		result.SessionToken = result.RespHeader[respHeaderSessionToken]
 		if result.StatusCode >= 400 {
-			result.ApiErr = fmt.Errorf("error executing Azure CosmosDB command; StatusCode=%d;Body=%s", result.StatusCode, result.RespBody)
+			result.ApiErr = fmt.Errorf("error executing Azure Cosmos DB command; StatusCode=%d;Body=%s", result.StatusCode, result.RespBody)
 		}
 	}
 	return result
 }
 
-// DatabaseSpec specifies a CosmosDB database specifications for creation.
+// DatabaseSpec specifies a Cosmos DB database specifications for creation.
 type DatabaseSpec struct {
 	Id        string
 	Ru, MaxRu int
 }
 
-// CreateDatabase invokes CosmosDB API to create a new database.
+// CreateDatabase invokes Cosmos DB API to create a new database.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/create-a-database.
 //
@@ -200,7 +201,7 @@ func (c *RestClient) CreateDatabase(spec DatabaseSpec) *RespCreateDb {
 	return result
 }
 
-// GetDatabase invokes CosmosDB API to get an existing database.
+// GetDatabase invokes Cosmos DB API to get an existing database.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/get-a-database.
 func (c *RestClient) GetDatabase(dbName string) *RespGetDb {
@@ -217,7 +218,7 @@ func (c *RestClient) GetDatabase(dbName string) *RespGetDb {
 	return result
 }
 
-// DeleteDatabase invokes CosmosDB API to delete an existing database.
+// DeleteDatabase invokes Cosmos DB API to delete an existing database.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/delete-a-database.
 func (c *RestClient) DeleteDatabase(dbName string) *RespDeleteDb {
@@ -231,7 +232,7 @@ func (c *RestClient) DeleteDatabase(dbName string) *RespDeleteDb {
 	return result
 }
 
-// ListDatabases invokes CosmosDB API to list all available databases.
+// ListDatabases invokes Cosmos DB API to list all available databases.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/list-databases.
 func (c *RestClient) ListDatabases() *RespListDb {
@@ -254,7 +255,7 @@ func (c *RestClient) ListDatabases() *RespListDb {
 	return result
 }
 
-// CollectionSpec specifies a CosmosDB collection specifications for creation.
+// CollectionSpec specifies a Cosmos DB collection specifications for creation.
 type CollectionSpec struct {
 	DbName, CollName string
 	Ru, MaxRu        int
@@ -266,7 +267,7 @@ type CollectionSpec struct {
 	UniqueKeyPolicy  map[string]interface{}
 }
 
-// CreateCollection invokes CosmosDB API to create a new collection.
+// CreateCollection invokes Cosmos DB API to create a new collection.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/create-a-collection.
 //
@@ -298,7 +299,7 @@ func (c *RestClient) CreateCollection(spec CollectionSpec) *RespCreateColl {
 	return result
 }
 
-// ReplaceCollection invokes CosmosDB API to replace an existing collection.
+// ReplaceCollection invokes Cosmos DB API to replace an existing collection.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/replace-a-collection.
 //
@@ -334,7 +335,7 @@ func (c *RestClient) ReplaceCollection(spec CollectionSpec) *RespReplaceColl {
 	return result
 }
 
-// GetCollection invokes CosmosDB API to get an existing collection.
+// GetCollection invokes Cosmos DB API to get an existing collection.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/get-a-collection
 func (c *RestClient) GetCollection(dbName, collName string) *RespGetColl {
@@ -351,7 +352,7 @@ func (c *RestClient) GetCollection(dbName, collName string) *RespGetColl {
 	return result
 }
 
-// DeleteCollection invokes CosmosDB API to delete an existing collection.
+// DeleteCollection invokes Cosmos DB API to delete an existing collection.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/delete-a-collection.
 func (c *RestClient) DeleteCollection(dbName, collName string) *RespDeleteColl {
@@ -365,7 +366,7 @@ func (c *RestClient) DeleteCollection(dbName, collName string) *RespDeleteColl {
 	return result
 }
 
-// ListCollections invokes CosmosDB API to list all available collections.
+// ListCollections invokes Cosmos DB API to list all available collections.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/list-collections.
 func (c *RestClient) ListCollections(dbName string) *RespListColl {
@@ -388,7 +389,7 @@ func (c *RestClient) ListCollections(dbName string) *RespListColl {
 	return result
 }
 
-// GetPkranges invokes CosmosDB API to retrieves the list of partition key ranges for a collection.
+// GetPkranges invokes Cosmos DB API to retrieves the list of partition key ranges for a collection.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/get-partition-key-ranges.
 //
@@ -407,16 +408,16 @@ func (c *RestClient) GetPkranges(dbName, collName string) *RespGetPkranges {
 	return result
 }
 
-// DocumentSpec specifies a CosmosDB document specifications for creation.
+// DocumentSpec specifies a Cosmos DB document specifications for creation.
 type DocumentSpec struct {
 	DbName, CollName   string
 	IsUpsert           bool
 	IndexingDirective  string // accepted value "", "Include" or "Exclude"
 	PartitionKeyValues []interface{}
-	DocumentData       map[string]interface{}
+	DocumentData       DocInfo
 }
 
-// CreateDocument invokes CosmosDB API to create a new document.
+// CreateDocument invokes Cosmos DB API to create a new document.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/create-a-document.
 func (c *RestClient) CreateDocument(spec DocumentSpec) *RespCreateDoc {
@@ -446,7 +447,7 @@ func (c *RestClient) CreateDocument(spec DocumentSpec) *RespCreateDoc {
 	return result
 }
 
-// ReplaceDocument invokes CosmosDB API to replace an existing document.
+// ReplaceDocument invokes Cosmos DB API to replace an existing document.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/replace-a-document.
 func (c *RestClient) ReplaceDocument(matchEtag string, spec DocumentSpec) *RespReplaceDoc {
@@ -479,7 +480,7 @@ type DocReq struct {
 	SessionToken            string // string token used with session level consistency
 }
 
-// GetDocument invokes CosmosDB API to get an existing document.
+// GetDocument invokes Cosmos DB API to get an existing document.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/get-a-document.
 func (c *RestClient) GetDocument(r DocReq) *RespGetDoc {
@@ -507,7 +508,7 @@ func (c *RestClient) GetDocument(r DocReq) *RespGetDoc {
 	return result
 }
 
-// DeleteDocument invokes CosmosDB API to delete an existing document.
+// DeleteDocument invokes Cosmos DB API to delete an existing document.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/delete-a-document.
 func (c *RestClient) DeleteDocument(r DocReq) *RespDeleteDoc {
@@ -539,32 +540,6 @@ type QueryReq struct {
 	ConsistencyLevel      string // accepted values: "", "Strong", "Bounded", "Session" or "Eventual"
 	SessionToken          string // string token used with session level consistency
 }
-
-// func (c *RestClient) queryDocumentsForPkRange(baseReq *http.Request, pkRangeId string) *RespQueryDocs {
-// 	req := baseReq.Clone(baseReq.Context())
-// 	req.Header.Set(restApiHeaderPartitionKeyRangeId, pkRangeId)
-// 	var result *RespQueryDocs
-// 	for {
-// 		resp := c.client.Do(req)
-// 		tempResult := &RespQueryDocs{RestReponse: c.buildRestReponse(resp)}
-// 		if tempResult.CallErr == nil {
-// 			tempResult.ContinuationToken = tempResult.RespHeader[respHeaderContinuation]
-// 			tempResult.CallErr = json.Unmarshal(tempResult.RespBody, &tempResult)
-// 			tempResult.Count = int64(len(tempResult.Documents))
-// 		}
-// 		if result != nil {
-// 			tempResult.Count += result.Count
-// 			tempResult.RequestCharge += result.RequestCharge
-// 			tempResult.Documents = append(result.Documents, tempResult.Documents...)
-// 		}
-// 		result = tempResult
-// 		if result.CallErr != nil || tempResult.ContinuationToken == "" {
-// 			break
-// 		}
-// 		req.Header.Set(restApiHeaderContinuation, tempResult.ContinuationToken)
-// 	}
-// 	return result
-// }
 
 func (c *RestClient) buildQueryRequest(query QueryReq) *http.Request {
 	method, url := "POST", c.endpoint+"/dbs/"+query.DbName+"/colls/"+query.CollName+"/docs"
@@ -599,28 +574,131 @@ func (c *RestClient) buildQueryRequest(query QueryReq) *http.Request {
 	return req
 }
 
-// TODO
-// - [x] (v0.1.7+) simple cross-partition queries (+paging)
-// - [-] cross-partition queries with ordering (+paging) / partial supported if number of pkrange == 1
-// - [-] cross-partition queries with group-by (+paging) / partial supported if number of pkrange == 1
+// queryAndMergeCrossPartitions queries documents from multiple partition-range-ids, then merges them to built the final result.
+func (c *RestClient) queryAndMergeCrossPartitions(query QueryReq, pkranges *RespGetPkranges, queryPlan *RespQueryPlan) *RespQueryDocs {
+	queryRewritten := queryPlan.QueryInfo.RewrittenQuery != ""
+	if queryRewritten {
+		query.Query = strings.ReplaceAll(queryPlan.QueryInfo.RewrittenQuery, "{documentdb-formattableorderbyquery-filter}", "true")
+	}
+
+	var cctResult, cctQuery = make(map[string]string), make(map[string]string)
+	if err := json.Unmarshal([]byte(query.ContinuationToken), &cctQuery); err != nil || query.ContinuationToken == "" {
+		cctQuery = make(map[string]string)
+		for _, pkrange := range pkranges.Pkranges {
+			cctQuery[pkrange.Id] = ""
+		}
+	}
+	for k, v := range cctQuery {
+		cctResult[k] = v
+	}
+
+	var result *RespQueryDocs
+	for i, pkrange := range pkranges.Pkranges {
+		query.PkRangeId = pkrange.Id
+		if continuationToken, ok := cctQuery[pkrange.Id]; !ok {
+			// all documents from this pk-range had been queried
+			continue
+		} else {
+			query.ContinuationToken = continuationToken
+		}
+		pkresult := c.queryDocumentsAsIs(query, true)
+		if result == nil {
+			result = pkresult
+		} else {
+			result.RequestCharge += pkresult.RequestCharge
+			result.RestReponse = pkresult.RestReponse
+		}
+		if result.Error() != nil {
+			break
+		}
+		if pkresult.ContinuationToken == "" {
+			delete(cctResult, pkrange.Id)
+		} else {
+			cctResult[pkrange.Id] = pkresult.ContinuationToken
+		}
+		if i > 0 {
+			if queryPlan.IsDistinctQuery() {
+				result = result.MergeDistinct(queryPlan, pkresult)
+			} else if queryPlan.IsGroupByQuery() {
+				result = result.MergeGroupBy(queryPlan, pkresult)
+			} else if queryPlan.IsOrderByQuery() {
+				result = result.MergeOrderBy(queryPlan, pkresult)
+			} else {
+				result.Count += pkresult.Count
+				result.Documents = append(result.Documents, pkresult.Documents...)
+			}
+		}
+
+		if query.MaxItemCount > 0 {
+			// honor MaxItemCount setting
+			if (queryPlan.IsDistinctQuery() || queryPlan.IsOrderByQuery()) && result.Count >= query.MaxItemCount {
+				break
+			}
+			if result.Count >= query.MaxItemCount*pkranges.Count {
+				break
+			}
+		}
+	}
+	if queryRewritten {
+		if queryPlan.IsGroupByQuery() {
+			flattenDocs := result.Documents.FlattenGroupBy(queryPlan)
+			for i := range result.Documents {
+				result.Documents[i] = flattenDocs[i]
+			}
+		} else if queryPlan.IsOrderByQuery() {
+			flattenDocs := result.Documents.FlattenOrderBy(queryPlan)
+			for i := range result.Documents {
+				result.Documents[i] = flattenDocs[i]
+			}
+		}
+	}
+	if queryPlan.QueryInfo.Limit > 0 {
+		offset := int(math.Max(0, float64(queryPlan.QueryInfo.Offset)))
+		limit := int(math.Min(float64(len(result.Documents)-offset), float64(queryPlan.QueryInfo.Limit)))
+		result.Documents = result.Documents[offset : offset+limit]
+		result.Count = len(result.Documents)
+	}
+	if len(cctResult) > 0 {
+		js, _ := json.Marshal(cctResult)
+		result.ContinuationToken = string(js)
+	}
+	return result
+}
+
 func (c *RestClient) queryDocumentsCrossPartitions(query QueryReq) *RespQueryDocs {
 	pkranges := c.GetPkranges(query.DbName, query.CollName)
 	if pkranges.Error() != nil {
 		return &RespQueryDocs{RestReponse: pkranges.RestReponse}
 	}
 	if pkranges.Count == 1 {
+		// if there is only 1 physical partition then we perform the query on that partition
 		query.PkRangeId = pkranges.Pkranges[0].Id
 		return c.QueryDocuments(query)
 	}
 
+	queryPlan := c.QueryPlan(query)
+	if queryPlan.Error() != nil {
+		return &RespQueryDocs{RestReponse: queryPlan.RestReponse}
+	}
+	if queryPlan.QueryInfo.DistinctType != "None" || queryPlan.QueryInfo.RewrittenQuery != "" {
+		return c.queryAndMergeCrossPartitions(query, pkranges, queryPlan)
+	}
+
+	return c.queryDocumentsAsIs(query, true)
+}
+
+// queryDocumentsAsIs sends the query as-is to server gateway for execution.
+func (c *RestClient) queryDocumentsAsIs(query QueryReq, crossPartition bool) *RespQueryDocs {
 	req := c.buildQueryRequest(query)
-	req.Header.Set(restApiHeaderEnableCrossPartitionQuery, "true")
+	if crossPartition {
+		req.Header.Set(restApiHeaderEnableCrossPartitionQuery, "true")
+	}
 	var result *RespQueryDocs
+	if query.MaxItemCount < 0 {
+		// request chunk by chunk as it would have negative impact if we fetch a large number of documents in one go
+		req.Header.Set(restApiHeaderPageSize, "100")
+	}
 	for {
-		if query.MaxItemCount < 0 {
-			// request chunk by chunk as it would have negative impact if we fetch a large number of documents in one go
-			req.Header.Set(restApiHeaderPageSize, "100")
-		}
 		resp := c.client.Do(req)
 		tempResult := &RespQueryDocs{RestReponse: c.buildRestReponse(resp)}
 		if tempResult.CallErr == nil {
@@ -633,7 +711,7 @@ func (c *RestClient) queryDocumentsCrossPartitions(query QueryReq) *RespQueryDoc
 			tempResult.Documents = append(result.Documents, tempResult.Documents...)
 		}
 		result = tempResult
-		if result.CallErr != nil || query.MaxItemCount >= 0 || tempResult.ContinuationToken == "" {
+		if result.CallErr != nil || query.MaxItemCount > 0 || tempResult.ContinuationToken == "" {
 			break
 		}
 		req.Header.Set(restApiHeaderContinuation, tempResult.ContinuationToken)
@@ -641,7 +719,14 @@ func (c *RestClient) queryDocumentsCrossPartitions(query QueryReq) *RespQueryDoc
 	return result
 }
 
-// QueryDocuments invokes CosmosDB API to query a collection for documents.
+// QueryDocuments invokes Cosmos DB API to query a collection for documents.
+//
+// Please be noted that:
+//   - Non-cross-partition queries (either specifying QueryReq.PkRangeId, QueryReq.PkValue or number of pk-ranges is 1) would work;
+//     excepted for the following known issue: `SELECT sum/min/max/avg` combined with QueryReq.MaxItemCount would not work (`SELECT count(1)`
+//     has no issue combining with QueryReq.MaxItemCount).
+//   - Known cross-partition queries (where number of pk-ranges > 1 and none of QueryReq.PkRangeId or QueryReq.PkValue is specified)
+//     that would not work correctly: queries with ORDER BY/DISTINCT/GROUP BY combined with QueryReq.MaxItemCount, except for `SELECT count(1)`.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/query-documents.
 func (c *RestClient) QueryDocuments(query QueryReq) *RespQueryDocs {
@@ -649,34 +734,10 @@ func (c *RestClient) QueryDocuments(query QueryReq) *RespQueryDocs {
 		// cross-partition is redundant when pkrangid or pkvalue is specified
 		return c.queryDocumentsCrossPartitions(query)
 	}
-	req := c.buildQueryRequest(query)
-	var result *RespQueryDocs
-	for {
-		if query.MaxItemCount < 0 {
-			// request chunk by chunk as it would have negative impact if we fetch a large number of documents in one go
-			req.Header.Set(restApiHeaderPageSize, "100")
-		}
-		resp := c.client.Do(req)
-		tempResult := &RespQueryDocs{RestReponse: c.buildRestReponse(resp)}
-		if tempResult.CallErr == nil {
-			tempResult.ContinuationToken = tempResult.RespHeader[respHeaderContinuation]
-			tempResult.CallErr = json.Unmarshal(tempResult.RespBody, &tempResult)
-		}
-		if result != nil {
-			tempResult.Count += result.Count
-			tempResult.RequestCharge += result.RequestCharge
-			tempResult.Documents = append(result.Documents, tempResult.Documents...)
-		}
-		result = tempResult
-		if result.CallErr != nil || query.MaxItemCount >= 0 || tempResult.ContinuationToken == "" {
-			break
-		}
-		req.Header.Set(restApiHeaderContinuation, tempResult.ContinuationToken)
-	}
-	return result
+	return c.queryDocumentsAsIs(query, false)
 }
 
-// QueryPlan invokes CosmosDB API to generate query plan.
+// QueryPlan invokes Cosmos DB API to generate query plan.
 //
 // Available since v0.1.8
 func (c *RestClient) QueryPlan(query QueryReq) *RespQueryPlan {
@@ -715,25 +776,67 @@ func (c *RestClient) QueryPlan(query QueryReq) *RespQueryPlan {
 
 // ListDocsReq specifies a list documents request.
 type ListDocsReq struct {
-	DbName, CollName    string
-	MaxItemCount        int
-	ContinuationToken   string
-	ConsistencyLevel    string // accepted values: "", "Strong", "Bounded", "Session" or "Eventual"
-	SessionToken        string // string token used with session level consistency
-	NotMatchEtag        string
-	PartitionKeyRangeId string
+	DbName, CollName  string
+	MaxItemCount      int
+	ContinuationToken string
+	ConsistencyLevel  string // accepted values: "", "Strong", "Bounded", "Session" or "Eventual"
+	SessionToken      string // string token used with session level consistency
+	NotMatchEtag      string
+	PkRangeId         string
+	IsIncrementalFeed bool // (available since v0.1.9) if "true", the request is used to fetch the incremental changes to documents within the collection
 }
 
-// ListDocuments invokes CosmosDB API to query read-feed for documents.
+func (c *RestClient) getChangeFeed(r ListDocsReq, req *http.Request) *RespListDocs {
+	var result *RespListDocs
+	for {
+		resp := c.client.Do(req)
+		tempResult := &RespListDocs{RestReponse: c.buildRestReponse(resp)}
+		if 300 <= tempResult.StatusCode && tempResult.StatusCode < 400 {
+			// not an error, the status code 3xx indicates that there is currently no item from the change feed
+		} else if tempResult.CallErr == nil {
+			tempResult.ContinuationToken = tempResult.RespHeader[respHeaderContinuation]
+			tempResult.Etag = tempResult.RespHeader[respHeaderEtag]
+			tempResult.CallErr = json.Unmarshal(tempResult.RespBody, &tempResult)
+		}
+		if result == nil {
+			result = tempResult
+		} else {
+			result.ContinuationToken = tempResult.ContinuationToken
+			result.Etag = tempResult.Etag
+			result.SessionToken = tempResult.SessionToken
+			result.RequestCharge += tempResult.RequestCharge
+			result.Count += tempResult.Count
+			result.Documents = append(result.Documents, tempResult.Documents...)
+			if r.IsIncrementalFeed {
+				sort.Slice(result.Documents, func(i, j int) bool {
+					return result.Documents[i].Ts() < result.Documents[j].Ts()
+				})
+			}
+		}
+		if result.ContinuationToken == "" || r.MaxItemCount > 0 {
+			break
+		}
+		req.Header.Set(restApiHeaderContinuation, result.ContinuationToken)
+	}
+	return result
+}
+
+// ListDocuments invokes Cosmos DB API to query read-feed for documents.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/list-documents.
+//
+// Note: if fetching incremental feed (ListDocsReq.IsIncrementalFeed = true), it is the caller responsibility to
+// resubmit the request with proper value of etag (ListDocsReq.NotMatchEtag)
 func (c *RestClient) ListDocuments(r ListDocsReq) *RespListDocs {
-	method := "GET"
-	url := c.endpoint + "/dbs/" + r.DbName + "/colls/" + r.CollName + "/docs"
+	method, url := "GET", c.endpoint+"/dbs/"+r.DbName+"/colls/"+r.CollName+"/docs"
 	req := c.buildJsonRequest(method, url, nil)
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+r.DbName+"/colls/"+r.CollName)
+	req.Header.Set(restApiHeaderEnableCrossPartitionQuery, "true")
 	if r.MaxItemCount > 0 {
 		req.Header.Set(restApiHeaderPageSize, strconv.Itoa(r.MaxItemCount))
+	} else {
+		// request chunk by chunk as it would have negative impact if we fetch a large number of documents in one go
+		req.Header.Set(restApiHeaderPageSize, "100")
 	}
 	if r.ContinuationToken != "" {
 		req.Header.Set(restApiHeaderContinuation, r.ContinuationToken)
@@ -747,21 +850,43 @@ func (c *RestClient) ListDocuments(r ListDocsReq) *RespListDocs {
 	if r.NotMatchEtag != "" {
 		req.Header.Set(httpHeaderIfNoneMatch, r.NotMatchEtag)
 	}
-	if r.PartitionKeyRangeId != "" {
-		req.Header.Set(restApiHeaderPartitionKeyRangeId, r.PartitionKeyRangeId)
+	if r.PkRangeId != "" {
+		req.Header.Set(restApiHeaderPartitionKeyRangeId, r.PkRangeId)
+	}
+	if r.IsIncrementalFeed {
+		req.Header.Set(restApiHeaderIncremental, "Incremental feed")
+		return c.getChangeFeed(r, req)
 	}
 
-	resp := c.client.Do(req)
-	result := &RespListDocs{RestReponse: c.buildRestReponse(resp)}
-	if result.CallErr == nil {
-		result.ContinuationToken = result.RespHeader[respHeaderContinuation]
-		result.Etag = result.RespHeader[respHeaderEtag]
-		result.CallErr = json.Unmarshal(result.RespBody, &result)
+	// fetch documents from table/collection
+	var result *RespListDocs
+	for {
+		resp := c.client.Do(req)
+		tempResult := &RespListDocs{RestReponse: c.buildRestReponse(resp)}
+		if tempResult.CallErr == nil {
+			tempResult.ContinuationToken = tempResult.RespHeader[respHeaderContinuation]
+			tempResult.Etag = tempResult.RespHeader[respHeaderEtag]
+			tempResult.CallErr = json.Unmarshal(tempResult.RespBody, &tempResult)
+		}
+		if result == nil {
+			result = tempResult
+		} else {
+			result.ContinuationToken = tempResult.ContinuationToken
+			result.Etag = tempResult.Etag
+			result.SessionToken = tempResult.SessionToken
+			result.RequestCharge += tempResult.RequestCharge
+			result.Count += tempResult.Count
+			result.Documents = append(result.Documents, tempResult.Documents...)
+		}
+		if result.ContinuationToken == "" || r.MaxItemCount > 0 {
+			break
+		}
+		req.Header.Set(restApiHeaderContinuation, result.ContinuationToken)
 	}
 	return result
 }
 
-// GetOfferForResource invokes CosmosDB API to get offer info of a resource.
+// GetOfferForResource invokes Cosmos DB API to get offer info of a resource.
 //
 // Available since v0.1.1
 func (c *RestClient) GetOfferForResource(rid string) *RespGetOffer {
@@ -778,7 +903,7 @@ func (c *RestClient) GetOfferForResource(rid string) *RespGetOffer {
 	return result
 }
 
-// QueryOffers invokes CosmosDB API to query existing offers.
+// QueryOffers invokes Cosmos DB API to query existing offers.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/querying-offers.
 //
@@ -831,7 +956,7 @@ func (c *RestClient) buildReplaceOfferContentAndHeaders(currentOffer OfferInfo, 
 	return nil, headers
 }
 
-// ReplaceOfferForResource invokes CosmosDB API to replace/update offer info of a resource.
+// ReplaceOfferForResource invokes Cosmos DB API to replace/update offer info of a resource.
 //
 //   - If ru > 0 and maxru <= 0: switch to manual throughput and set provisioning value to ru.
 //   - If ru <= 0 and maxru > 0: switch to autopilot throughput and set max provisioning value to maxru.
@@ -869,7 +994,7 @@ func (c *RestClient) ReplaceOfferForResource(rid string, ru, maxru int) *RespRep
 		 * [btnguyen2k] 2022-02-16
 		 * OfferInfo.Rid is returned from the server, but it _must_ be lower-cased when we send back to the server for
 		 * issuing the 'replace-offer' request.
-		 * Not sure if this is intended or a bug of CosmosDB.
+		 * Not sure if this is intended or a bug of Cosmos DB.
 		 */
 		req = c.addAuthHeader(req, method, "offers", strings.ToLower(getResult.OfferInfo.Rid))
 		for k, v := range headers {
@@ -916,7 +1041,7 @@ func (r RestReponse) Error() error {
 	return r.ApiErr
 }
 
-// DbInfo captures info of a CosmosDB database.
+// DbInfo captures info of a Cosmos DB database.
 type DbInfo struct {
 	Id    string `json:"id"`     // user-generated unique name for the database
 	Rid   string `json:"_rid"`   // (system generated property) _rid attribute of the database
@@ -927,31 +1052,31 @@ type DbInfo struct {
 	Users string `json:"_users"` // (system-generated property) _users attribute of the database
 }
 
-// RespCreateDb captures the response from CreateDatabase call.
+// RespCreateDb captures the response from RestClient.CreateDatabase call.
 type RespCreateDb struct {
 	RestReponse
 	DbInfo
 }
 
-// RespGetDb captures the response from GetDatabase call.
+// RespGetDb captures the response from RestClient.GetDatabase call.
 type RespGetDb struct {
 	RestReponse
 	DbInfo
 }
 
-// RespDeleteDb captures the response from DeleteDatabase call.
+// RespDeleteDb captures the response from RestClient.DeleteDatabase call.
 type RespDeleteDb struct {
 	RestReponse
 }
 
-// RespListDb captures the response from ListDatabases call.
+// RespListDb captures the response from RestClient.ListDatabases call.
 type RespListDb struct {
 	RestReponse `json:"-"`
 	Count       int      `json:"_count"` // number of databases returned from the list operation
 	Databases   []DbInfo `json:"Databases"`
 }
 
-// CollInfo captures info of a CosmosDB collection.
+// CollInfo captures info of a Cosmos DB collection.
 type CollInfo struct {
 	Id                       string                 `json:"id"`                       // user-generated unique name for the collection
 	Rid                      string                 `json:"_rid"`                     // (system generated property) _rid attribute of the collection
@@ -969,38 +1094,123 @@ type CollInfo struct {
 	GeospatialConfig         map[string]interface{} `json:"geospatialConfig"`         // Geo-spatial configuration settings for collection
 }
 
-// RespCreateColl captures the response from CreateCollection call.
+// RespCreateColl captures the response from RestClient.CreateCollection call.
 type RespCreateColl struct {
 	RestReponse
 	CollInfo
 }
 
-// RespReplaceColl captures the response from ReplaceCollection call.
+// RespReplaceColl captures the response from RestClient.ReplaceCollection call.
 type RespReplaceColl struct {
 	RestReponse
 	CollInfo
 }
 
-// RespGetColl captures the response from GetCollection call.
+// RespGetColl captures the response from RestClient.GetCollection call.
 type RespGetColl struct {
 	RestReponse
 	CollInfo
 }
 
-// RespDeleteColl captures the response from DeleteCollection call.
+// RespDeleteColl captures the response from RestClient.DeleteCollection call.
 type RespDeleteColl struct {
 	RestReponse
 }
 
-// RespListColl captures the response from ListCollections call.
+// RespListColl captures the response from RestClient.ListCollections call.
 type RespListColl struct {
 	RestReponse `json:"-"`
 	Count       int        `json:"_count"` // number of collections returned from the list operation
 	Collections []CollInfo `json:"DocumentCollections"`
 }
 
-// DocInfo captures info of a CosmosDB document.
+// // NewDocInfo creates a new DocInfo instance and populates its data from supplied one.
+// //
+// // Availabile since v0.1.9
+// func NewDocInfo(data map[string]interface{}) DocInfo {
+// 	doc := DocInfo{}
+// 	for k, v := range data {
+// 		doc[k] = v
+// 	}
+// 	return doc
+// }
+
+// QueriesDocs is list of returned documents from a query.
+// Queries can return a list of documents or a list of scalar values.
+//
+// Available since v0.1.9
+type QueriesDocs []interface{}
+
+// AsDocInfoAt returns the i-th queried document as a DocInfo.
+func (docs QueriesDocs) AsDocInfoAt(i int) DocInfo {
+	switch docInfo := docs[i].(type) {
+	case DocInfo:
+		return docInfo
+	case map[string]interface{}:
+		return docInfo
+	default:
+		return nil
+	}
+}
+
+// AsDocInfoSlice returns the queried documents as []DocInfo.
+func (docs QueriesDocs) AsDocInfoSlice() []DocInfo {
+	result := make([]DocInfo, len(docs))
+	for i, doc := range docs {
+		switch docInfo := doc.(type) {
+		case DocInfo:
+			result[i] = docInfo
+		case map[string]interface{}:
+			result[i] = docInfo
+		default:
+			return nil
+		}
+	}
+	return result
+}
+
+// FlattenOrderBy transforms result from a rewritten order-by query to []DocInfo.
+func (docs QueriesDocs) FlattenOrderBy(queryPlan *RespQueryPlan) []DocInfo {
+	result := make([]DocInfo, len(docs))
+	for i, doc := range docs.AsDocInfoSlice() {
+		result[i] = doc["payload"].(map[string]interface{})
+	}
+	return result
+}
+
+// FlattenGroupBy transforms result from a rewritten group-by query to []DocInfo.
+func (docs QueriesDocs) FlattenGroupBy(queryPlan *RespQueryPlan) []DocInfo {
+	result := make([]DocInfo, len(docs))
+	for i, doc := range docs.AsDocInfoSlice() {
+		payload := doc["payload"].(map[string]interface{})
+		docDest := DocInfo{}
+		for k, v := range queryPlan.QueryInfo.GroupByAliasToAggregateType {
+			docDest[k] = payload[k]
+			if strings.ToUpper(v) == "AVERAGE" {
+				docDest[k] = 0.0
+				count, _ := reddo.ToFloat(payload[k].(map[string]interface{})["item"].(map[string]interface{})["count"])
+				if count != 0.0 {
+					sum, _ := reddo.ToFloat(payload[k].(map[string]interface{})["item"].(map[string]interface{})["sum"])
+					docDest[k] = sum / count
+				}
+			} else if v != "" {
+				docDest[k] = payload[k].(map[string]interface{})["item"]
+			}
+		}
+		result[i] = docDest
+	}
+	return result
+}
+
+// DocInfo is a Cosmos DB document.
 type DocInfo map[string]interface{}
+
+// AsMap return the document as [string]interface{}
+//
+// Available since v0.1.9
+func (d DocInfo) AsMap() map[string]interface{} {
+	return d
+}
 
 // RemoveSystemAttrs returns a clone of the document with all system attributes removed.
 func (d DocInfo) RemoveSystemAttrs() DocInfo {
@@ -1089,40 +1299,152 @@ func (d DocInfo) GetAttrAsTypeUnsafe(attrName string, typ reflect.Type) interfac
 	return v
 }
 
-// RespCreateDoc captures the response from CreateDocument call.
+// RespCreateDoc captures the response from RestClient.CreateDocument call.
 type RespCreateDoc struct {
 	RestReponse
 	DocInfo
 }
 
-// RespReplaceDoc captures the response from ReplaceDocument call.
+// RespReplaceDoc captures the response from RestClient.ReplaceDocument call.
 type RespReplaceDoc struct {
 	RestReponse
 	DocInfo
 }
 
-// RespGetDoc captures the response from GetDocument call.
+// RespGetDoc captures the response from RestClient.GetDocument call.
 type RespGetDoc struct {
 	RestReponse
 	DocInfo
 }
 
-// RespDeleteDoc captures the response from DeleteDocument call.
+// RespDeleteDoc captures the response from RestClient.DeleteDocument call.
 type RespDeleteDoc struct {
 	RestReponse
 }
 
-// RespQueryDocs captures the response from QueryDocuments call.
+// RespQueryDocs captures the response from RestClient.QueryDocuments call.
 type RespQueryDocs struct {
 	RestReponse       `json:"-"`
-	Count             int       `json:"_count"` // number of documents returned from the operation
-	Documents         []DocInfo `json:"Documents"`
-	ContinuationToken string    `json:"-"`
+	Count             int         `json:"_count"` // number of documents returned from the operation
+	Documents         QueriesDocs `json:"Documents"`
+	ContinuationToken string      `json:"-"`
 }
 
-type typDistinctType string // possible values: None, Ordered, Unordered
-type typOrderBy string      // possible values: Ascending, Descending
-type typAggregates string   // possible values: Average, Count, Max, Min, Sum
+// MergeDistinct merges result from another "SELECT DISTINCT" query.
+//
+// Available since v0.1.9
+func (r *RespQueryDocs) MergeDistinct(_ *RespQueryPlan, other *RespQueryDocs) *RespQueryDocs {
+	itemSet := make(map[string]bool)
+	// CRC32 + MD5 hashing is fast (is MD5 + SHA1 better?)
+	hf1, hf2 := checksum.Crc32HashFunc, checksum.Md5HashFunc
+	for _, doc := range r.Documents {
+		key := fmt.Sprintf("%x:%x", checksum.Checksum(hf1, doc), checksum.Checksum(hf2, doc))
+		itemSet[key] = true
+	}
+
+	for _, otherDoc := range other.Documents {
+		key := fmt.Sprintf("%x:%x", checksum.Checksum(hf1, otherDoc), checksum.Checksum(hf2, otherDoc))
+		if !itemSet[key] {
+			itemSet[key] = true
+			r.Documents = append(r.Documents, otherDoc)
+			r.Count++
+		}
+	}
+	return r
+}
+
+// MergeGroupBy merges result from another "SELECT ... GROUP BY" query.
+//
+// This function assumes the rewritten query was executed and each returned document has the following structure: `{"groupByItems": [...], payload: {...}}`.
+//
+// Available since v0.1.9
+func (r *RespQueryDocs) MergeGroupBy(queryPlan *RespQueryPlan, other *RespQueryDocs) *RespQueryDocs {
+	for _, otherDoc := range other.Documents.AsDocInfoSlice() {
+		merged := false
+		for _, myDoc := range r.Documents.AsDocInfoSlice() {
+			if reflect.DeepEqual(myDoc["groupByItems"], otherDoc["groupByItems"]) {
+				myPayload := myDoc["payload"].(map[string]interface{})
+				otherPayload := otherDoc["payload"].(map[string]interface{})
+				for k, v := range queryPlan.QueryInfo.GroupByAliasToAggregateType {
+					v = strings.ToUpper(v)
+					switch v {
+					// case "COUNT":
+					// 	myVal, _ := reddo.ToInt(myPayload[k].(map[string]interface{})["item"])
+					// 	otherVal, _ := reddo.ToInt(otherPayload[k].(map[string]interface{})["item"])
+					// 	myPayload[k].(map[string]interface{})["item"] = myVal + otherVal
+					// 	myDoc["payload"] = myPayload
+					case "COUNT", "SUM":
+						myVal, _ := reddo.ToFloat(myPayload[k].(map[string]interface{})["item"])
+						otherVal, _ := reddo.ToFloat(otherPayload[k].(map[string]interface{})["item"])
+						myPayload[k].(map[string]interface{})["item"] = myVal + otherVal
+						myDoc["payload"] = myPayload
+					case "MAX", "MIN":
+						myVal, _ := reddo.ToFloat(myPayload[k].(map[string]interface{})["item"])
+						otherVal, _ := reddo.ToFloat(otherPayload[k].(map[string]interface{})["item"])
+						if v == "MAX" && otherVal > myVal {
+							myPayload[k].(map[string]interface{})["item"] = otherVal
+							myDoc["payload"] = myPayload
+						} else if v == "MIN" && otherVal < myVal {
+							myPayload[k].(map[string]interface{})["item"] = otherVal
+							myDoc["payload"] = myPayload
+						}
+					case "AVERAGE":
+						mySum, _ := reddo.ToFloat(myPayload[k].(map[string]interface{})["item"].(map[string]interface{})["sum"])
+						myCount, _ := reddo.ToInt(myPayload[k].(map[string]interface{})["item"].(map[string]interface{})["count"])
+						otherSum, _ := reddo.ToFloat(otherPayload[k].(map[string]interface{})["item"].(map[string]interface{})["sum"])
+						otherCount, _ := reddo.ToInt(otherPayload[k].(map[string]interface{})["item"].(map[string]interface{})["count"])
+						myPayload[k].(map[string]interface{})["item"] = map[string]interface{}{"sum": mySum + otherSum, "count": myCount + otherCount}
+						myDoc["payload"] = myPayload
+					}
+				}
+				merged = true
+				break
+			}
+		}
+		if !merged {
+			r.Documents = append(r.Documents, otherDoc)
+			r.Count++
+		}
+	}
+	return r
+}
+
+// MergeOrderBy merges result from another "SELECT ... ORDER BY" query.
+//
+// This function assumes the rewritten query was executed and each returned document has the following structure: `{"orderByItems": [...], payload: {...}}`.
+//
+// Available since v0.1.9
+func (r *RespQueryDocs) MergeOrderBy(queryPlan *RespQueryPlan, other *RespQueryDocs) *RespQueryDocs {
+	r.Count += other.Count
+	r.Documents = append(r.Documents, other.Documents...)
+	sort.Slice(r.Documents, func(i, j int) bool {
+		iOrderByItems := r.Documents[i].(map[string]interface{})["orderByItems"].([]interface{})
+		jOrderByItems := r.Documents[j].(map[string]interface{})["orderByItems"].([]interface{})
+		for index, odir := range queryPlan.QueryInfo.OrderBy {
+			odir = strings.ToUpper(odir)
+			iItem := iOrderByItems[index].(map[string]interface{})["item"]
+			jItem := jOrderByItems[index].(map[string]interface{})["item"]
+			if iItem == jItem {
+				continue
+			}
+
+			istr, iok := iItem.(string)
+			jstr, jok := jItem.(string)
+			if iok && jok {
+				return (odir == "DESCENDING" && istr > jstr) || (odir != "DESCENDING" && istr < jstr)
+			}
+
+			ifloat, iok := iItem.(float64)
+			jfloat, jok := jItem.(float64)
+			if iok && jok {
+				return (odir == "DESCENDING" && ifloat > jfloat) || (odir != "DESCENDING" && ifloat < jfloat)
+			}
+		}
+		return false
+	})
+	return r
+}
+
 type typDCountInfo struct {
 	DCountAlias string `json:"dCountAlias"`
 }
@@ -1134,23 +1456,44 @@ type RespQueryPlan struct {
 	RestReponse               `json:"-"`
 	QueryExecutionInfoVersion int `json:"partitionedQueryExecutionInfoVersion"`
 	QueryInfo                 struct {
-		DistinctType                typDistinctType          `json:"distinctType"`
-		Top                         int                      `json:"top"`
-		Offset                      int                      `json:"offset"`
-		Limit                       int                      `json:"limit"`
-		OrderBy                     []typOrderBy             `json:"orderBy"`
-		OrderByExpressions          []string                 `json:"orderByExpressions"`
-		GroupByExpressions          []string                 `json:"groupByExpressions"`
-		GroupByAliases              []string                 `json:"groupByAliases"`
-		Aggregates                  []typAggregates          `json:"aggregates"`
-		GroupByAliasToAggregateType map[string]typAggregates `json:"groupByAliasToAggregateType"`
-		RewrittenQuery              string                   `json:"rewrittenQuery"`
-		HasSelectValue              bool                     `json:"hasSelectValue"`
-		DCountInfo                  typDCountInfo            `json:"dCountInfo"`
+		DistinctType                string            `json:"distinctType"` // possible values: None, Ordered, Unordered
+		Top                         int               `json:"top"`
+		Offset                      int               `json:"offset"`
+		Limit                       int               `json:"limit"`
+		OrderBy                     []string          `json:"orderBy"` // possible values: Ascending, Descending
+		OrderByExpressions          []string          `json:"orderByExpressions"`
+		GroupByExpressions          []string          `json:"groupByExpressions"`
+		GroupByAliases              []string          `json:"groupByAliases"`
+		Aggregates                  []string          `json:"aggregates"` // possible values: Average, Count, Max, Min, Sum
+		GroupByAliasToAggregateType map[string]string `json:"groupByAliasToAggregateType"`
+		RewrittenQuery              string            `json:"rewrittenQuery"`
+		HasSelectValue              bool              `json:"hasSelectValue"`
+		DCountInfo                  typDCountInfo     `json:"dCountInfo"`
 	} `json:"queryInfo"`
 }
 
-// RespListDocs captures the response from ListDocuments call.
+// IsDistinctQuery tests if duplicates are eliminated in the query's projection.
+//
+// Available v0.1.9
+func (qp *RespQueryPlan) IsDistinctQuery() bool {
+	return strings.ToUpper(qp.QueryInfo.DistinctType) != "NONE"
+}
+
+// IsGroupByQuery tests if "group-by" aggregation is in the query's projection.
+//
+// Available v0.1.9
+func (qp *RespQueryPlan) IsGroupByQuery() bool {
+	return len(qp.QueryInfo.GroupByAliasToAggregateType) > 0
+}
+
+// IsOrderByQuery tests if "order-by" clause is in the query's projection.
+//
+// Available v0.1.9
+func (qp *RespQueryPlan) IsOrderByQuery() bool {
+	return len(qp.QueryInfo.OrderByExpressions) > 0
+}
+
+// RespListDocs captures the response from RestClient.ListDocuments call.
 type RespListDocs struct {
 	RestReponse       `json:"-"`
 	Count             int       `json:"_count"` // number of documents returned from the operation
@@ -1159,7 +1502,7 @@ type RespListDocs struct {
 	Etag              string    `json:"-"` // logical sequence number (LSN) of last document returned in the response
 }
 
-// OfferInfo captures info of a CosmosDB offer.
+// OfferInfo captures info of a Cosmos DB offer.
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/offers.
 type OfferInfo struct {
@@ -1180,10 +1523,10 @@ type OfferInfo struct {
 // OfferThroughput returns value of field 'offerThroughput'
 func (o OfferInfo) OfferThroughput() int {
 	o._lock.Lock()
+	defer o._lock.Unlock()
 	if o._s == nil {
 		o._s = semita.NewSemita(o.Content)
 	}
-	defer o._lock.Unlock()
 	v, err := o._s.GetValueOfType("offerThroughput", reddo.TypeInt)
 	if err == nil {
 		return int(v.(int64))
@@ -1194,10 +1537,10 @@ func (o OfferInfo) OfferThroughput() int {
 // MaxThroughputEverProvisioned returns value of field 'maxThroughputEverProvisioned'
 func (o OfferInfo) MaxThroughputEverProvisioned() int {
 	o._lock.Lock()
+	defer o._lock.Unlock()
 	if o._s == nil {
 		o._s = semita.NewSemita(o.Content)
 	}
-	defer o._lock.Unlock()
 	v, err := o._s.GetValueOfType("offerMinimumThroughputParameters.maxThroughputEverProvisioned", reddo.TypeInt)
 	if err == nil {
 		return int(v.(int64))
@@ -1205,24 +1548,24 @@ func (o OfferInfo) MaxThroughputEverProvisioned() int {
 	return 0
 }
 
-// IsAutopilot returns true if auto pilot is enabled, false otherwise.
+// IsAutopilot returns true if autopilot is enabled, false otherwise.
 func (o OfferInfo) IsAutopilot() bool {
 	o._lock.Lock()
+	defer o._lock.Unlock()
 	if o._s == nil {
 		o._s = semita.NewSemita(o.Content)
 	}
-	defer o._lock.Unlock()
 	v, err := o._s.GetValue("offerAutopilotSettings")
 	return err == nil && v != nil
 }
 
-// RespGetOffer captures the response from GetOffer call.
+// RespGetOffer captures the response from RestClient.GetOffer call.
 type RespGetOffer struct {
 	RestReponse
 	OfferInfo
 }
 
-// RespQueryOffers captures the response from QueryOffers call.
+// RespQueryOffers captures the response from RestClient.QueryOffers call.
 type RespQueryOffers struct {
 	RestReponse       `json:"-"`
 	Count             int         `json:"_count"` // number of records returned from the operation
@@ -1230,7 +1573,7 @@ type RespQueryOffers struct {
 	ContinuationToken string      `json:"-"`
 }
 
-// RespReplaceOffer captures the response from ReplaceOffer call.
+// RespReplaceOffer captures the response from RestClient.ReplaceOffer call.
 type RespReplaceOffer struct {
 	RestReponse
 	OfferInfo
