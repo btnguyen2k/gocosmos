@@ -87,13 +87,13 @@ func _testRestClientQueryPlan(t *testing.T, testName string, client *RestClient,
 	lowStr, highStr := fmt.Sprintf("%05d", low), fmt.Sprintf("%05d", high)
 	var testCases = []queryTestCase{
 		{name: "Bare", query: "SELECT * FROM c WHERE @low<=c.id AND c.id<@high"},
-		{name: "OrderAsc", query: "SELECT * FROM c WHERE @low<=c.id AND c.id<@high ORDER BY c.grade", withOrder: true, orderDirection: "asc", rewrittenSql: true},
-		{name: "OrderDesc", query: "SELECT * FROM c WHERE @low<=c.id AND c.id<@high ORDER BY c.grade DESC", withOrder: true, orderDirection: "desc", rewrittenSql: true},
-		{name: "GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "count", rewrittenSql: true},
-		{name: "GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "sum", rewrittenSql: true},
-		{name: "GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "min", rewrittenSql: true},
-		{name: "GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "max", rewrittenSql: true},
-		{name: "GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", withGroupBy: true, groupBy: "average", rewrittenSql: true},
+		{name: "OrderAsc", query: "SELECT * FROM c WHERE @low<=c.id AND c.id<@high ORDER BY c.grade", orderField: "grade", orderDirection: "asc", rewrittenSql: true},
+		{name: "OrderDesc", query: "SELECT * FROM c WHERE @low<=c.id AND c.id<@high ORDER BY c.grade DESC", orderField: "grade", orderDirection: "desc", rewrittenSql: true},
+		{name: "GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", groupByField: "count", rewrittenSql: true},
+		{name: "GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", groupByField: "sum", rewrittenSql: true},
+		{name: "GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", groupByField: "min", rewrittenSql: true},
+		{name: "GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", groupByField: "max", rewrittenSql: true},
+		{name: "GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", groupByField: "average", rewrittenSql: true},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -113,16 +113,16 @@ func _testRestClientQueryPlan(t *testing.T, testName string, client *RestClient,
 			if !testCase.rewrittenSql && result.QueryInfo.RewrittenQuery != "" {
 				t.Fatalf("%s failed: expecting <rewritten-query> to be nil but received %#v", testName+"/"+testCase.name+"/QueryPlan", result.QueryInfo.RewrittenQuery)
 			}
-			if testCase.withOrder && (len(result.QueryInfo.OrderBy) < 1 || len(result.QueryInfo.OrderByExpressions) < 1) {
+			if testCase.orderField != "" && (len(result.QueryInfo.OrderBy) < 1 || len(result.QueryInfo.OrderByExpressions) < 1) {
 				t.Fatalf("%s failed: expecting <order-by/expressions> but received empty", testName+"/"+testCase.name+"/QueryPlan")
 			}
-			if !testCase.withOrder && (len(result.QueryInfo.OrderBy) > 0 || len(result.QueryInfo.OrderByExpressions) > 0) {
+			if testCase.orderField == "" && (len(result.QueryInfo.OrderBy) > 0 || len(result.QueryInfo.OrderByExpressions) > 0) {
 				t.Fatalf("%s failed: expecting <order-by/expressions> to be empty but received {%#v / %#v}", testName+"/"+testCase.name+"/QueryPlan", result.QueryInfo.OrderBy, result.QueryInfo.OrderByExpressions)
 			}
-			if testCase.withGroupBy && (len(result.QueryInfo.GroupByExpressions) < 1 || len(result.QueryInfo.GroupByAliases) < 1 || len(result.QueryInfo.GroupByAliasToAggregateType) < 1) {
+			if testCase.groupByField != "" && (len(result.QueryInfo.GroupByExpressions) < 1 || len(result.QueryInfo.GroupByAliases) < 1 || len(result.QueryInfo.GroupByAliasToAggregateType) < 1) {
 				t.Fatalf("%s failed: expecting <group-by-expressions/alias> but received empty", testName+"/"+testCase.name+"/QueryPlan")
 			}
-			if !testCase.withGroupBy && (len(result.QueryInfo.GroupByExpressions) > 0 || len(result.QueryInfo.GroupByAliases) > 0 || len(result.QueryInfo.GroupByAliasToAggregateType) > 0) {
+			if testCase.groupByField == "" && (len(result.QueryInfo.GroupByExpressions) > 0 || len(result.QueryInfo.GroupByAliases) > 0 || len(result.QueryInfo.GroupByAliasToAggregateType) > 0) {
 				t.Fatalf("%s failed: expecting <group-by-expressions/alias> to be empty but received {%#v / %#v}", testName+"/"+testCase.name+"/QueryPlan", result.QueryInfo.OrderBy, result.QueryInfo.OrderByExpressions)
 			}
 		})

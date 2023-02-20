@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"net/http"
 	"net/url"
 	"reflect"
@@ -571,130 +570,161 @@ func (c *RestClient) buildQueryRequest(query QueryReq) *http.Request {
 	} else if query.PkValue != "" {
 		req.Header.Set(restApiHeaderPartitionKey, `["`+query.PkValue+`"]`)
 	}
+	if query.CrossPartitionEnabled {
+		req.Header.Set(restApiHeaderEnableCrossPartitionQuery, "true")
+	}
 	return req
 }
 
-// queryAndMergeCrossPartitions queries documents from multiple partition-range-ids, then merges them to built the final result.
-func (c *RestClient) queryAndMergeCrossPartitions(query QueryReq, pkranges *RespGetPkranges, queryPlan *RespQueryPlan) *RespQueryDocs {
+func (c *RestClient) mergeQueryResults(existingResp, newResp *RespQueryDocs, queryPlan *RespQueryPlan) *RespQueryDocs {
+	temp := *newResp
+	result := &temp
+	if existingResp != nil {
+		result.RequestCharge += existingResp.RequestCharge
+		if newResp.Error() == nil {
+			result = result.merge(queryPlan, existingResp)
+		}
+	} else if queryPlan.IsDistinctQuery() {
+		result.Documents = result.Documents.ReduceDistinct(queryPlan)
+		result.Count = len(result.Documents)
+	}
+	if queryPlan.QueryInfo.RewrittenQuery != "" {
+		result.populateRewrittenDocuments(queryPlan)
+	}
+	return result
+}
+
+// Note: the query is executed as-is, not rewritten!
+func (c *RestClient) queryAllAndMerge(query QueryReq, queryPlan *RespQueryPlan) *RespQueryDocs {
+	var result *RespQueryDocs
+	for {
+		result = c.mergeQueryResults(result, c.queryDocumentsCall(query), queryPlan)
+		if result.Error() != nil || result.ContinuationToken == "" || (query.MaxItemCount > 0 && result.Count >= query.MaxItemCount) {
+			break
+		}
+		query.ContinuationToken = result.ContinuationToken
+	}
+	return result
+}
+
+// queryAndMerge queries documents then performs merging to build the final result.
+//
+// Note: query is rewritten, executed and flattened (transformed) before returned!
+func (c *RestClient) queryAndMerge(query QueryReq, pkranges *RespGetPkranges, queryPlan *RespQueryPlan) *RespQueryDocs {
 	queryRewritten := queryPlan.QueryInfo.RewrittenQuery != ""
 	if queryRewritten {
 		query.Query = strings.ReplaceAll(queryPlan.QueryInfo.RewrittenQuery, "{documentdb-formattableorderbyquery-filter}", "true")
 	}
 
-	var cctResult, cctQuery = make(map[string]string), make(map[string]string)
-	if err := json.Unmarshal([]byte(query.ContinuationToken), &cctQuery); err != nil || query.ContinuationToken == "" {
-		cctQuery = make(map[string]string)
-		for _, pkrange := range pkranges.Pkranges {
-			cctQuery[pkrange.Id] = ""
-		}
-	}
-	for k, v := range cctQuery {
-		cctResult[k] = v
-	}
-
 	var result *RespQueryDocs
-	for i, pkrange := range pkranges.Pkranges {
-		query.PkRangeId = pkrange.Id
-		if continuationToken, ok := cctQuery[pkrange.Id]; !ok {
-			// all documents from this pk-range had been queried
-			continue
-		} else {
-			query.ContinuationToken = continuationToken
+	savedContinuationToken := query.ContinuationToken
+	if query.PkValue != "" || query.PkRangeId != "" || pkranges.Count == 1 {
+		if query.PkValue == "" && query.PkRangeId == "" {
+			query.PkRangeId = pkranges.Pkranges[0].Id
 		}
-		pkresult := c.queryDocumentsAsIs(query, true)
-		if result == nil {
-			result = pkresult
-		} else {
-			result.RequestCharge += pkresult.RequestCharge
-			result.RestReponse = pkresult.RestReponse
-		}
-		if result.Error() != nil {
-			break
-		}
-		if pkresult.ContinuationToken == "" {
-			delete(cctResult, pkrange.Id)
-		} else {
-			cctResult[pkrange.Id] = pkresult.ContinuationToken
-		}
-		if i > 0 {
-			if queryPlan.IsDistinctQuery() {
-				result = result.MergeDistinct(queryPlan, pkresult)
-			} else if queryPlan.IsGroupByQuery() {
-				result = result.MergeGroupBy(queryPlan, pkresult)
-			} else if queryPlan.IsOrderByQuery() {
-				result = result.MergeOrderBy(queryPlan, pkresult)
-			} else {
-				result.Count += pkresult.Count
-				result.Documents = append(result.Documents, pkresult.Documents...)
+		result = c.queryDocumentsSimple(query, queryPlan)
+	} else {
+		var cctResult, cctQuery = make(map[string]string), make(map[string]string)
+		if err := json.Unmarshal([]byte(query.ContinuationToken), &cctQuery); err != nil || query.ContinuationToken == "" {
+			cctQuery = make(map[string]string)
+			for _, pkrange := range pkranges.Pkranges {
+				cctQuery[pkrange.Id] = ""
 			}
+		}
+		for k, v := range cctQuery {
+			cctResult[k] = v
 		}
 
-		if query.MaxItemCount > 0 {
-			// honor MaxItemCount setting
-			if (queryPlan.IsDistinctQuery() || queryPlan.IsOrderByQuery()) && result.Count >= query.MaxItemCount {
+		savedMaxItemCount := query.MaxItemCount
+		for _, pkrange := range pkranges.Pkranges {
+			if continuationToken, ok := cctQuery[pkrange.Id]; !ok {
+				// all documents from this pk-range had been queried
+				continue
+			} else {
+				query.ContinuationToken = continuationToken
+				query.PkRangeId = pkrange.Id
+			}
+			result = c.mergeQueryResults(result, c.queryAllAndMerge(query, queryPlan), queryPlan)
+			if result.Error() != nil {
 				break
 			}
-			if result.Count >= query.MaxItemCount*pkranges.Count {
+			if result.ContinuationToken == "" {
+				delete(cctResult, pkrange.Id)
+			} else {
+				cctResult[pkrange.Id] = result.ContinuationToken
+			}
+			if len(cctResult) > 0 {
+				js, _ := json.Marshal(cctResult)
+				result.ContinuationToken = string(js)
+			} else {
+				result.ContinuationToken = ""
+			}
+			if query.MaxItemCount > 0 {
+				// honor MaxItemCount setting
+				if queryPlan.IsGroupByQuery() && result.Count > query.MaxItemCount {
+					break
+				}
+				if result.Count >= query.MaxItemCount {
+					break
+				}
+				query.MaxItemCount = savedMaxItemCount - result.Count
+				if query.MaxItemCount <= 0 {
+					break
+				}
+			}
+			if queryPlan.QueryInfo.Limit > 0 && !queryPlan.IsGroupByQuery() && result.Count >= queryPlan.QueryInfo.Offset+queryPlan.QueryInfo.Limit {
 				break
 			}
 		}
 	}
+
+	return c.finalPrepareResult(result, queryPlan, savedContinuationToken)
+}
+
+func (c *RestClient) finalPrepareResult(result *RespQueryDocs, queryPlan *RespQueryPlan, savedContinuationToken string) *RespQueryDocs {
+	queryRewritten := queryPlan.QueryInfo.RewrittenQuery != ""
+	if queryPlan.IsDistinctQuery() || queryPlan.IsGroupByQuery() {
+		if queryPlan.IsDistinctQuery() {
+			result.Documents = result.Documents.ReduceDistinct(queryPlan)
+		} else {
+			result.Documents = result.Documents.ReduceGroupBy(queryPlan)
+		}
+		result.Count = len(result.Documents)
+		result.populateRewrittenDocuments(queryPlan)
+	}
+
 	if queryRewritten {
-		if queryPlan.IsGroupByQuery() {
-			flattenDocs := result.Documents.FlattenGroupBy(queryPlan)
-			for i := range result.Documents {
-				result.Documents[i] = flattenDocs[i]
-			}
-		} else if queryPlan.IsOrderByQuery() {
-			flattenDocs := result.Documents.FlattenOrderBy(queryPlan)
-			for i := range result.Documents {
-				result.Documents[i] = flattenDocs[i]
-			}
-		}
-	}
-	if queryPlan.QueryInfo.Limit > 0 {
-		offset := int(math.Max(0, float64(queryPlan.QueryInfo.Offset)))
-		limit := int(math.Min(float64(len(result.Documents)-offset), float64(queryPlan.QueryInfo.Limit)))
-		result.Documents = result.Documents[offset : offset+limit]
+		result.Documents = result.Documents.Flatten(queryPlan)
 		result.Count = len(result.Documents)
 	}
-	if len(cctResult) > 0 {
-		js, _ := json.Marshal(cctResult)
-		result.ContinuationToken = string(js)
+	if queryPlan.QueryInfo.Limit > 0 {
+		offset, limit := queryPlan.QueryInfo.Offset, queryPlan.QueryInfo.Limit
+		if savedContinuationToken != "" && queryRewritten {
+			offset = 0
+		}
+		if len(result.Documents)-offset < limit {
+			limit = len(result.Documents) - offset
+		}
+		if limit > 0 {
+			result.Documents = result.Documents[offset : offset+limit]
+			result.Count = len(result.Documents)
+			if result.RewrittenDocuments != nil {
+				result.RewrittenDocuments = result.RewrittenDocuments[offset : offset+limit]
+			}
+		}
 	}
 	return result
 }
 
-func (c *RestClient) queryDocumentsCrossPartitions(query QueryReq) *RespQueryDocs {
-	pkranges := c.GetPkranges(query.DbName, query.CollName)
-	if pkranges.Error() != nil {
-		return &RespQueryDocs{RestReponse: pkranges.RestReponse}
-	}
-	if pkranges.Count == 1 {
-		// if there is only 1 physical partition then we perform the query on that partition
-		query.PkRangeId = pkranges.Pkranges[0].Id
-		return c.QueryDocuments(query)
-	}
-
-	queryPlan := c.QueryPlan(query)
-	if queryPlan.Error() != nil {
-		return &RespQueryDocs{RestReponse: queryPlan.RestReponse}
-	}
-	if queryPlan.QueryInfo.DistinctType != "None" || queryPlan.QueryInfo.RewrittenQuery != "" {
-		return c.queryAndMergeCrossPartitions(query, pkranges, queryPlan)
-	}
-
-	return c.queryDocumentsAsIs(query, true)
-}
-
-// queryDocumentsAsIs sends the query as-is to server gateway for execution.
-func (c *RestClient) queryDocumentsAsIs(query QueryReq, crossPartition bool) *RespQueryDocs {
+// queryDocumentsSimple handle a query-documents request with simple SQL query.
+//
+// If QueryReq.MaxItemCount <= 0, all matched documents will be returned
+//
+// Note: query is executed as-is, not rewritten!
+func (c *RestClient) queryDocumentsSimple(query QueryReq, queryPlan *RespQueryPlan) *RespQueryDocs {
 	req := c.buildQueryRequest(query)
-	if crossPartition {
-		req.Header.Set(restApiHeaderEnableCrossPartitionQuery, "true")
-	}
 	var result *RespQueryDocs
-	if query.MaxItemCount < 0 {
+	if query.MaxItemCount <= 0 {
 		// request chunk by chunk as it would have negative impact if we fetch a large number of documents in one go
 		req.Header.Set(restApiHeaderPageSize, "100")
 	}
@@ -706,35 +736,126 @@ func (c *RestClient) queryDocumentsAsIs(query QueryReq, crossPartition bool) *Re
 			tempResult.CallErr = json.Unmarshal(tempResult.RespBody, &tempResult)
 		}
 		if result != nil {
+			// append returned document list
 			tempResult.Count += result.Count
 			tempResult.RequestCharge += result.RequestCharge
 			tempResult.Documents = append(result.Documents, tempResult.Documents...)
 		}
 		result = tempResult
-		if result.CallErr != nil || query.MaxItemCount > 0 || tempResult.ContinuationToken == "" {
+		if result.Error() != nil || query.MaxItemCount > 0 || result.ContinuationToken == "" {
 			break
 		}
 		req.Header.Set(restApiHeaderContinuation, tempResult.ContinuationToken)
+	}
+	return result.populateRewrittenDocuments(queryPlan)
+}
+
+// queryDocumentsCall makes a single query-documents API call.
+//
+// Note: the query is executed as-is!
+func (c *RestClient) queryDocumentsCall(query QueryReq) *RespQueryDocs {
+	req := c.buildQueryRequest(query)
+	resp := c.client.Do(req)
+	result := &RespQueryDocs{RestReponse: c.buildRestReponse(resp)}
+	if result.CallErr == nil {
+		result.ContinuationToken = result.RespHeader[respHeaderContinuation]
+		result.CallErr = json.Unmarshal(result.RespBody, &result)
 	}
 	return result
 }
 
 // QueryDocuments invokes Cosmos DB API to query a collection for documents.
 //
-// Please be noted that:
-//   - Non-cross-partition queries (either specifying QueryReq.PkRangeId, QueryReq.PkValue or number of pk-ranges is 1) would work;
-//     excepted for the following known issue: `SELECT sum/min/max/avg` combined with QueryReq.MaxItemCount would not work (`SELECT count(1)`
-//     has no issue combining with QueryReq.MaxItemCount).
-//   - Known cross-partition queries (where number of pk-ranges > 1 and none of QueryReq.PkRangeId or QueryReq.PkValue is specified)
-//     that would not work correctly: queries with ORDER BY/DISTINCT/GROUP BY combined with QueryReq.MaxItemCount, except for `SELECT count(1)`.
-//
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/query-documents.
+//
+// Known issues:
+//   - (*) `GROUP BY` with `ORDER BY` queries are currently not supported by Cosmos DB! Resolution/Workaround: NONE!
+//   - Paging a cross-partition `OFFSET...LIMIT` query using QueryReq.MaxItemCount: it would not work. Moreover, the
+//     result returned from QueryDocumentsCrossPartition might be different from or the one returned from call to
+//     QueryDocuments without pagination. Resolution/Workaround: NONE!
+//   - Paging a cross-partition `ORDER BY` query using QueryReq.MaxItemCount would not work: returned rows might not be
+//     in the expected order. Resolution/Workaround: use QueryDocumentsCrossPartition or QueryDocuments without paging
+//     (caution: intermediate results are kept in memory, be alerted for out-of-memory error).
+//   - Paging a cross-partition `SELECT DISTINCT/VALUE` query using QueryReq.MaxItemCount would not work: returned rows
+//     might be duplicated. Resolution/Workaround: use QueryDocumentsCrossPartition or QueryDocuments without paging
+//     (caution: intermediate results are kept in memory, be alerted for out-of-memory error).
+//   - Cross-partition queries that combine `GROUP BY` with QueryReq.MaxItemCount would not work: the aggregate function
+//     might not work properly. Resolution/Workaround: use QueryDocumentsCrossPartition or QueryDocuments without
+//     QueryReq.MaxItemCount (caution: intermediate results are kept in memory, be alerted for out-of-memory error).
 func (c *RestClient) QueryDocuments(query QueryReq) *RespQueryDocs {
-	if query.CrossPartitionEnabled && query.PkRangeId == "" && query.PkValue == "" {
-		// cross-partition is redundant when pkrangid or pkvalue is specified
-		return c.queryDocumentsCrossPartitions(query)
+	queryPlan := c.QueryPlan(query)
+	if queryPlan.Error() != nil {
+		return &RespQueryDocs{RestReponse: queryPlan.RestReponse}
 	}
-	return c.queryDocumentsAsIs(query, false)
+
+	if queryPlan.QueryInfo.DistinctType != "None" || queryPlan.QueryInfo.RewrittenQuery != "" {
+		pkranges := c.GetPkranges(query.DbName, query.CollName)
+		if pkranges.Error() != nil {
+			return &RespQueryDocs{RestReponse: pkranges.RestReponse}
+		}
+		return c.queryAndMerge(query, pkranges, queryPlan)
+	}
+
+	return c.queryDocumentsSimple(query, queryPlan)
+}
+
+// QueryDocumentsCrossPartition can be used as a workaround for known issues with QueryDocuments.
+//
+// Caution: intermediate results are kept in memory, and all matched rows are returned. Be alerted for out-of-memory error!
+//
+// Available since v0.2.0
+func (c *RestClient) QueryDocumentsCrossPartition(query QueryReq) *RespQueryDocs {
+	query.CrossPartitionEnabled = true
+	queryPlan := c.QueryPlan(query)
+	if queryPlan.Error() != nil {
+		return &RespQueryDocs{RestReponse: queryPlan.RestReponse}
+	}
+	queryRewritten := queryPlan.QueryInfo.RewrittenQuery != ""
+	pkranges := c.GetPkranges(query.DbName, query.CollName)
+	if pkranges.Error() != nil {
+		return &RespQueryDocs{RestReponse: pkranges.RestReponse}
+	}
+	if queryRewritten {
+		query.Query = strings.ReplaceAll(queryPlan.QueryInfo.RewrittenQuery, "{documentdb-formattableorderbyquery-filter}", "true")
+	}
+	var result *RespQueryDocs
+	savedContinuationToken := query.ContinuationToken
+	for _, pkrange := range pkranges.Pkranges {
+		query.PkRangeId = pkrange.Id
+		for {
+			result = c.mergeQueryResults(result, c.queryAllAndMerge(query, queryPlan), queryPlan)
+			if result.Error() != nil || result.ContinuationToken == "" {
+				break
+			}
+			query.ContinuationToken = result.ContinuationToken
+		}
+		if result.Error() != nil {
+			return result
+		}
+		query.ContinuationToken = ""
+	}
+	return c.finalPrepareResult(result, queryPlan, savedContinuationToken)
+	// if queryRewritten {
+	// 	result.Documents = result.RewrittenDocuments.Flatten(queryPlan)
+	// 	result.Count = len(result.Documents)
+	// }
+	// if queryPlan.QueryInfo.Limit > 0 {
+	// 	offset, limit := queryPlan.QueryInfo.Offset, queryPlan.QueryInfo.Limit
+	// 	if queryRewritten {
+	// 		offset = 0
+	// 	}
+	// 	if len(result.Documents)-offset < limit {
+	// 		limit = len(result.Documents) - offset
+	// 	}
+	// 	if limit > 0 {
+	// 		result.Documents = result.Documents[offset : offset+limit]
+	// 		result.Count = len(result.Documents)
+	// 		if result.RewrittenDocuments != nil {
+	// 			result.RewrittenDocuments = result.RewrittenDocuments[offset : offset+limit]
+	// 		}
+	// 	}
+	// }
+	// return result
 }
 
 // QueryPlan invokes Cosmos DB API to generate query plan.
@@ -1124,25 +1245,147 @@ type RespListColl struct {
 	Collections []CollInfo `json:"DocumentCollections"`
 }
 
-// // NewDocInfo creates a new DocInfo instance and populates its data from supplied one.
-// //
-// // Availabile since v0.1.9
-// func NewDocInfo(data map[string]interface{}) DocInfo {
-// 	doc := DocInfo{}
-// 	for k, v := range data {
-// 		doc[k] = v
-// 	}
-// 	return doc
-// }
-
-// QueriesDocs is list of returned documents from a query.
-// Queries can return a list of documents or a list of scalar values.
+// QueriedDocs is list of returned documents from a query such as result from RestClient.QueryDocuments call.
+// A query can return a list of documents or a list of scalar values.
 //
 // Available since v0.1.9
-type QueriesDocs []interface{}
+type QueriedDocs []interface{}
+
+// Merge merges this document list with another using the rule determined by supplied query plan and returns the merged list.
+//
+// Available since v0.2.0
+func (docs QueriedDocs) Merge(queryPlan *RespQueryPlan, otherDocs QueriedDocs) QueriedDocs {
+	if queryPlan != nil && queryPlan.IsGroupByQuery() {
+		return docs.mergeGroupBy(queryPlan, otherDocs)
+	}
+	if queryPlan != nil && queryPlan.IsOrderByQuery() {
+		result := docs.mergeOrderBy(queryPlan, otherDocs)
+		if queryPlan.IsDistinctQuery() {
+			result = result.ReduceDistinct(queryPlan)
+		}
+		return result
+	}
+	if queryPlan != nil && queryPlan.IsDistinctQuery() {
+		return docs.mergeDistinct(queryPlan, otherDocs)
+	}
+	return append(docs, otherDocs...)
+}
+
+// mergeDistinct merges this document list with another using "distinct" rule (duplicated items removed) and returns the merged list.
+//
+// Available since v0.2.0
+func (docs QueriedDocs) mergeDistinct(queryPlan *RespQueryPlan, otherDocs QueriedDocs) QueriedDocs {
+	result := append(docs, otherDocs...)
+	return result.ReduceDistinct(queryPlan)
+}
+
+// mergeGroupBy merges this document list with another using "group by" rule and returns the merged list.
+//
+// This function assumes the rewritten query was executed and each returned document has the following structure: `{"groupByItems": [...], payload: {...}}`.
+//
+// Available since v0.2.0
+func (docs QueriedDocs) mergeGroupBy(queryPlan *RespQueryPlan, otherDocs QueriedDocs) QueriedDocs {
+	result := make(QueriedDocs, 0)
+	for _, otherDoc := range append(docs.AsDocInfoSlice(), otherDocs.AsDocInfoSlice()...) {
+		merged := false
+		for _, myDoc := range result.AsDocInfoSlice() {
+			if reflect.DeepEqual(myDoc["groupByItems"], otherDoc["groupByItems"]) {
+				myPayload := myDoc["payload"].(map[string]interface{})
+				otherPayload := otherDoc["payload"].(map[string]interface{})
+				for k, v := range queryPlan.QueryInfo.GroupByAliasToAggregateType {
+					v = strings.ToUpper(v)
+					switch v {
+					case "COUNT", "SUM":
+						myVal, _ := reddo.ToFloat(myPayload[k].(map[string]interface{})["item"])
+						otherVal, _ := reddo.ToFloat(otherPayload[k].(map[string]interface{})["item"])
+						myPayload[k].(map[string]interface{})["item"] = myVal + otherVal
+						myDoc["payload"] = myPayload
+					case "MAX", "MIN":
+						myVal, _ := reddo.ToFloat(myPayload[k].(map[string]interface{})["item"])
+						otherVal, _ := reddo.ToFloat(otherPayload[k].(map[string]interface{})["item"])
+						if v == "MAX" && otherVal > myVal {
+							myPayload[k].(map[string]interface{})["item"] = otherVal
+							myDoc["payload"] = myPayload
+						} else if v == "MIN" && otherVal < myVal {
+							myPayload[k].(map[string]interface{})["item"] = otherVal
+							myDoc["payload"] = myPayload
+						}
+					case "AVERAGE":
+						mySum, _ := reddo.ToFloat(myPayload[k].(map[string]interface{})["item"].(map[string]interface{})["sum"])
+						myCount, _ := reddo.ToInt(myPayload[k].(map[string]interface{})["item"].(map[string]interface{})["count"])
+						otherSum, _ := reddo.ToFloat(otherPayload[k].(map[string]interface{})["item"].(map[string]interface{})["sum"])
+						otherCount, _ := reddo.ToInt(otherPayload[k].(map[string]interface{})["item"].(map[string]interface{})["count"])
+						myPayload[k].(map[string]interface{})["item"] = map[string]interface{}{"sum": mySum + otherSum, "count": myCount + otherCount}
+						myDoc["payload"] = myPayload
+					}
+				}
+				merged = true
+				break
+			}
+		}
+		if !merged {
+			result = append(result, otherDoc)
+		}
+	}
+	return result
+}
+
+func _convertToStrings(i, j interface{}) (string, string, bool) {
+	if i == nil {
+		i = ""
+	}
+	if j == nil {
+		j = ""
+	}
+	istr, iok := i.(string)
+	jstr, jok := j.(string)
+	return istr, jstr, iok && jok
+}
+
+func _convertToFloats(i, j interface{}) (float64, float64, bool) {
+	if i == nil {
+		i = 0.0
+	}
+	if j == nil {
+		j = 0.0
+	}
+	ifloat, iok := i.(float64)
+	jfloat, jok := j.(float64)
+	return ifloat, jfloat, iok && jok
+}
+
+// mergeOrderBy merges this document list with another using "order by" rule (the final list is sorted) and returns the merged list.
+//
+// This function assumes the rewritten query was executed and each returned document has the following structure: `{"orderByItems": [...], payload: {...}}`.
+//
+// Available since v0.2.0
+func (docs QueriedDocs) mergeOrderBy(queryPlan *RespQueryPlan, otherDocs QueriedDocs) QueriedDocs {
+	result := append(docs, otherDocs...)
+	sort.Slice(result, func(i, j int) bool {
+		iOrderByItems := result[i].(map[string]interface{})["orderByItems"].([]interface{})
+		jOrderByItems := result[j].(map[string]interface{})["orderByItems"].([]interface{})
+		for index, odir := range queryPlan.QueryInfo.OrderBy {
+			odir = strings.ToUpper(odir)
+			iItem := iOrderByItems[index].(map[string]interface{})["item"]
+			jItem := jOrderByItems[index].(map[string]interface{})["item"]
+			if iItem == jItem {
+				continue
+			}
+
+			if istr, jstr, ok := _convertToStrings(iItem, jItem); ok {
+				return (odir == "DESCENDING" && istr > jstr) || (odir != "DESCENDING" && istr < jstr)
+			}
+			if ifloat, jfloat, ok := _convertToFloats(iItem, jItem); ok {
+				return (odir == "DESCENDING" && ifloat > jfloat) || (odir != "DESCENDING" && ifloat < jfloat)
+			}
+		}
+		return false
+	})
+	return result
+}
 
 // AsDocInfoAt returns the i-th queried document as a DocInfo.
-func (docs QueriesDocs) AsDocInfoAt(i int) DocInfo {
+func (docs QueriedDocs) AsDocInfoAt(i int) DocInfo {
 	switch docInfo := docs[i].(type) {
 	case DocInfo:
 		return docInfo
@@ -1154,7 +1397,7 @@ func (docs QueriesDocs) AsDocInfoAt(i int) DocInfo {
 }
 
 // AsDocInfoSlice returns the queried documents as []DocInfo.
-func (docs QueriesDocs) AsDocInfoSlice() []DocInfo {
+func (docs QueriedDocs) AsDocInfoSlice() []DocInfo {
 	result := make([]DocInfo, len(docs))
 	for i, doc := range docs {
 		switch docInfo := doc.(type) {
@@ -1169,35 +1412,117 @@ func (docs QueriesDocs) AsDocInfoSlice() []DocInfo {
 	return result
 }
 
-// FlattenOrderBy transforms result from a rewritten order-by query to []DocInfo.
-func (docs QueriesDocs) FlattenOrderBy(queryPlan *RespQueryPlan) []DocInfo {
-	result := make([]DocInfo, len(docs))
-	for i, doc := range docs.AsDocInfoSlice() {
-		result[i] = doc["payload"].(map[string]interface{})
+// Flatten transforms result from execution of a rewritten query to the non-rewritten form.
+//
+// Available since v0.2.0
+func (docs QueriedDocs) Flatten(queryPlan *RespQueryPlan) QueriedDocs {
+	result := make(QueriedDocs, len(docs))
+	for i, item := range docs {
+		doc := item
+		if queryPlan != nil && (queryPlan.IsOrderByQuery() || queryPlan.IsGroupByQuery()) {
+			switch item.(type) {
+			case map[string]interface{}:
+				doc = item.(map[string]interface{})["payload"]
+			case DocInfo:
+				doc = item.(DocInfo)["payload"]
+			}
+			if queryPlan.IsGroupByQuery() {
+				payload, ok := doc.(map[string]interface{})
+				if ok {
+					docDest := DocInfo{}
+					for k, v := range queryPlan.QueryInfo.GroupByAliasToAggregateType {
+						docDest[k] = payload[k]
+						if strings.ToUpper(v) == "AVERAGE" {
+							docDest[k] = 0.0
+							count, _ := reddo.ToFloat(payload[k].(map[string]interface{})["item"].(map[string]interface{})["count"])
+							if count != 0.0 {
+								sum, _ := reddo.ToFloat(payload[k].(map[string]interface{})["item"].(map[string]interface{})["sum"])
+								docDest[k] = sum / count
+							}
+						} else if v != "" {
+							docDest[k] = payload[k].(map[string]interface{})["item"]
+						}
+					}
+					doc = docDest
+				}
+			}
+		}
+		result[i] = doc
 	}
 	return result
 }
 
-// FlattenGroupBy transforms result from a rewritten group-by query to []DocInfo.
-func (docs QueriesDocs) FlattenGroupBy(queryPlan *RespQueryPlan) []DocInfo {
-	result := make([]DocInfo, len(docs))
-	for i, doc := range docs.AsDocInfoSlice() {
-		payload := doc["payload"].(map[string]interface{})
-		docDest := DocInfo{}
-		for k, v := range queryPlan.QueryInfo.GroupByAliasToAggregateType {
-			docDest[k] = payload[k]
-			if strings.ToUpper(v) == "AVERAGE" {
-				docDest[k] = 0.0
-				count, _ := reddo.ToFloat(payload[k].(map[string]interface{})["item"].(map[string]interface{})["count"])
-				if count != 0.0 {
-					sum, _ := reddo.ToFloat(payload[k].(map[string]interface{})["item"].(map[string]interface{})["sum"])
-					docDest[k] = sum / count
-				}
-			} else if v != "" {
-				docDest[k] = payload[k].(map[string]interface{})["item"]
+// ReduceDistinct removes duplicated rows from a SELECT DISTINCT query.
+//
+// Available since v0.2.0
+func (docs QueriedDocs) ReduceDistinct(queryPlan *RespQueryPlan) QueriedDocs {
+	itemMap := make(map[string]bool)
+	result := make(QueriedDocs, 0)
+	queryRewritten := queryPlan.QueryInfo.RewrittenQuery != ""
+	hf1, hf2 := checksum.Crc32HashFunc, checksum.Md5HashFunc // CRC32 + MD5 hashing is fast (is MD5 + SHA1 better?)
+	for _, doc := range docs {
+		item := doc
+		if docAsMap, typOk := doc.(map[string]interface{}); typOk && queryRewritten {
+			ok := false
+			if item, ok = docAsMap["payload"]; !ok {
+				// fallback
+				item = doc
 			}
 		}
-		result[i] = docDest
+		key := fmt.Sprintf("%x:%x", checksum.Checksum(hf1, item), checksum.Checksum(hf2, item))
+		if _, ok := itemMap[key]; !ok {
+			itemMap[key] = true
+			result = append(result, doc)
+		}
+	}
+	return result
+}
+
+// ReduceGroupBy merge rows returned from a SELECT...GROUP BY "rewritten" query.
+//
+// Available since v0.2.0
+func (docs QueriedDocs) ReduceGroupBy(queryPlan *RespQueryPlan) QueriedDocs {
+	result := make(QueriedDocs, 0)
+	for _, otherDoc := range docs.AsDocInfoSlice() {
+		merged := false
+		for _, myDoc := range result.AsDocInfoSlice() {
+			if reflect.DeepEqual(myDoc["groupByItems"], otherDoc["groupByItems"]) {
+				myPayload := myDoc["payload"].(map[string]interface{})
+				otherPayload := otherDoc["payload"].(map[string]interface{})
+				for k, v := range queryPlan.QueryInfo.GroupByAliasToAggregateType {
+					v = strings.ToUpper(v)
+					switch v {
+					case "COUNT", "SUM":
+						myVal, _ := reddo.ToFloat(myPayload[k].(map[string]interface{})["item"])
+						otherVal, _ := reddo.ToFloat(otherPayload[k].(map[string]interface{})["item"])
+						myPayload[k].(map[string]interface{})["item"] = myVal + otherVal
+						myDoc["payload"] = myPayload
+					case "MAX", "MIN":
+						myVal, _ := reddo.ToFloat(myPayload[k].(map[string]interface{})["item"])
+						otherVal, _ := reddo.ToFloat(otherPayload[k].(map[string]interface{})["item"])
+						if v == "MAX" && otherVal > myVal {
+							myPayload[k].(map[string]interface{})["item"] = otherVal
+							myDoc["payload"] = myPayload
+						} else if v == "MIN" && otherVal < myVal {
+							myPayload[k].(map[string]interface{})["item"] = otherVal
+							myDoc["payload"] = myPayload
+						}
+					case "AVERAGE":
+						mySum, _ := reddo.ToFloat(myPayload[k].(map[string]interface{})["item"].(map[string]interface{})["sum"])
+						myCount, _ := reddo.ToInt(myPayload[k].(map[string]interface{})["item"].(map[string]interface{})["count"])
+						otherSum, _ := reddo.ToFloat(otherPayload[k].(map[string]interface{})["item"].(map[string]interface{})["sum"])
+						otherCount, _ := reddo.ToInt(otherPayload[k].(map[string]interface{})["item"].(map[string]interface{})["count"])
+						myPayload[k].(map[string]interface{})["item"] = map[string]interface{}{"sum": mySum + otherSum, "count": myCount + otherCount}
+						myDoc["payload"] = myPayload
+					}
+				}
+				merged = true
+				break
+			}
+		}
+		if !merged {
+			result = append(result, otherDoc)
+		}
 	}
 	return result
 }
@@ -1324,124 +1649,30 @@ type RespDeleteDoc struct {
 
 // RespQueryDocs captures the response from RestClient.QueryDocuments call.
 type RespQueryDocs struct {
-	RestReponse       `json:"-"`
-	Count             int         `json:"_count"` // number of documents returned from the operation
-	Documents         QueriesDocs `json:"Documents"`
-	ContinuationToken string      `json:"-"`
+	RestReponse        `json:"-"`
+	Count              int            `json:"_count"` // number of documents returned from the operation
+	Documents          QueriedDocs    `json:"Documents"`
+	ContinuationToken  string         `json:"-"`
+	QueryPlan          *RespQueryPlan `json:"-"` // (available since v0.2.0) the query plan used to execute the query
+	RewrittenDocuments QueriedDocs    `json:"-"` // (available since v0.2.0) the original returned documents from the execution of RespQueryPlan.QueryInfo.RewrittenQuery
 }
 
-// MergeDistinct merges result from another "SELECT DISTINCT" query.
-//
-// Available since v0.1.9
-func (r *RespQueryDocs) MergeDistinct(_ *RespQueryPlan, other *RespQueryDocs) *RespQueryDocs {
-	itemSet := make(map[string]bool)
-	// CRC32 + MD5 hashing is fast (is MD5 + SHA1 better?)
-	hf1, hf2 := checksum.Crc32HashFunc, checksum.Md5HashFunc
-	for _, doc := range r.Documents {
-		key := fmt.Sprintf("%x:%x", checksum.Checksum(hf1, doc), checksum.Checksum(hf2, doc))
-		itemSet[key] = true
-	}
-
-	for _, otherDoc := range other.Documents {
-		key := fmt.Sprintf("%x:%x", checksum.Checksum(hf1, otherDoc), checksum.Checksum(hf2, otherDoc))
-		if !itemSet[key] {
-			itemSet[key] = true
-			r.Documents = append(r.Documents, otherDoc)
-			r.Count++
-		}
+// Available since v0.2.0
+func (r *RespQueryDocs) populateRewrittenDocuments(queryPlan *RespQueryPlan) *RespQueryDocs {
+	r.QueryPlan = queryPlan
+	r.RewrittenDocuments = nil
+	if queryPlan != nil && queryPlan.QueryInfo.RewrittenQuery != "" {
+		r.RewrittenDocuments = make(QueriedDocs, len(r.Documents))
+		copy(r.RewrittenDocuments, r.Documents)
 	}
 	return r
 }
 
-// MergeGroupBy merges result from another "SELECT ... GROUP BY" query.
-//
-// This function assumes the rewritten query was executed and each returned document has the following structure: `{"groupByItems": [...], payload: {...}}`.
-//
-// Available since v0.1.9
-func (r *RespQueryDocs) MergeGroupBy(queryPlan *RespQueryPlan, other *RespQueryDocs) *RespQueryDocs {
-	for _, otherDoc := range other.Documents.AsDocInfoSlice() {
-		merged := false
-		for _, myDoc := range r.Documents.AsDocInfoSlice() {
-			if reflect.DeepEqual(myDoc["groupByItems"], otherDoc["groupByItems"]) {
-				myPayload := myDoc["payload"].(map[string]interface{})
-				otherPayload := otherDoc["payload"].(map[string]interface{})
-				for k, v := range queryPlan.QueryInfo.GroupByAliasToAggregateType {
-					v = strings.ToUpper(v)
-					switch v {
-					// case "COUNT":
-					// 	myVal, _ := reddo.ToInt(myPayload[k].(map[string]interface{})["item"])
-					// 	otherVal, _ := reddo.ToInt(otherPayload[k].(map[string]interface{})["item"])
-					// 	myPayload[k].(map[string]interface{})["item"] = myVal + otherVal
-					// 	myDoc["payload"] = myPayload
-					case "COUNT", "SUM":
-						myVal, _ := reddo.ToFloat(myPayload[k].(map[string]interface{})["item"])
-						otherVal, _ := reddo.ToFloat(otherPayload[k].(map[string]interface{})["item"])
-						myPayload[k].(map[string]interface{})["item"] = myVal + otherVal
-						myDoc["payload"] = myPayload
-					case "MAX", "MIN":
-						myVal, _ := reddo.ToFloat(myPayload[k].(map[string]interface{})["item"])
-						otherVal, _ := reddo.ToFloat(otherPayload[k].(map[string]interface{})["item"])
-						if v == "MAX" && otherVal > myVal {
-							myPayload[k].(map[string]interface{})["item"] = otherVal
-							myDoc["payload"] = myPayload
-						} else if v == "MIN" && otherVal < myVal {
-							myPayload[k].(map[string]interface{})["item"] = otherVal
-							myDoc["payload"] = myPayload
-						}
-					case "AVERAGE":
-						mySum, _ := reddo.ToFloat(myPayload[k].(map[string]interface{})["item"].(map[string]interface{})["sum"])
-						myCount, _ := reddo.ToInt(myPayload[k].(map[string]interface{})["item"].(map[string]interface{})["count"])
-						otherSum, _ := reddo.ToFloat(otherPayload[k].(map[string]interface{})["item"].(map[string]interface{})["sum"])
-						otherCount, _ := reddo.ToInt(otherPayload[k].(map[string]interface{})["item"].(map[string]interface{})["count"])
-						myPayload[k].(map[string]interface{})["item"] = map[string]interface{}{"sum": mySum + otherSum, "count": myCount + otherCount}
-						myDoc["payload"] = myPayload
-					}
-				}
-				merged = true
-				break
-			}
-		}
-		if !merged {
-			r.Documents = append(r.Documents, otherDoc)
-			r.Count++
-		}
-	}
-	return r
-}
-
-// MergeOrderBy merges result from another "SELECT ... ORDER BY" query.
-//
-// This function assumes the rewritten query was executed and each returned document has the following structure: `{"orderByItems": [...], payload: {...}}`.
-//
-// Available since v0.1.9
-func (r *RespQueryDocs) MergeOrderBy(queryPlan *RespQueryPlan, other *RespQueryDocs) *RespQueryDocs {
-	r.Count += other.Count
-	r.Documents = append(r.Documents, other.Documents...)
-	sort.Slice(r.Documents, func(i, j int) bool {
-		iOrderByItems := r.Documents[i].(map[string]interface{})["orderByItems"].([]interface{})
-		jOrderByItems := r.Documents[j].(map[string]interface{})["orderByItems"].([]interface{})
-		for index, odir := range queryPlan.QueryInfo.OrderBy {
-			odir = strings.ToUpper(odir)
-			iItem := iOrderByItems[index].(map[string]interface{})["item"]
-			jItem := jOrderByItems[index].(map[string]interface{})["item"]
-			if iItem == jItem {
-				continue
-			}
-
-			istr, iok := iItem.(string)
-			jstr, jok := jItem.(string)
-			if iok && jok {
-				return (odir == "DESCENDING" && istr > jstr) || (odir != "DESCENDING" && istr < jstr)
-			}
-
-			ifloat, iok := iItem.(float64)
-			jfloat, jok := jItem.(float64)
-			if iok && jok {
-				return (odir == "DESCENDING" && ifloat > jfloat) || (odir != "DESCENDING" && ifloat < jfloat)
-			}
-		}
-		return false
-	})
+// note: this function does NOT add up request-charge
+// note 2: we are executing the rewritten query (if any)
+func (r *RespQueryDocs) merge(queryPlan *RespQueryPlan, other *RespQueryDocs) *RespQueryDocs {
+	r.Documents = r.Documents.Merge(queryPlan, other.Documents)
+	r.Count = len(r.Documents)
 	return r
 }
 

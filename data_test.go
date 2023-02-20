@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 /*======================================================================*/
@@ -33,9 +36,10 @@ func _initData(t *testing.T, testName string, client *RestClient, db, container 
 			"id":       fmt.Sprintf("%05d", i),
 			"username": username,
 			"email":    "user" + strconv.Itoa(i) + "@domain.com",
-			"grade":    randList[i],
-			"category": category,
+			"grade":    float64(randList[i]),
+			"category": float64(category),
 			"active":   i%10 == 0,
+			"big":      fmt.Sprintf("%05d", i) + "/" + strings.Repeat("this is a very long string/", 256),
 		}
 		dataList[i] = docInfo
 		if result := client.CreateDocument(DocumentSpec{DbName: db, CollName: container, PartitionKeyValues: []interface{}{username}, DocumentData: docInfo}); result.Error() != nil {
@@ -28470,43 +28474,46 @@ const _testDataVolcano = `
 /*----------------------------------------------------------------------*/
 
 func _initDataNutrition(t *testing.T, testName string, client *RestClient, db, container string) {
-	// _testDataNutrition, err := os.ReadFile("data_test_nutrition.json")
-	// if err != nil {
-	// 	t.Fatalf("%s failed: %s", testName, err)
-	// }
 	dataListNutrition := make([]DocInfo, 0)
+	dataMapNutrition := make(map[string]DocInfo)
 	err := json.Unmarshal([]byte(_testDataNutrition), &dataListNutrition)
 	if err != nil {
 		t.Fatalf("%s failed: %s", testName, err)
 	}
-	numWorkers := 8
+	fmt.Printf("\tDataset: %#v / Number of records: %#v\n", "Nutrition", len(dataListNutrition))
+
+	numWorkers := 2
+	buff := make(chan DocInfo, numWorkers*4)
 	wg := &sync.WaitGroup{}
 	wg.Add(numWorkers)
+	numDocWritten := int64(0)
 	for id := 0; id < numWorkers; id++ {
-		go func(id int, wg *sync.WaitGroup) {
+		go func(id int, wg *sync.WaitGroup, buff <-chan DocInfo) {
 			defer wg.Done()
-			low := id * len(dataListNutrition) / numWorkers
-			high := low + len(dataListNutrition)/numWorkers
-			if high > len(dataListNutrition) {
-				high = len(dataListNutrition)
-			}
-			for i := low; i < high; i++ {
-				doc := dataListNutrition[i]
-				if result := client.CreateDocument(DocumentSpec{DbName: db, CollName: container, PartitionKeyValues: []interface{}{doc["id"]}, DocumentData: doc}); result.Error() != nil {
+			start := time.Now()
+			for doc := range buff {
+				docId := doc["id"].(string)
+				dataMapNutrition[docId] = doc
+				if result := client.CreateDocument(DocumentSpec{DbName: db, CollName: container, PartitionKeyValues: []interface{}{docId}, DocumentData: doc}); result.Error() != nil {
 					t.Fatalf("%s failed: (%#v) %s", testName, id, result.Error())
 				}
+				atomic.AddInt64(&numDocWritten, 1)
+
+				now := time.Now()
+				if float64(numDocWritten)/float64(now.Sub(start).Milliseconds()+1) > 0.25 {
+					fmt.Printf("\t[DEBUG] too fast, slowing down...")
+					time.Sleep(1 * time.Millisecond)
+				}
 			}
-		}(id, wg)
+			fmt.Printf("\t\tWorker %#v: %#v docs written\n", id, numDocWritten)
+		}(id, wg, buff)
 	}
-	// for _, doc := range dataListNutrition {
-	// 	go func(wg *sync.WaitGroup, doc DocInfo) {
-	// 		defer wg.Done()
-	// 		if result := client.CreateDocument(DocumentSpec{DbName: db, CollName: container, PartitionKeyValues: []interface{}{doc["id"]}, DocumentData: doc}); result.Error() != nil {
-	// 			t.Fatalf("%s failed: %s", testName, result.Error())
-	// 		}
-	// 	}(wg, doc)
-	// }
+	for _, doc := range dataListNutrition {
+		buff <- doc
+	}
+	close(buff)
 	wg.Wait()
+	fmt.Printf("\tDataset: %#v / (checksum) Number of records: %#v\n", "Nutrition", len(dataMapNutrition))
 }
 
 func _initDataNutritionSmallRU(t *testing.T, testName string, client *RestClient, db, container string) {
