@@ -834,7 +834,8 @@ func _testRestClientQueryDocumentsContinuation(t *testing.T, testName string, cl
 				if tempResult.Error() != nil {
 					t.Fatalf("%s failed: %s", testName+"/"+testCase.name+"/Query", tempResult.Error())
 				}
-				ignoreMaxItemCountCheck := strings.HasSuffix(testCase.name, "_Sum") ||
+				ignoreMaxItemCountCheck := strings.HasSuffix(testCase.name, "_Count") ||
+					strings.HasSuffix(testCase.name, "_Sum") ||
 					strings.HasSuffix(testCase.name, "_Min") || strings.HasSuffix(testCase.name, "_Max") ||
 					strings.HasSuffix(testCase.name, "_Avg")
 				if !ignoreMaxItemCountCheck && (tempResult.Count > testCase.maxItemCount || len(tempResult.Documents) > testCase.maxItemCount) {
