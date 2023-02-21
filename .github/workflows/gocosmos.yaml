@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  test:
+- test:
     name: Test driver
     runs-on: windows-latest
     steps:
@@ -33,7 +33,7 @@ jobs:
           flags: driver
           name: driver
 
-  test:
+- test:
     name: Test RestClient non-query
     runs-on: windows-latest
     steps:
@@ -59,7 +59,7 @@ jobs:
           flags: restclient_nonquery
           name: restclient_nonquery
 
-  test:
+- test:
     name: Test RestClient query
     runs-on: windows-latest
     steps:
@@ -85,7 +85,7 @@ jobs:
           flags: restclient_query
           name: restclient_query
 
-  test:
+- test:
     name: Test other
     runs-on: windows-latest
     steps:
