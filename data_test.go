@@ -28482,15 +28482,15 @@ func _initDataNutrition(t *testing.T, testName string, client *RestClient, db, c
 	}
 	fmt.Printf("\tDataset: %#v / Number of records: %#v\n", "Nutrition", len(dataListNutrition))
 
-	numWorkers := 2
+	numWorkers := 4
 	buff := make(chan DocInfo, numWorkers*4)
 	wg := &sync.WaitGroup{}
 	wg.Add(numWorkers)
 	numDocWritten := int64(0)
+	start := time.Now()
 	for id := 0; id < numWorkers; id++ {
 		go func(id int, wg *sync.WaitGroup, buff <-chan DocInfo) {
 			defer wg.Done()
-			start := time.Now()
 			for doc := range buff {
 				docId := doc["id"].(string)
 				dataMapNutrition[docId] = doc
@@ -28498,11 +28498,15 @@ func _initDataNutrition(t *testing.T, testName string, client *RestClient, db, c
 					t.Fatalf("%s failed: (%#v) %s", testName, id, result.Error())
 				}
 				atomic.AddInt64(&numDocWritten, 1)
-
-				now := time.Now()
-				if float64(numDocWritten)/float64(now.Sub(start).Milliseconds()+1) > 0.25 {
-					fmt.Printf("\t[DEBUG] too fast, slowing down...")
-					time.Sleep(1 * time.Millisecond)
+				for {
+					now := time.Now()
+					d := now.Sub(start)
+					r := float64(numDocWritten) / (d.Seconds() + 0.01)
+					if r <= 123.0 {
+						break
+					}
+					fmt.Printf("\t[DEBUG] too fast, slowing down...(Id: %d / NumDocs: %d / Dur: %.3f / Rate: %.3f)\n", id, numDocWritten, d.Seconds(), r)
+					time.Sleep(1*time.Second + time.Duration(rand.Intn(1234))*time.Millisecond)
 				}
 			}
 			fmt.Printf("\t\tWorker %#v: %#v docs written\n", id, numDocWritten)
