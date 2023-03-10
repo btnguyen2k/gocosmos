@@ -28517,6 +28517,13 @@ func _initDataNutrition(t *testing.T, testName string, client *RestClient, db, c
 	}
 	close(buff)
 	wg.Wait()
+	{
+		now := time.Now()
+		d := now.Sub(start)
+		r := float64(numDocWritten) / (d.Seconds() + 0.01)
+		fmt.Printf("\t[DEBUG] Dur: %.3f / Rate: %.3f\n", d.Seconds(), r)
+		time.Sleep(1*time.Second + time.Duration(rand.Intn(1234))*time.Millisecond)
+	}
 	fmt.Printf("\tDataset: %#v / (checksum) Number of records: %#v\n", "Nutrition", len(dataMapNutrition))
 }
 

@@ -62,7 +62,39 @@ func TestRestClient_QueryDocuments_DbOrTableNotExists(t *testing.T) {
 
 type funcTestFatal func(msg string)
 
-func _verifyResult(f funcTestFatal, testName string, testCase queryTestCase, expectedNumItems int, queryResult *RespQueryDocs) {
+func _verifyResult(f funcTestFatal, testName string, testCase queryTestCase, expectedNumItems int, queryResult interface{}) {
+	switch queryResult.(type) {
+	case *RespQueryDocs:
+		_verifyResultRespQueryDocs(f, testName, testCase, expectedNumItems, queryResult.(*RespQueryDocs))
+	case []map[string]interface{}:
+		_verifyResultDriverSelect(f, testName, testCase, expectedNumItems, queryResult.([]map[string]interface{}))
+	}
+}
+
+func _verifyResultDriverSelect(f funcTestFatal, testName string, testCase queryTestCase, expectedNumItems int, rows []map[string]interface{}) {
+	if len(rows) == 0 {
+		f(fmt.Sprintf("%s failed: <num-document> is zero", testName))
+	}
+	if testCase.groupByField == "" {
+		if testCase.maxItemCount > 0 && expectedNumItems <= 0 && len(rows) > testCase.maxItemCount {
+			f(fmt.Sprintf("%s failed: <num-document> expected not exceeding %#v but received %#v", testName, testCase.maxItemCount, len(rows)))
+		}
+		if (testCase.maxItemCount <= 0 || expectedNumItems > 0) && len(rows) != expectedNumItems {
+			f(fmt.Sprintf("%s failed: <num-document> expected %#v but received %#v", testName, expectedNumItems, len(rows)))
+		}
+	}
+	for i, row := range rows {
+		if testCase.groupByField == "" && testCase.distinctQuery == 0 {
+			var docInfo DocInfo = row
+			id, _ := strconv.Atoi(docInfo.Id())
+			if !reflect.DeepEqual(docInfo.RemoveSystemAttrs(), dataList[id]) {
+				f(fmt.Sprintf("%s failed: %#v-th document expected to be\n%#v\nbut received\n%#v", testName, i, dataList[id], docInfo.RemoveSystemAttrs()))
+			}
+		}
+	}
+}
+
+func _verifyResultRespQueryDocs(f funcTestFatal, testName string, testCase queryTestCase, expectedNumItems int, queryResult *RespQueryDocs) {
 	if queryResult.Error() != nil {
 		f(fmt.Sprintf("%s failed: %s", testName, queryResult.Error()))
 	}
@@ -91,10 +123,34 @@ func _verifyResult(f funcTestFatal, testName string, testCase queryTestCase, exp
 	}
 }
 
-func _verifyDistinct(f funcTestFatal, testName string, testCase queryTestCase, queryResult *RespQueryDocs) {
+func _verifyDistinct(f funcTestFatal, testName string, testCase queryTestCase, queryResult interface{}) {
 	if testCase.distinctQuery == 0 {
 		return
 	}
+	switch queryResult.(type) {
+	case *RespQueryDocs:
+		_verifyDistinctRespQueryDocs(f, testName, testCase, queryResult.(*RespQueryDocs))
+	case []map[string]interface{}:
+		_verifyDistinctDriverSelect(f, testName, testCase, queryResult.([]map[string]interface{}))
+	}
+}
+
+func _verifyDistinctDriverSelect(f funcTestFatal, testName string, testCase queryTestCase, rows []map[string]interface{}) {
+	distinctSet := make(map[string]bool)
+	for _, doc := range rows {
+		js, _ := json.Marshal(doc)
+		distinctSet[string(js)] = true
+	}
+	expectedNumItems := testCase.expectedNumItems
+	if testCase.maxItemCount > 0 && len(distinctSet) > testCase.maxItemCount {
+		f(fmt.Sprintf("%s failed: expected max %#v distinct rows, but received %#v", testName, testCase.maxItemCount, rows))
+	}
+	if testCase.maxItemCount <= 0 && len(distinctSet) != expectedNumItems {
+		f(fmt.Sprintf("%s failed: expected %#v distinct rows, but received %#v", testName, expectedNumItems, rows))
+	}
+}
+
+func _verifyDistinctRespQueryDocs(f funcTestFatal, testName string, testCase queryTestCase, queryResult *RespQueryDocs) {
 	distinctSet := make(map[string]bool)
 	for _, doc := range queryResult.Documents {
 		js, _ := json.Marshal(doc)
@@ -109,40 +165,67 @@ func _verifyDistinct(f funcTestFatal, testName string, testCase queryTestCase, q
 	}
 }
 
-func _verifyOrderBy(f funcTestFatal, testName string, testCase queryTestCase, queryResult *RespQueryDocs) {
+func _verifyOrderBy(f funcTestFatal, testName string, testCase queryTestCase, queryResult interface{}) {
 	if testCase.orderField == "" {
 		return
 	}
+	switch queryResult.(type) {
+	case *RespQueryDocs:
+		_verifyOrderByRespQueryDocs(f, testName, testCase, queryResult.(*RespQueryDocs))
+	case []map[string]interface{}:
+		_verifyOrderByDriverSelect(f, testName, testCase, queryResult.([]map[string]interface{}))
+	}
+}
+
+func _verifyOrderByDriverSelect(f funcTestFatal, testName string, testCase queryTestCase, rows []map[string]interface{}) {
+	if len(rows) == 0 {
+		f(fmt.Sprintf("%s failed: empty/invalid query result", testName))
+	}
+	odir := strings.ToUpper(testCase.orderDirection)
+	var prevDoc interface{}
+	for _, doc := range rows {
+		if prevDoc != nil {
+			var pv, cv interface{}
+			var err error
+			if pv, err = reddo.Convert(prevDoc.(map[string]interface{})[testCase.orderField], testCase.orderType); err != nil {
+				f(fmt.Sprintf("%s failed: error converting %#v - %s", testName, prevDoc.(map[string]interface{})[testCase.orderField], err))
+			}
+			if cv, err = reddo.Convert(doc[testCase.orderField], testCase.orderType); err != nil {
+				f(fmt.Sprintf("%s failed: error converting %#v - %s", testName, doc[testCase.orderField], err))
+			}
+			switch testCase.orderType {
+			case reddo.TypeInt:
+				if (odir == "DESC" && pv.(int64) < cv.(int64)) || (odir != "DESC" && pv.(int64) > cv.(int64)) {
+					f(fmt.Sprintf("%s failed: out of order {doc: %#v, value: %#v} -> {doc: %#v, value: %#v}", testName, prevDoc, pv, doc, cv))
+				}
+			case reddo.TypeFloat:
+				if (odir == "DESC" && pv.(float64) < cv.(float64)) || (odir != "DESC" && pv.(float64) > cv.(float64)) {
+					f(fmt.Sprintf("%s failed: out of order {doc: %#v, value: %#v} -> {doc: %#v, value: %#v}", testName, prevDoc, pv, doc, cv))
+				}
+			case reddo.TypeString:
+				if (odir == "DESC" && pv.(string) < cv.(string)) || (odir != "DESC" && pv.(string) > cv.(string)) {
+					f(fmt.Sprintf("%s failed: out of order {doc: %#v, value: %#v} -> {doc: %#v, value: %#v}", testName, prevDoc, pv, doc, cv))
+				}
+			default:
+				f(fmt.Sprintf("%s failed: cannot compare values of type %#v", testName, testCase.orderType))
+			}
+		}
+		prevDoc = doc
+	}
+}
+
+func _verifyOrderByRespQueryDocs(f funcTestFatal, testName string, testCase queryTestCase, queryResult *RespQueryDocs) {
 	docList := queryResult.Documents
 	if len(docList) == 0 {
 		f(fmt.Sprintf("%s failed: empty/invalid query result", testName))
 	}
-	// fmt.Printf("[DEBUG]%#v/%#v ====================\n", testCase.orderDirection, testCase.orderField)
-	// for _, doc := range queryResult.Documents {
-	// 	switch doc.(type) {
-	// 	case DocInfo:
-	// 		m := doc.(DocInfo).RemoveSystemAttrs().AsMap()
-	// 		delete(m, "big")
-	// 		fmt.Printf("\t%#v\n", m)
-	// 	case map[string]interface{}:
-	// 		var d DocInfo = doc.(map[string]interface{})
-	// 		m := d.RemoveSystemAttrs().AsMap()
-	// 		delete(m, "big")
-	// 		fmt.Printf("\t%#v\n", m)
-	// 	default:
-	// 		fmt.Printf("\t%#v\n", doc)
-	// 	}
-	// }
 	odir := strings.ToUpper(testCase.orderDirection)
 	var prevDoc interface{}
 	for _, doc := range docList {
 		if prevDoc != nil {
 			var pv, cv interface{}
 			var err error
-			// var pv, cv float64
 			if testCase.distinctQuery > 0 {
-				// pv, _ = reddo.ToFloat(prevDoc)
-				// cv, _ = reddo.ToFloat(doc)
 				if pv, err = reddo.Convert(prevDoc, testCase.orderType); err != nil {
 					f(fmt.Sprintf("%s failed: error converting %#v - %s", testName, prevDoc, err))
 				}
@@ -150,8 +233,6 @@ func _verifyOrderBy(f funcTestFatal, testName string, testCase queryTestCase, qu
 					f(fmt.Sprintf("%s failed: error converting %#v - %s", testName, doc, err))
 				}
 			} else {
-				// pv, _ = reddo.ToFloat(prevDoc.(map[string]interface{})[testCase.orderField])
-				// cv, _ = reddo.ToFloat(doc.(map[string]interface{})[testCase.orderField])
 				if pv, err = reddo.Convert(prevDoc.(map[string]interface{})[testCase.orderField], testCase.orderType); err != nil {
 					f(fmt.Sprintf("%s failed: error converting %#v - %s", testName, prevDoc.(map[string]interface{})[testCase.orderField], err))
 				}
@@ -175,19 +256,103 @@ func _verifyOrderBy(f funcTestFatal, testName string, testCase queryTestCase, qu
 			default:
 				f(fmt.Sprintf("%s failed: cannot compare values of type %#v", testName, testCase.orderType))
 			}
-			// if (odir == "DESC" && pv < cv) || (odir != "DESC" && pv > cv) {
-			// 	f(fmt.Sprintf("%s failed: out of order {doc: %#v, value: %#v} -> {doc: %#v, value: %#v}", testName, prevDoc, pv, doc, cv))
-			// }
 		}
 		prevDoc = doc
 	}
 }
 
-func _verifyGroupBy(f funcTestFatal, testName string, testCase queryTestCase, partition, lowStr, highStr string, queryResult *RespQueryDocs) {
+func _verifyGroupBy(f funcTestFatal, testName string, testCase queryTestCase, partition, lowStr, highStr string, queryResult interface{}) {
 	if testCase.groupByField == "" {
 		return
 	}
+	switch queryResult.(type) {
+	case *RespQueryDocs:
+		_verifyGroupByRespQueryDocs(f, testName, testCase, partition, lowStr, highStr, queryResult.(*RespQueryDocs))
+	case []map[string]interface{}:
+		_verifyGroupByDriverSelect(f, testName, testCase, partition, lowStr, highStr, queryResult.([]map[string]interface{}))
+	}
+}
 
+func _verifyGroupByDriverSelect(f funcTestFatal, testName string, testCase queryTestCase, partition, lowStr, highStr string, rows []map[string]interface{}) {
+	if len(rows) == 0 {
+		f(fmt.Sprintf("%s failed: empty/invalid query result", testName))
+	}
+	countPerCat, sumPerCat := make(map[int]int), make(map[int]int)
+	minPerCat, maxPerCat := make(map[int]int), make(map[int]int)
+	countPerPartitionPerCat, sumPerPartitionPerCat := make(map[string]map[int]int), make(map[string]map[int]int)
+	minPerPartitionPerCat, maxPerPartitionPerCat := make(map[string]map[int]int), make(map[string]map[int]int)
+	for i := 0; i < numLogicalPartitions; i++ {
+		countPerPartitionPerCat["user"+strconv.Itoa(i)] = make(map[int]int)
+		sumPerPartitionPerCat["user"+strconv.Itoa(i)] = make(map[int]int)
+		minPerPartitionPerCat["user"+strconv.Itoa(i)] = make(map[int]int)
+		maxPerPartitionPerCat["user"+strconv.Itoa(i)] = make(map[int]int)
+	}
+	for _, docInfo := range dataList {
+		if lowStr <= docInfo.Id() && docInfo.Id() < highStr {
+			username := docInfo.GetAttrAsTypeUnsafe("username", reddo.TypeString).(string)
+			category := docInfo.GetAttrAsTypeUnsafe("category", reddo.TypeInt).(int64)
+			grade := docInfo.GetAttrAsTypeUnsafe("grade", reddo.TypeInt).(int64)
+
+			countPerCat[int(category)]++
+			sumPerCat[int(category)] += int(grade)
+			if minPerCat[int(category)] == 0 || minPerCat[int(category)] > int(grade) {
+				minPerCat[int(category)] = int(grade)
+			}
+			if maxPerCat[int(category)] < int(grade) {
+				maxPerCat[int(category)] = int(grade)
+			}
+
+			countPerPartitionPerCat[username][int(category)]++
+			sumPerPartitionPerCat[username][int(category)] += int(grade)
+			if minPerPartitionPerCat[username][int(category)] == 0 || minPerPartitionPerCat[username][int(category)] > int(grade) {
+				minPerPartitionPerCat[username][int(category)] = int(grade)
+			}
+			if maxPerPartitionPerCat[username][int(category)] < int(grade) {
+				maxPerPartitionPerCat[username][int(category)] = int(grade)
+			}
+		}
+	}
+
+	for _, row := range rows {
+		category, _ := reddo.ToInt(row["Category"])
+		value, _ := reddo.ToInt(row["Value"])
+		var expected int
+		switch strings.ToUpper(testCase.groupByField) {
+		case "COUNT":
+			expected = countPerCat[int(category)]
+			if partition != "" {
+				expected = countPerPartitionPerCat[partition][int(category)]
+			}
+		case "SUM":
+			expected = sumPerCat[int(category)]
+			if partition != "" {
+				expected = sumPerPartitionPerCat[partition][int(category)]
+			}
+		case "MIN":
+			expected = minPerCat[int(category)]
+			if partition != "" {
+				expected = minPerPartitionPerCat[partition][int(category)]
+			}
+		case "MAX":
+			expected = maxPerCat[int(category)]
+			if partition != "" {
+				expected = maxPerPartitionPerCat[partition][int(category)]
+			}
+		case "AVG", "AVERAGE":
+			expected = sumPerCat[int(category)] / countPerCat[int(category)]
+			if partition != "" {
+				expected = sumPerPartitionPerCat[partition][int(category)] / countPerPartitionPerCat[partition][int(category)]
+			}
+		default:
+			f(fmt.Sprintf("%s failed: <group-by aggregation %#v> expected %#v but received  %#v", testName, testCase.groupByField, expected, value))
+		}
+		if int(value) != expected {
+			f(fmt.Sprintf("%s failed: <group-by aggregation %#v> expected %#v but received  %#v", testName, testCase.groupByField, expected, value))
+		}
+	}
+}
+
+func _verifyGroupByRespQueryDocs(f funcTestFatal, testName string, testCase queryTestCase, partition, lowStr, highStr string, queryResult *RespQueryDocs) {
 	countPerCat, sumPerCat := make(map[int]int), make(map[int]int)
 	minPerCat, maxPerCat := make(map[int]int), make(map[int]int)
 	countPerPartitionPerCat, sumPerPartitionPerCat := make(map[string]map[int]int), make(map[string]map[int]int)
