@@ -27,7 +27,7 @@ type queryTestCase struct {
 	orderDirection string
 	orderType      reflect.Type
 
-	groupByField string
+	groupByAggr string
 
 	rewrittenSql bool
 }
@@ -75,7 +75,7 @@ func _verifyResultDriverSelect(f funcTestFatal, testName string, testCase queryT
 	if len(rows) == 0 {
 		f(fmt.Sprintf("%s failed: <num-document> is zero", testName))
 	}
-	if testCase.groupByField == "" {
+	if testCase.groupByAggr == "" {
 		if testCase.maxItemCount > 0 && expectedNumItems <= 0 && len(rows) > testCase.maxItemCount {
 			f(fmt.Sprintf("%s failed: <num-document> expected not exceeding %#v but received %#v", testName, testCase.maxItemCount, len(rows)))
 		}
@@ -84,7 +84,7 @@ func _verifyResultDriverSelect(f funcTestFatal, testName string, testCase queryT
 		}
 	}
 	for i, row := range rows {
-		if testCase.groupByField == "" && testCase.distinctQuery == 0 {
+		if testCase.groupByAggr == "" && testCase.distinctQuery == 0 {
 			var docInfo DocInfo = row
 			id, _ := strconv.Atoi(docInfo.Id())
 			if !reflect.DeepEqual(docInfo.RemoveSystemAttrs(), dataList[id]) {
@@ -101,7 +101,7 @@ func _verifyResultRespQueryDocs(f funcTestFatal, testName string, testCase query
 	if queryResult.Count == 0 || len(queryResult.Documents) == 0 {
 		f(fmt.Sprintf("%s failed: <num-document> is zero", testName))
 	}
-	if testCase.groupByField == "" {
+	if testCase.groupByAggr == "" {
 		if testCase.maxItemCount > 0 && expectedNumItems <= 0 && (len(queryResult.Documents) > testCase.maxItemCount || queryResult.Count > testCase.maxItemCount) {
 			f(fmt.Sprintf("%s failed: <num-document> expected not exceeding %#v but received (len: %#v / count: %#v)", testName, testCase.maxItemCount, len(queryResult.Documents), queryResult.Count))
 		}
@@ -113,7 +113,7 @@ func _verifyResultRespQueryDocs(f funcTestFatal, testName string, testCase query
 		if doc == nil {
 			f(fmt.Sprintf("%s failed: nil at %#v", testName, i))
 		}
-		if testCase.groupByField == "" && testCase.distinctQuery == 0 {
+		if testCase.groupByAggr == "" && testCase.distinctQuery == 0 {
 			docInfo := queryResult.Documents.AsDocInfoAt(i)
 			id, _ := strconv.Atoi(docInfo.Id())
 			if !reflect.DeepEqual(docInfo.RemoveSystemAttrs(), dataList[id]) {
@@ -262,7 +262,7 @@ func _verifyOrderByRespQueryDocs(f funcTestFatal, testName string, testCase quer
 }
 
 func _verifyGroupBy(f funcTestFatal, testName string, testCase queryTestCase, partition, lowStr, highStr string, queryResult interface{}) {
-	if testCase.groupByField == "" {
+	if testCase.groupByAggr == "" {
 		return
 	}
 	switch queryResult.(type) {
@@ -317,7 +317,7 @@ func _verifyGroupByDriverSelect(f funcTestFatal, testName string, testCase query
 		category, _ := reddo.ToInt(row["Category"])
 		value, _ := reddo.ToInt(row["Value"])
 		var expected int
-		switch strings.ToUpper(testCase.groupByField) {
+		switch strings.ToUpper(testCase.groupByAggr) {
 		case "COUNT":
 			expected = countPerCat[int(category)]
 			if partition != "" {
@@ -344,10 +344,10 @@ func _verifyGroupByDriverSelect(f funcTestFatal, testName string, testCase query
 				expected = sumPerPartitionPerCat[partition][int(category)] / countPerPartitionPerCat[partition][int(category)]
 			}
 		default:
-			f(fmt.Sprintf("%s failed: <group-by aggregation %#v> expected %#v but received  %#v", testName, testCase.groupByField, expected, value))
+			f(fmt.Sprintf("%s failed: <group-by aggregation %#v> expected %#v but received  %#v", testName, testCase.groupByAggr, expected, value))
 		}
 		if int(value) != expected {
-			f(fmt.Sprintf("%s failed: <group-by aggregation %#v> expected %#v but received  %#v", testName, testCase.groupByField, expected, value))
+			f(fmt.Sprintf("%s failed: <group-by aggregation %#v> expected %#v but received  %#v", testName, testCase.groupByAggr, expected, value))
 		}
 	}
 }
@@ -397,7 +397,7 @@ func _verifyGroupByRespQueryDocs(f funcTestFatal, testName string, testCase quer
 		category := doc.GetAttrAsTypeUnsafe("Category", reddo.TypeInt).(int64)
 		value := doc.GetAttrAsTypeUnsafe("Value", reddo.TypeInt).(int64)
 		var expected int
-		switch strings.ToUpper(testCase.groupByField) {
+		switch strings.ToUpper(testCase.groupByAggr) {
 		case "COUNT":
 			expected = countPerCat[int(category)]
 			if partition != "" {
@@ -424,10 +424,10 @@ func _verifyGroupByRespQueryDocs(f funcTestFatal, testName string, testCase quer
 				expected = sumPerPartitionPerCat[partition][int(category)] / countPerPartitionPerCat[partition][int(category)]
 			}
 		default:
-			f(fmt.Sprintf("%s failed: <group-by aggregation %#v> expected %#v but received  %#v", testName, testCase.groupByField, expected, value))
+			f(fmt.Sprintf("%s failed: <group-by aggregation %#v> expected %#v but received  %#v", testName, testCase.groupByAggr, expected, value))
 		}
 		if int(value) != expected {
-			f(fmt.Sprintf("%s failed: <group-by aggregation %#v> expected %#v but received  %#v", testName, testCase.groupByField, expected, value))
+			f(fmt.Sprintf("%s failed: <group-by aggregation %#v> expected %#v but received  %#v", testName, testCase.groupByAggr, expected, value))
 		}
 	}
 }
@@ -508,30 +508,30 @@ func _testRestClientQueryDocumentsPkValue(t *testing.T, testName string, client 
 
 		/* GROUP BY with ORDER BY is not supported! */
 
-		{name: "NoLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", groupByField: "count"},
-		{name: "MaxItemCount_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: 5, groupByField: "count"},
-		{name: "OffsetLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 3", expectedNumItems: 3, groupByField: "count"},
-		{name: "OffsetLimit_MaxItemCount_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", maxItemCount: 7, groupByField: "count"},
+		{name: "NoLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", groupByAggr: "count"},
+		{name: "MaxItemCount_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: 5, groupByAggr: "count"},
+		{name: "OffsetLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 3", expectedNumItems: 3, groupByAggr: "count"},
+		{name: "OffsetLimit_MaxItemCount_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", maxItemCount: 7, groupByAggr: "count"},
 
-		{name: "NoLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", groupByField: "sum"},
-		{name: "MaxItemCount_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: 5, groupByField: "sum"},
-		{name: "OffsetLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 3", expectedNumItems: 3, groupByField: "sum"},
-		{name: "OffsetLimit_MaxItemCount_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", maxItemCount: 7, groupByField: "sum"},
+		{name: "NoLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", groupByAggr: "sum"},
+		{name: "MaxItemCount_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: 5, groupByAggr: "sum"},
+		{name: "OffsetLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 3", expectedNumItems: 3, groupByAggr: "sum"},
+		{name: "OffsetLimit_MaxItemCount_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", maxItemCount: 7, groupByAggr: "sum"},
 
-		{name: "NoLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", groupByField: "min"},
-		{name: "MaxItemCount_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: 5, groupByField: "min"},
-		{name: "OffsetLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 3", expectedNumItems: 3, groupByField: "min"},
-		{name: "OffsetLimit_MaxItemCount_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", maxItemCount: 7, groupByField: "min"},
+		{name: "NoLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", groupByAggr: "min"},
+		{name: "MaxItemCount_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: 5, groupByAggr: "min"},
+		{name: "OffsetLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 3", expectedNumItems: 3, groupByAggr: "min"},
+		{name: "OffsetLimit_MaxItemCount_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", maxItemCount: 7, groupByAggr: "min"},
 
-		{name: "NoLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", groupByField: "max"},
-		{name: "MaxItemCount_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: 5, groupByField: "max"},
-		{name: "OffsetLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 3", expectedNumItems: 3, groupByField: "max"},
-		{name: "OffsetLimit_MaxItemCount_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", maxItemCount: 7, groupByField: "max"},
+		{name: "NoLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", groupByAggr: "max"},
+		{name: "MaxItemCount_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: 5, groupByAggr: "max"},
+		{name: "OffsetLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 3", expectedNumItems: 3, groupByAggr: "max"},
+		{name: "OffsetLimit_MaxItemCount_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", maxItemCount: 7, groupByAggr: "max"},
 
-		{name: "NoLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", groupByField: "average"},
-		{name: "MaxItemCount_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: 5, groupByField: "average"},
-		{name: "OffsetLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 3", expectedNumItems: 3, groupByField: "average"},
-		{name: "OffsetLimit_MaxItemCount_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", maxItemCount: 7, groupByField: "average"},
+		{name: "NoLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", groupByAggr: "average"},
+		{name: "MaxItemCount_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: 5, groupByAggr: "average"},
+		{name: "OffsetLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 3", expectedNumItems: 3, groupByAggr: "average"},
+		{name: "OffsetLimit_MaxItemCount_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", maxItemCount: 7, groupByAggr: "average"},
 	}
 	params := []interface{}{map[string]interface{}{"name": "@low", "value": lowStr}, map[string]interface{}{"name": "@high", "value": highStr}}
 	for _, testCase := range testCases {
@@ -659,7 +659,7 @@ func _testRestClientQueryDocumentsPkrangeid(t *testing.T, testName string, clien
 				if result.Count == 0 || len(result.Documents) == 0 {
 					t.Fatalf("%s failed: <num-document> is zero", testName+"/"+testCase.name+"/pkrangeid="+pkrange.Id)
 				}
-				if testCase.groupByField == "" {
+				if testCase.groupByAggr == "" {
 					if testCase.maxItemCount > 0 && (len(result.Documents) > testCase.maxItemCount || result.Count > testCase.maxItemCount) {
 						t.Fatalf("%s failed: <num-document> expected not exceeding %#v but received (len: %#v / count: %#v)", testName+"/"+testCase.name+"/pkrangeid="+pkrange.Id, testCase.maxItemCount, len(result.Documents), result.Count)
 					}
@@ -670,7 +670,7 @@ func _testRestClientQueryDocumentsPkrangeid(t *testing.T, testName string, clien
 				_verifyDistinct(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name+"/pkrangeid="+pkrange.Id, testCase, result)
 				_verifyOrderBy(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name+"/pkrangeid="+pkrange.Id, testCase, result)
 			}
-			if testCase.groupByField == "" && testCase.maxItemCount <= 0 && totalItems != totalExpected {
+			if testCase.groupByAggr == "" && testCase.maxItemCount <= 0 && totalItems != totalExpected {
 				t.Fatalf("%s failed: <total-num-document> expected %#v but received  %#v", testName+"/"+testCase.name, totalExpected, totalItems)
 			}
 		})
@@ -752,16 +752,16 @@ func _testRestClientQueryDocumentsCrossPartitions(t *testing.T, testName string,
 
 		/* GROUP BY with ORDER BY is not supported! */
 
-		{name: "NoLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByField: "count"},
-		{name: "OffsetLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByField: "count"},
-		{name: "NoLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByField: "sum"},
-		{name: "OffsetLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByField: "sum"},
-		{name: "NoLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByField: "min"},
-		{name: "OffsetLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByField: "min"},
-		{name: "NoLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByField: "max"},
-		{name: "OffsetLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByField: "max"},
-		{name: "NoLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByField: "average"},
-		{name: "OffsetLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByField: "average"},
+		{name: "NoLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByAggr: "count"},
+		{name: "OffsetLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByAggr: "count"},
+		{name: "NoLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByAggr: "sum"},
+		{name: "OffsetLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByAggr: "sum"},
+		{name: "NoLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByAggr: "min"},
+		{name: "OffsetLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByAggr: "min"},
+		{name: "NoLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByAggr: "max"},
+		{name: "OffsetLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByAggr: "max"},
+		{name: "NoLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByAggr: "average"},
+		{name: "OffsetLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByAggr: "average"},
 
 		/* GROUP BY combined with MaxItemCount would not work! */
 	}
@@ -855,30 +855,30 @@ func _testRestClientQueryDocumentsCrossPartition(t *testing.T, testName string, 
 
 		/* GROUP BY with ORDER BY is not supported! */
 
-		{name: "NoLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByField: "count"},
-		{name: "MaxItemCount_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, maxItemCount: numCategories/2 + 1, groupByField: "count"},
-		{name: "OffsetLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByField: "count"},
-		{name: "OffsetLimit_MaxItemCount_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", expectedNumItems: numCategories, maxItemCount: 3, groupByField: "count"},
+		{name: "NoLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByAggr: "count"},
+		{name: "MaxItemCount_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, maxItemCount: numCategories/2 + 1, groupByAggr: "count"},
+		{name: "OffsetLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByAggr: "count"},
+		{name: "OffsetLimit_MaxItemCount_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", expectedNumItems: numCategories, maxItemCount: 3, groupByAggr: "count"},
 
-		{name: "NoLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByField: "sum"},
-		{name: "MaxItemCount_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, maxItemCount: numCategories/2 + 1, groupByField: "sum"},
-		{name: "OffsetLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByField: "sum"},
-		{name: "OffsetLimit_MaxItemCount_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", expectedNumItems: numCategories, maxItemCount: 3, groupByField: "sum"},
+		{name: "NoLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByAggr: "sum"},
+		{name: "MaxItemCount_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, maxItemCount: numCategories/2 + 1, groupByAggr: "sum"},
+		{name: "OffsetLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByAggr: "sum"},
+		{name: "OffsetLimit_MaxItemCount_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", expectedNumItems: numCategories, maxItemCount: 3, groupByAggr: "sum"},
 
-		{name: "NoLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByField: "min"},
-		{name: "MaxItemCount_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, maxItemCount: numCategories/2 + 1, groupByField: "min"},
-		{name: "OffsetLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByField: "min"},
-		{name: "OffsetLimit_MaxItemCount_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", expectedNumItems: numCategories, maxItemCount: 3, groupByField: "min"},
+		{name: "NoLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByAggr: "min"},
+		{name: "MaxItemCount_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, maxItemCount: numCategories/2 + 1, groupByAggr: "min"},
+		{name: "OffsetLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByAggr: "min"},
+		{name: "OffsetLimit_MaxItemCount_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", expectedNumItems: numCategories, maxItemCount: 3, groupByAggr: "min"},
 
-		{name: "NoLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByField: "max"},
-		{name: "MaxItemCount_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, maxItemCount: numCategories/2 + 1, groupByField: "max"},
-		{name: "OffsetLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByField: "max"},
-		{name: "OffsetLimit_MaxItemCount_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", expectedNumItems: numCategories, maxItemCount: 3, groupByField: "max"},
+		{name: "NoLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByAggr: "max"},
+		{name: "MaxItemCount_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, maxItemCount: numCategories/2 + 1, groupByAggr: "max"},
+		{name: "OffsetLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByAggr: "max"},
+		{name: "OffsetLimit_MaxItemCount_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", expectedNumItems: numCategories, maxItemCount: 3, groupByAggr: "max"},
 
-		{name: "NoLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByField: "average"},
-		{name: "MaxItemCount_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, maxItemCount: numCategories/2 + 1, groupByField: "average"},
-		{name: "OffsetLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByField: "average"},
-		{name: "OffsetLimit_MaxItemCount_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", expectedNumItems: numCategories, maxItemCount: 3, groupByField: "avg"},
+		{name: "NoLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, groupByAggr: "average"},
+		{name: "MaxItemCount_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", expectedNumItems: numCategories, maxItemCount: numCategories/2 + 1, groupByAggr: "average"},
+		{name: "OffsetLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 3 LIMIT 5", expectedNumItems: 5, groupByAggr: "average"},
+		{name: "OffsetLimit_MaxItemCount_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category OFFSET 1 LIMIT 10", expectedNumItems: numCategories, maxItemCount: 3, groupByAggr: "avg"},
 	}
 	params := []interface{}{map[string]interface{}{"name": "@low", "value": lowStr}, map[string]interface{}{"name": "@high", "value": highStr}}
 	for _, testCase := range testCases {
@@ -967,16 +967,16 @@ func _testRestClientQueryDocumentsContinuation(t *testing.T, testName string, cl
 		{name: "*DistinctDoc_OrderAsc", query: "SELECT DISTINCT c.category FROM c ORDER BY c.category", maxItemCount: 3, distinctQuery: -1, expectedNumItems: numCategories},
 
 		/* GROUP BY combined with MaxItemCount would not work */
-		{name: "*GroupByCategory_Count", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: numCategories/3 + 1, groupByField: "count"},
-		{name: "GroupByUser_Count", query: "SELECT c.username AS 'Username', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.username", maxItemCount: numLogicalPartitions/3 + 1, groupByField: "count"},
-		{name: "*GroupByCategory_Sum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: numCategories/3 + 1, groupByField: "sum"},
-		{name: "GroupByUser_Sum", query: "SELECT c.username AS 'Username', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.username", maxItemCount: numLogicalPartitions/3 + 1, groupByField: "sum"},
-		{name: "*GroupByCategory_Min", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: numCategories/3 + 1, groupByField: "min"},
-		{name: "GroupByUser_Min", query: "SELECT c.username AS 'Username', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.username", maxItemCount: numLogicalPartitions/3 + 1, groupByField: "min"},
-		{name: "*GroupByCategory_Max", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: numCategories/3 + 1, groupByField: "max"},
-		{name: "GroupByUser_Max", query: "SELECT c.username AS 'Username', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.username", maxItemCount: numLogicalPartitions/3 + 1, groupByField: "max"},
-		{name: "*GroupByCategory_Avg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: numCategories/3 + 1, groupByField: "average"},
-		{name: "GroupByUser_Avg", query: "SELECT c.username AS 'Username', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.username", maxItemCount: numLogicalPartitions/3 + 1, groupByField: "average"},
+		{name: "*GroupByCategory_Count", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: numCategories/3 + 1, groupByAggr: "count"},
+		{name: "GroupByUser_Count", query: "SELECT c.username AS 'Username', count(1) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.username", maxItemCount: numLogicalPartitions/3 + 1, groupByAggr: "count"},
+		{name: "*GroupByCategory_Sum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: numCategories/3 + 1, groupByAggr: "sum"},
+		{name: "GroupByUser_Sum", query: "SELECT c.username AS 'Username', sum(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.username", maxItemCount: numLogicalPartitions/3 + 1, groupByAggr: "sum"},
+		{name: "*GroupByCategory_Min", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: numCategories/3 + 1, groupByAggr: "min"},
+		{name: "GroupByUser_Min", query: "SELECT c.username AS 'Username', min(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.username", maxItemCount: numLogicalPartitions/3 + 1, groupByAggr: "min"},
+		{name: "*GroupByCategory_Max", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: numCategories/3 + 1, groupByAggr: "max"},
+		{name: "GroupByUser_Max", query: "SELECT c.username AS 'Username', max(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.username", maxItemCount: numLogicalPartitions/3 + 1, groupByAggr: "max"},
+		{name: "*GroupByCategory_Avg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.category", maxItemCount: numCategories/3 + 1, groupByAggr: "average"},
+		{name: "GroupByUser_Avg", query: "SELECT c.username AS 'Username', avg(c.grade) AS 'Value' FROM c WHERE @low<=c.id AND c.id<@high GROUP BY c.username", maxItemCount: numLogicalPartitions/3 + 1, groupByAggr: "average"},
 	}
 	params := []interface{}{map[string]interface{}{"name": "@low", "value": lowStr}, map[string]interface{}{"name": "@high", "value": highStr}}
 	for _, testCase := range testCases {

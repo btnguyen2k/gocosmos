@@ -1,5 +1,13 @@
 # gocosmos release notes
 
+## 2023-03-xx - v0.2.0
+
+- `RestClient`:
+  - `QueryDocuments`: enhancements & bug fixed with cross-partition queries.
+  - New function `QueryDocumentsCrossPartition(QueryReq) *RespQueryDocs` do address limitations of `QueryDocuments`.
+- `database/sql` driver:
+  - Update `StmtSelect.Query` to better support cross-partition queries.
+
 ## 2023-01-04 - v0.1.9
 
 - Update `RestClient`

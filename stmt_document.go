@@ -400,32 +400,34 @@ func (s *StmtSelect) Query(args []driver.Value) (driver.Rows, error) {
 		CrossPartitionEnabled: s.isCrossPartition,
 	}
 
-	var result *RespQueryDocs
-	for {
-		tempResult := s.conn.restClient.QueryDocuments(query)
-		if result == nil {
-			result = tempResult
-		} else {
-			saveRequestCharge := result.RequestCharge
-			result.RestReponse = tempResult.RestReponse
-			result.ContinuationToken = tempResult.ContinuationToken
-			result.RequestCharge += saveRequestCharge
-			if result.RewrittenDocuments == nil {
-				result.Documents = result.Documents.Merge(tempResult.QueryPlan, tempResult.Documents)
-			} else {
-				result.RewrittenDocuments = result.RewrittenDocuments.Merge(tempResult.QueryPlan, tempResult.RewrittenDocuments)
-				result.Documents = result.RewrittenDocuments.Flatten(tempResult.QueryPlan)
-			}
-			result.Count = len(result.Documents)
-		}
-		if tempResult.Error() != nil || tempResult.ContinuationToken == "" {
-			break
-		}
-		if tempResult.QueryPlan.QueryInfo.Limit > 0 && result.Count >= tempResult.QueryPlan.QueryInfo.Limit {
-			break
-		}
-		query.ContinuationToken = tempResult.ContinuationToken
-	}
+	result := s.conn.restClient.QueryDocumentsCrossPartition(query)
+
+	// var result *RespQueryDocs
+	// for {
+	// 	tempResult := s.conn.restClient.QueryDocuments(query)
+	// 	if result == nil {
+	// 		result = tempResult
+	// 	} else {
+	// 		saveRequestCharge := result.RequestCharge
+	// 		result.RestReponse = tempResult.RestReponse
+	// 		result.ContinuationToken = tempResult.ContinuationToken
+	// 		result.RequestCharge += saveRequestCharge
+	// 		if result.RewrittenDocuments == nil {
+	// 			result.Documents = result.Documents.Merge(tempResult.QueryPlan, tempResult.Documents)
+	// 		} else {
+	// 			result.RewrittenDocuments = result.RewrittenDocuments.Merge(tempResult.QueryPlan, tempResult.RewrittenDocuments)
+	// 			result.Documents = result.RewrittenDocuments.Flatten(tempResult.QueryPlan)
+	// 		}
+	// 		result.Count = len(result.Documents)
+	// 	}
+	// 	if tempResult.Error() != nil || tempResult.ContinuationToken == "" {
+	// 		break
+	// 	}
+	// 	if tempResult.QueryPlan.QueryInfo.Limit > 0 && result.Count >= tempResult.QueryPlan.QueryInfo.Limit {
+	// 		break
+	// 	}
+	// 	query.ContinuationToken = tempResult.ContinuationToken
+	// }
 
 	err := result.Error()
 	var rows driver.Rows

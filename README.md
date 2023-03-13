@@ -129,6 +129,16 @@ value is `AutoId=true`.
 
 _This settings is available since [v0.1.2](RELEASE-NOTES.md)._
 
+### Known issues
+
+**`GROUP BY` combined with `ORDER BY` is not supported**
+
+Azure Cosmos DB does not support `GROUP BY` combined with `ORDER BY` yet. You will receive the following error message:
+
+> 'ORDER BY' is not supported in presence of GROUP BY.
+
+
+
 ## Features
 
 The REST client supports:

@@ -75,16 +75,16 @@ func _testSelectPkValue(t *testing.T, testName string, db *sql.DB, collname stri
 		{name: "OffsetLimit_DistinctDoc_OrderDesc", query: "SELECT DISTINCT c.category FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 ORDER BY c.category DESC OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", distinctQuery: -1, orderType: reddo.TypeInt, orderField: "category", orderDirection: "desc", expectedNumItems: 3},
 
 		/* GROUP BY with ORDER BY is not supported! */
-		{name: "NoLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByField: "count"},
-		{name: "OffsetLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByField: "count"},
-		{name: "NoLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByField: "sum"},
-		{name: "OffsetLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByField: "sum"},
-		{name: "NoLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByField: "min"},
-		{name: "OffsetLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByField: "min"},
-		{name: "NoLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByField: "max"},
-		{name: "OffsetLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByField: "max"},
-		{name: "NoLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByField: "average"},
-		{name: "OffsetLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByField: "average"},
+		{name: "NoLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByAggr: "count"},
+		{name: "OffsetLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByAggr: "count"},
+		{name: "NoLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByAggr: "sum"},
+		{name: "OffsetLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByAggr: "sum"},
+		{name: "NoLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByAggr: "min"},
+		{name: "OffsetLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByAggr: "min"},
+		{name: "NoLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByAggr: "max"},
+		{name: "OffsetLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByAggr: "max"},
+		{name: "NoLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByAggr: "average"},
+		{name: "OffsetLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByAggr: "average"},
 	}
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -172,16 +172,16 @@ func _testSelectCrossPartition(t *testing.T, testName string, db *sql.DB, collna
 
 		/* GROUP BY with ORDER BY is not supported! */
 
-		{name: "NoLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByField: "count"},
-		{name: "OffsetLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByField: "count"},
-		{name: "NoLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByField: "sum"},
-		{name: "OffsetLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByField: "sum"},
-		{name: "NoLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByField: "min"},
-		{name: "OffsetLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByField: "min"},
-		{name: "NoLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByField: "max"},
-		{name: "OffsetLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByField: "max"},
-		{name: "NoLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByField: "average"},
-		{name: "OffsetLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByField: "average"},
+		{name: "NoLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByAggr: "count"},
+		{name: "OffsetLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByAggr: "count"},
+		{name: "NoLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByAggr: "sum"},
+		{name: "OffsetLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByAggr: "sum"},
+		{name: "NoLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByAggr: "min"},
+		{name: "OffsetLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByAggr: "min"},
+		{name: "NoLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByAggr: "max"},
+		{name: "OffsetLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByAggr: "max"},
+		{name: "NoLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByAggr: "average"},
+		{name: "OffsetLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByAggr: "average"},
 	}
 	params := []interface{}{lowStr, highStr}
 	for _, testCase := range testCases {
@@ -235,6 +235,95 @@ func TestSelect_CrossPartition_LargeRU(t *testing.T) {
 	}
 	db := _openDefaultDb(t, testName, dbname)
 	_testSelectCrossPartition(t, testName, db, collname)
+}
+
+/*----------------------------------------------------------------------*/
+
+func _testSelectPaging(t *testing.T, testName string, db *sql.DB, collname string, pkranges *RespGetPkranges) {
+	low, high := 123, 987
+	lowStr, highStr := fmt.Sprintf("%05d", low), fmt.Sprintf("%05d", high)
+	var testCases = []queryTestCase{
+		{name: "Simple_OrderAsc", query: "SELECT * FROM c WHERE $1<=c.id AND c.id<@2 ORDER BY c.id OFFSET :3 LIMIT 23 WITH collection=%s WITH cross_partition=true", maxItemCount: 23, orderField: "id", orderType: reddo.TypeString, orderDirection: "asc"},
+		{name: "Simple_OrderDesc", query: "SELECT * FROM c WHERE $1<=c.id AND c.id<@2 ORDER BY c.id DESC OFFSET :3 LIMIT 29 WITH collection=%s WITH cross_partition=true", maxItemCount: 29, orderField: "id", orderType: reddo.TypeString, orderDirection: "desc"},
+
+		{name: "DistinctDoc_OrderAsc", query: "SELECT DISTINCT c.username FROM c WHERE $1<=c.id AND c.id<@2 ORDER BY c.username OFFSET :3 LIMIT 3 WITH collection=%s WITH cross_partition=true", maxItemCount: 3, orderField: "username", orderType: reddo.TypeString, orderDirection: "asc", expectedNumItems: numLogicalPartitions, distinctQuery: -1, distinctField: "username"},
+		{name: "DistinctValue_OrderDesc", query: "SELECT DISTINCT VALUE c.category FROM c WHERE $1<=c.id AND c.id<@2 ORDER BY c.category DESC OFFSET :3 LIMIT 3 WITH collection=%s WITH cross_partition=true", maxItemCount: 3, orderField: "$1", orderType: reddo.TypeInt, orderDirection: "desc", expectedNumItems: numCategories, distinctQuery: 1, distinctField: "$1"},
+
+		{name: "GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category OFFSET :3 LIMIT 3 WITH collection=%s WITH cross_partition=true", maxItemCount: 3, groupByAggr: "count", expectedNumItems: numCategories},
+		{name: "GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category OFFSET :3 LIMIT 3 WITH collection=%s WITH cross_partition=true", maxItemCount: 3, groupByAggr: "sum", expectedNumItems: numCategories},
+		{name: "GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category OFFSET :3 LIMIT 3 WITH collection=%s WITH cross_partition=true", maxItemCount: 3, groupByAggr: "min", expectedNumItems: numCategories},
+		{name: "GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category OFFSET :3 LIMIT 3 WITH collection=%s WITH cross_partition=true", maxItemCount: 3, groupByAggr: "max", expectedNumItems: numCategories},
+		{name: "GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 GROUP BY c.category OFFSET :3 LIMIT 3 WITH collection=%s WITH cross_partition=true", maxItemCount: 3, groupByAggr: "average", expectedNumItems: numCategories},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			expectedNumItems := high - low
+			if testCase.expectedNumItems > 0 {
+				expectedNumItems = testCase.expectedNumItems
+			}
+			sql := fmt.Sprintf(testCase.query, collname)
+			offset := 0
+			finalRows := make([]map[string]interface{}, 0)
+			for {
+				params := []interface{}{lowStr, highStr, offset}
+				dbRows, err := db.Query(sql, params...)
+				if err != nil {
+					t.Fatalf("%s failed: %s", testName+"/"+testCase.name, err)
+				}
+				rows, err := _fetchAllRows(dbRows)
+				if err != nil {
+					t.Fatalf("%s failed: %s", testName+"/"+testCase.name, err)
+				}
+				if offset == 0 || len(rows) != 0 {
+					_verifyResult(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name, testCase, 0, rows)
+					_verifyOrderBy(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name, testCase, rows)
+					_verifyDistinct(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name, testCase, rows)
+				}
+				if len(rows) == 0 {
+					break
+				}
+				finalRows = append(finalRows, rows...)
+				offset += len(rows)
+			}
+			testCase.maxItemCount = 0
+			_verifyResult(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name, testCase, expectedNumItems, finalRows)
+			_verifyOrderBy(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name, testCase, finalRows)
+			_verifyDistinct(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name, testCase, finalRows)
+			_verifyGroupBy(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name, testCase, "", lowStr, highStr, finalRows)
+		})
+	}
+}
+
+func TestSelect_Paging_SmallRU(t *testing.T) {
+	testName := "TestSelect_Paging_SmallRU"
+	dbname := testDb
+	collname := testTable
+	client := _newRestClient(t, testName)
+	_initDataSmallRU(t, testName, client, dbname, collname, 1000)
+	pkranges := client.GetPkranges(dbname, collname)
+	if pkranges.Error() != nil {
+		t.Fatalf("%s failed: %s", testName+"/GetPkranges", pkranges.Error())
+	} else if pkranges.Count != 1 {
+		t.Fatalf("%s failed: <num-partition> expected to be %#v but received %#v", testName+"/GetPkranges", 1, pkranges.Count)
+	}
+	db := _openDefaultDb(t, testName, dbname)
+	_testSelectPaging(t, testName, db, collname, pkranges)
+}
+
+func TestSelect_Paging_LargeRU(t *testing.T) {
+	testName := "TestSelect_Paging_LargeRU"
+	dbname := testDb
+	collname := testTable
+	client := _newRestClient(t, testName)
+	_initDataLargeRU(t, testName, client, dbname, collname, 1000)
+	pkranges := client.GetPkranges(dbname, collname)
+	if pkranges.Error() != nil {
+		t.Fatalf("%s failed: %s", testName+"/GetPkranges", pkranges.Error())
+	} else if pkranges.Count < 2 {
+		t.Fatalf("%s failed: <num-partition> expected to be larger than %#v but received %#v", testName+"/GetPkranges", 1, pkranges.Count)
+	}
+	db := _openDefaultDb(t, testName, dbname)
+	_testSelectPaging(t, testName, db, collname, pkranges)
 }
 
 /*----------------------------------------------------------------------*/

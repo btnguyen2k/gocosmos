@@ -707,11 +707,16 @@ func (c *RestClient) finalPrepareResult(result *RespQueryDocs, queryPlan *RespQu
 		}
 		if limit > 0 {
 			result.Documents = result.Documents[offset : offset+limit]
-			result.Count = len(result.Documents)
 			if result.RewrittenDocuments != nil {
 				result.RewrittenDocuments = result.RewrittenDocuments[offset : offset+limit]
 			}
+		} else {
+			result.Documents = result.Documents[0:0]
+			if result.RewrittenDocuments != nil {
+				result.RewrittenDocuments = result.RewrittenDocuments[0:0]
+			}
 		}
+		result.Count = len(result.Documents)
 	}
 	return result
 }
@@ -835,27 +840,6 @@ func (c *RestClient) QueryDocumentsCrossPartition(query QueryReq) *RespQueryDocs
 		query.ContinuationToken = ""
 	}
 	return c.finalPrepareResult(result, queryPlan, savedContinuationToken)
-	// if queryRewritten {
-	// 	result.Documents = result.RewrittenDocuments.Flatten(queryPlan)
-	// 	result.Count = len(result.Documents)
-	// }
-	// if queryPlan.QueryInfo.Limit > 0 {
-	// 	offset, limit := queryPlan.QueryInfo.Offset, queryPlan.QueryInfo.Limit
-	// 	if queryRewritten {
-	// 		offset = 0
-	// 	}
-	// 	if len(result.Documents)-offset < limit {
-	// 		limit = len(result.Documents) - offset
-	// 	}
-	// 	if limit > 0 {
-	// 		result.Documents = result.Documents[offset : offset+limit]
-	// 		result.Count = len(result.Documents)
-	// 		if result.RewrittenDocuments != nil {
-	// 			result.RewrittenDocuments = result.RewrittenDocuments[offset : offset+limit]
-	// 		}
-	// 	}
-	// }
-	// return result
 }
 
 // QueryPlan invokes Cosmos DB API to generate query plan.
