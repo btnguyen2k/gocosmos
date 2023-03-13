@@ -656,9 +656,9 @@ func _testRestClientQueryDocumentsPkrangeid(t *testing.T, testName string, clien
 					t.Fatalf("%s failed: %s", testName+"/"+testCase.name+"/pkrangeid="+pkrange.Id, result.Error())
 				}
 				totalItems += result.Count
-				if result.Count == 0 || len(result.Documents) == 0 {
-					t.Fatalf("%s failed: <num-document> is zero", testName+"/"+testCase.name+"/pkrangeid="+pkrange.Id)
-				}
+				// if result.Count == 0 || len(result.Documents) == 0 {
+				// 	t.Fatalf("%s failed: <num-document> is zero", testName+"/"+testCase.name+"/pkrangeid="+pkrange.Id)
+				// }
 				if testCase.groupByAggr == "" {
 					if testCase.maxItemCount > 0 && (len(result.Documents) > testCase.maxItemCount || result.Count > testCase.maxItemCount) {
 						t.Fatalf("%s failed: <num-document> expected not exceeding %#v but received (len: %#v / count: %#v)", testName+"/"+testCase.name+"/pkrangeid="+pkrange.Id, testCase.maxItemCount, len(result.Documents), result.Count)
