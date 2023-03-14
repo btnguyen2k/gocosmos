@@ -1,6 +1,6 @@
 # gocosmos release notes
 
-## 2023-03-xx - v0.2.0
+## 2023-03-14 - v0.2.0
 
 - `RestClient`:
   - `QueryDocuments`: enhancements & bug fixed with cross-partition queries.
