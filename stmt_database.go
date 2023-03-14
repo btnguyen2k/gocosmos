@@ -11,7 +11,8 @@ import (
 // StmtCreateDatabase implements "CREATE DATABASE" operation.
 //
 // Syntax:
-//     CREATE DATABASE [IF NOT EXISTS] <db-name> [WITH RU|MAXRU=ru]
+//
+//	CREATE DATABASE [IF NOT EXISTS] <db-name> [WITH RU|MAXRU=ru]
 //
 // - ru: an integer specifying CosmosDB's database throughput expressed in RU/s. Supply either RU or MAXRU, not both!
 //
@@ -103,7 +104,8 @@ func (r *ResultCreateDatabase) RowsAffected() (int64, error) {
 // StmtAlterDatabase implements "ALTER DATABASE" operation.
 //
 // Syntax:
-//     ALTER DATABASE <db-name> WITH RU|MAXRU=<ru>
+//
+//	ALTER DATABASE <db-name> WITH RU|MAXRU=<ru>
 //
 // - ru: an integer specifying CosmosDB's database throughput expressed in RU/s. Supply either RU or MAXRU, not both!
 //
@@ -200,7 +202,8 @@ func (r *ResultAlterDatabase) RowsAffected() (int64, error) {
 // StmtDropDatabase implements "DROP DATABASE" operation.
 //
 // Syntax:
-//     DROP DATABASE [IF EXISTS] <db-name>
+//
+//	DROP DATABASE [IF EXISTS] <db-name>
 //
 // - If "IF EXISTS" is specified, Exec will silently swallow the error "404 Not Found".
 type StmtDropDatabase struct {
@@ -242,7 +245,8 @@ func (s *StmtDropDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 // StmtListDatabases implements "LIST DATABASES" operation.
 //
 // Syntax:
-//     LIST DATABASES|DATABASE
+//
+//	LIST DATABASES|DATABASE
 type StmtListDatabases struct {
 	*Stmt
 }

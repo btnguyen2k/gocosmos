@@ -12,7 +12,8 @@ import (
 // StmtCreateCollection implements "CREATE COLLECTION" operation.
 //
 // Syntax:
-//     CREATE COLLECTION|TABLE [IF NOT EXISTS] [<db-name>.]<collection-name> <WITH [LARGE]PK=partitionKey> [WITH RU|MAXRU=ru] [WITH UK=/path1:/path2,/path3;/path4]
+//
+//	CREATE COLLECTION|TABLE [IF NOT EXISTS] [<db-name>.]<collection-name> <WITH [LARGE]PK=partitionKey> [WITH RU|MAXRU=ru] [WITH UK=/path1:/path2,/path3;/path4]
 //
 // - ru: an integer specifying CosmosDB's collection throughput expressed in RU/s. Supply either RU or MAXRU, not both!
 //
@@ -162,7 +163,8 @@ func (r *ResultCreateCollection) RowsAffected() (int64, error) {
 // StmtAlterCollection implements "ALTER COLLECTION" operation.
 //
 // Syntax:
-//     ALTER COLLECTION|TABLE [<db-name>.]<collection-name> WITH RU|MAXRU=<ru>
+//
+//	ALTER COLLECTION|TABLE [<db-name>.]<collection-name> WITH RU|MAXRU=<ru>
 //
 // - ru: an integer specifying CosmosDB's collection throughput expressed in RU/s. Supply either RU or MAXRU, not both!
 //
@@ -265,7 +267,8 @@ func (r *ResultAlterCollection) RowsAffected() (int64, error) {
 // StmtDropCollection implements "DROP COLLECTION" operation.
 //
 // Syntax:
-//     DROP COLLECTION|TABLE [IF EXISTS] [<db-name>.]<collection-name>
+//
+//	DROP COLLECTION|TABLE [IF EXISTS] [<db-name>.]<collection-name>
 //
 // If "IF EXISTS" is specified, Exec will silently swallow the error "404 Not Found".
 type StmtDropCollection struct {
@@ -311,7 +314,8 @@ func (s *StmtDropCollection) Exec(_ []driver.Value) (driver.Result, error) {
 // StmtListCollections implements "LIST DATABASES" operation.
 //
 // Syntax:
-//     LIST COLLECTIONS|TABLES|COLLECTION|TABLE [FROM <db-name>]
+//
+//	LIST COLLECTIONS|TABLES|COLLECTION|TABLE [FROM <db-name>]
 type StmtListCollections struct {
 	*Stmt
 	dbName string
