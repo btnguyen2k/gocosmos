@@ -7,8 +7,8 @@ on:
     branches: [ main ]
 
 jobs:
-  test:
-    name: Build and Test
+  testDriver:
+    name: Test driver
     runs-on: windows-latest
     steps:
       - name: Set up Go env
@@ -17,24 +17,122 @@ jobs:
           go-version: ^1.13
       - name: Check out code into the Go module directory
         uses: actions/checkout@v2
-      # - name: Start Azure CosmosDB simulator
-      #   run: docker run -d --name azure-cosmosdb-emulator -p 8081:8081 -p 8900:8900 -p 8901:8901 -p 8902:8902 -p 10250:10250 -p 10251:10251 -p 10252:10252 -p 10253:10253 -p 10254:10254 -p 10255:10255 -p 10256:10256 -p 10350:10350 mcr.microsoft.com/cosmosdb/windows/azure-cosmos-emulator
-      # - name: Install and Start Azure CosmosDB Simulator
-      #   run: |
-      #     choco install azure-cosmosdb-emulator
-      #     & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe"
-      #     Start-Sleep -s 90
-      #     try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
-      #     netstat -nt
       - name: Test
         run: |
           choco install azure-cosmosdb-emulator
           & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
-          Start-Sleep -s 120
+          Start-Sleep -s 60
           try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
           netstat -nt
           $env:COSMOSDB_DRIVER='gocosmos'
           $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=='
-          go test -cover -coverprofile="coverage.txt" -v -count 1 .
+          go test -cover -coverprofile="coverage_driver.txt" -v -count 1 -p 1 -run "Test_" .
       - name: Codecov
         uses: codecov/codecov-action@v3
+        with:
+          flags: driver
+          name: driver
+
+  testDriverSelect:
+    name: Test driver SELECT query
+    runs-on: windows-latest
+    steps:
+      - name: Set up Go env
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.13
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+      - name: Test
+        run: |
+          choco install azure-cosmosdb-emulator
+          & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
+          Start-Sleep -s 60
+          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
+          netstat -nt
+          $env:COSMOSDB_DRIVER='gocosmos'
+          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=='
+          go test -cover -coverprofile="coverage_driver_select.txt" -v -count 1 -p 1 -run "TestSelect_" .
+      - name: Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          flags: driver_select
+          name: driver_select
+
+  testRestClientNonQuery:
+    name: Test RestClient non-query
+    runs-on: windows-latest
+    steps:
+      - name: Set up Go env
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.13
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+      - name: Test
+        run: |
+          choco install azure-cosmosdb-emulator
+          & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
+          Start-Sleep -s 60
+          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
+          netstat -nt
+          $env:COSMOSDB_DRIVER='gocosmos'
+          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=='
+          go test -cover -coverprofile="coverage_restclient_nonquery.txt" -v -count 1 -p 1 -run "TestRestClient_[^Q]" .
+      - name: Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          flags: restclient_nonquery
+          name: restclient_nonquery
+
+  testRestClientQuery:
+    name: Test RestClient query
+    runs-on: windows-latest
+    steps:
+      - name: Set up Go env
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.13
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+      - name: Test
+        run: |
+          choco install azure-cosmosdb-emulator
+          & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
+          Start-Sleep -s 60
+          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
+          netstat -nt
+          $env:COSMOSDB_DRIVER='gocosmos'
+          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=='
+          go test -cover -coverprofile="coverage_restclient_query.txt" -v -count 1 -p 1 -run "TestRestClient_QueryDocuments" .
+      - name: Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          flags: restclient_query
+          name: restclient_query
+
+  testOther:
+    name: Test other
+    runs-on: windows-latest
+    steps:
+      - name: Set up Go env
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.13
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+      - name: Test
+        run: |
+          choco install azure-cosmosdb-emulator
+          & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
+          Start-Sleep -s 60
+          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
+          netstat -nt
+          $env:COSMOSDB_DRIVER='gocosmos'
+          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=='
+          go test -cover -coverprofile="coverage_other.txt" -v -count 1 -p 1 -run "TestNew" .
+      - name: Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          flags: other
+          name: other

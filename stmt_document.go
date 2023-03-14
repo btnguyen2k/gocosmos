@@ -399,34 +399,39 @@ func (s *StmtSelect) Query(args []driver.Value) (driver.Rows, error) {
 		Params:                params,
 		CrossPartitionEnabled: s.isCrossPartition,
 	}
-	documents := make([]DocInfo, 0)
-	var restResult *RespQueryDocs
-	for restResult = s.conn.restClient.QueryDocuments(query); restResult.Error() == nil; restResult = s.conn.restClient.QueryDocuments(query) {
-		// FIXME restResult.Documents is no longer slice of DocInfo
-		// documents = append(documents, restResult.Documents...)
-		documents = append(documents, restResult.Documents.AsDocInfoSlice()...)
-		if restResult.ContinuationToken == "" {
-			break
-		}
-		query.ContinuationToken = restResult.ContinuationToken
-	}
-	err := restResult.Error()
+
+	result := s.conn.restClient.QueryDocumentsCrossPartition(query)
+	err := result.Error()
 	var rows driver.Rows
 	if err == nil {
-		rows = &ResultSelect{count: len(documents), documents: documents, cursorCount: 0, columnList: make([]string, 0)}
-		if len(documents) > 0 {
-			doc := documents[0]
-			columnList := make([]string, len(doc))
-			i := 0
-			for colName := range doc {
-				columnList[i] = colName
-				i++
+		documents := result.Documents.AsDocInfoSlice()
+		if documents == nil {
+			documents = make([]DocInfo, len(result.Documents))
+			for i, doc := range result.Documents {
+				var docInfo DocInfo = map[string]interface{}{"$1": doc}
+				documents[i] = docInfo
 			}
-			sort.Strings(columnList)
-			rows.(*ResultSelect).columnList = columnList
 		}
+		for i, doc := range documents {
+			documents[i] = doc.RemoveSystemAttrs()
+		}
+		rows = &ResultSelect{count: len(documents), documents: documents, cursorCount: 0, columnList: make([]string, 0)}
+
+		// build column list
+		columnList := make([]string, 0)
+		columnMap := make(map[string]bool)
+		for _, doc := range documents {
+			for colName := range doc {
+				if _, ok := columnMap[colName]; !ok {
+					columnMap[colName] = true
+					columnList = append(columnList, colName)
+				}
+			}
+		}
+		sort.Strings(columnList)
+		rows.(*ResultSelect).columnList = columnList
 	}
-	switch restResult.StatusCode {
+	switch result.StatusCode {
 	case 403:
 		err = ErrForbidden
 	case 404:

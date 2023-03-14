@@ -46,6 +46,42 @@ func main() {
 - `AutoId`: (optional, available since [v0.1.2](RELEASE-NOTES.md)) see [auto id](#auto-id) session.
 - `InsecureSkipVerify`: (optional, available since [v0.1.4](RELEASE-NOTES.md)) if `true`, disable CA verification for https endpoint (useful to run against test/dev env with local/docker Cosmos DB emulator).
 
+### Known issues
+
+**`GROUP BY` combined with `ORDER BY` is not supported**
+
+Azure Cosmos DB does not support `GROUP BY` combined with `ORDER BY` yet. You will receive the following error message:
+
+> 'ORDER BY' is not supported in presence of GROUP BY.
+
+**Cross-partition queries**
+
+When documents are spanned across partitions, they must be fetched from multiple `PkRangeId` and then merged to build
+the final result. Due to this behaviour, some cross-partition queries might not work as expected.
+
+- *Paging cross-partition `OFFSET...LIMIT` queries using `max-count-item`*:<br>
+  Since documents must be fetched from multiple `PkRangeId`, the result is nondeterministic.
+  Moreover, calls to `RestClient.QueryDocumentsCrossPartition(...)` and `RestClient.QueryDocuments(...)` without
+  pagination (i.e. set `MaxCountItem=0`) may yield different results.
+
+- *Paging cross-partition `ORDER BY` queries with `max-count-item`*:<br>
+  Due to the fact that documents must be fetched from multiple `PkRangeId`, rows returned from calls to
+  `RestClient.QueryDocuments(...)` might not be in the expected order.<br>
+  *Workaround*: if you can afford the memory, use `RestClient.QueryDocumentsCrossPartition(...)` or
+  `RestClient.QueryDocuments(...)` without pagination (i.e. set `MaxCountItem=0`).
+
+- *Paging `SELECT DISTINCT` queries with `max-count-item`*:<br>
+  Due to the fact that documents must be fetched from multiple `PkRangeId`, rows returned from calls to
+  `RestClient.QueryDocuments(...)` might be duplicated.<br>
+  *Workaround*: if you can afford the memory, use `RestClient.QueryDocumentsCrossPartition(...)` or
+  `RestClient.QueryDocuments(...)` without pagination (i.e. set `MaxCountItem=0`).
+  
+- *`GROUP BY` combined with `max-count-item`*:<br>
+  Due to the fact that documents must be fetched from multiple `PkRangeId`, the result returned from calls to
+  `RestClient.QueryDocuments(...)` might not be as espected.<br>
+  *Workaround*: if you can afford the memory, use `RestClient.QueryDocumentsCrossPartition(...)` or
+  `RestClient.QueryDocuments(...)` without pagination (i.e. set `MaxCountItem=0`).
+
 ## Example usage: database/sql driver
 
 ```go
@@ -92,6 +128,22 @@ by specifying setting `AutoId=true` in the connection string (for REST client) o
 value is `AutoId=true`.
 
 _This settings is available since [v0.1.2](RELEASE-NOTES.md)._
+
+### Known issues
+
+**`GROUP BY` combined with `ORDER BY` is not supported**
+
+Azure Cosmos DB does not support `GROUP BY` combined with `ORDER BY` yet. You will receive the following error message:
+
+> 'ORDER BY' is not supported in presence of GROUP BY.
+
+**Cross-partition paging**
+
+The `database/sql` driver does not use `max-count-item` like the REST client. Hence the only paging technique that can
+be used is `OFFSET...LIMIT`. The underlying driver uses `the `RestClient.QueryDocumentsCrossPartition(...)` to fetch
+rows from Cosmos DB. Thus, some limitations:
+
+- `OFFSET...LIMIT` without `ORDER BY`: 
 
 ## Features
 
