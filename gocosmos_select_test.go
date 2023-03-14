@@ -286,6 +286,11 @@ func _testSelectPaging(t *testing.T, testName string, db *sql.DB, collname strin
 				offset += len(rows)
 			}
 			testCase.maxItemCount = 0
+			// {
+			// 	for i, row := range finalRows {
+			// 		fmt.Printf("%5d: %s\n", i, row["id"])
+			// 	}
+			// }
 			_verifyResult(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name, testCase, expectedNumItems, finalRows)
 			_verifyOrderBy(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name, testCase, finalRows)
 			_verifyDistinct(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name, testCase, finalRows)
@@ -363,8 +368,8 @@ func _testSelectCustomDataset(t *testing.T, testName string, testCases []customQ
 			for i, row := range rows {
 				expected := expectedResult[i]
 				if !reflect.DeepEqual(row, expected) {
-					fmt.Printf("DEBUG: %#v\n", rows)
-					fmt.Printf("DEBUG: %#v\n", expectedResult)
+					// fmt.Printf("DEBUG: %#v\n", rows)
+					// fmt.Printf("DEBUG: %#v\n", expectedResult)
 					t.Fatalf("%s failed: result\n%#v\ndoes not match expected one\n%#v", testName+"/"+testCase.name, row, expected)
 				}
 			}

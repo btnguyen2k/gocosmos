@@ -829,6 +829,7 @@ func (c *RestClient) QueryDocumentsCrossPartition(query QueryReq) *RespQueryDocs
 		query.PkRangeId = pkrange.Id
 		for {
 			result = c.mergeQueryResults(result, c.queryAllAndMerge(query, queryPlan), queryPlan)
+			// fmt.Printf("\tDEBUG: num rows: %5d\n", result.Count)
 			if result.Error() != nil || result.ContinuationToken == "" {
 				break
 			}

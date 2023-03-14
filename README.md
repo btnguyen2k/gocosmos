@@ -60,9 +60,9 @@ When documents are spanned across partitions, they must be fetched from multiple
 the final result. Due to this behaviour, some cross-partition queries might not work as expected.
 
 - *Paging cross-partition `OFFSET...LIMIT` queries using `max-count-item`*:<br>
-  This would not work as documents must be fetched from multiple `PkRangeId`.
-  Moreover, the result returned from `RestClient.QueryDocumentsCrossPartition(...)` might be different from or the one
-  returned from call to `RestClient.QueryDocuments(...)` without pagination (i.e. set `MaxCountItem=0`).
+  Since documents must be fetched from multiple `PkRangeId`, the result is nondeterministic.
+  Moreover, calls to `RestClient.QueryDocumentsCrossPartition(...)` and `RestClient.QueryDocuments(...)` without
+  pagination (i.e. set `MaxCountItem=0`) may yield different results.
 
 - *Paging cross-partition `ORDER BY` queries with `max-count-item`*:<br>
   Due to the fact that documents must be fetched from multiple `PkRangeId`, rows returned from calls to
@@ -137,7 +137,13 @@ Azure Cosmos DB does not support `GROUP BY` combined with `ORDER BY` yet. You wi
 
 > 'ORDER BY' is not supported in presence of GROUP BY.
 
+**Cross-partition paging**
 
+The `database/sql` driver does not use `max-count-item` like the REST client. Hence the only paging technique that can
+be used is `OFFSET...LIMIT`. The underlying driver uses `the `RestClient.QueryDocumentsCrossPartition(...)` to fetch
+rows from Cosmos DB. Thus, some limitations:
+
+- `OFFSET...LIMIT` without `ORDER BY`: 
 
 ## Features
 
