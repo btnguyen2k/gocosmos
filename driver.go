@@ -67,11 +67,11 @@ var (
 	ErrConflict = errors.New("StatusCode=409 Conflict")
 )
 
-// Driver is Azure CosmosDB driver for database/sql.
+// Driver is Azure Cosmos DB implementation of driver.Driver.
 type Driver struct {
 }
 
-// Open implements driver.Driver.Open.
+// Open implements driver.Driver/Open.
 //
 // connStr is expected in the following format:
 //
