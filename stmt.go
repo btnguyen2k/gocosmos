@@ -3,7 +3,10 @@ package gocosmos
 import (
 	"database/sql/driver"
 	"fmt"
+	"io"
+	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -227,17 +230,148 @@ func (s *Stmt) parseWithOpts(withOptsStr string) error {
 	return nil
 }
 
-// // validateWithOpts is no-op in this struct. Sub-implementations may override this behavior.
-// func (s *Stmt) validateWithOpts() error {
-// 	return nil
-// }
-
-// Close implements driver.Stmt.Close.
+// Close implements driver.Stmt/Close.
 func (s *Stmt) Close() error {
 	return nil
 }
 
-// NumInput implements driver.Stmt.NumInput.
+// NumInput implements driver.Stmt/NumInput.
 func (s *Stmt) NumInput() int {
 	return s.numInput
+}
+
+/*----------------------------------------------------------------------*/
+
+func buildResultNoResultSet(restResponse *RestReponse, supportLastInsertId bool, rid string, ignoreErrorCode int) *ResultNoResultSet {
+	result := &ResultNoResultSet{
+		err:                 restResponse.Error(),
+		lastInsertId:        rid,
+		supportLastInsertId: supportLastInsertId,
+	}
+	if result.err == nil {
+		result.affectedRows = 1
+	}
+	switch restResponse.StatusCode {
+	case 403:
+		if ignoreErrorCode == 403 {
+			result.err = nil
+		} else {
+			result.err = ErrForbidden
+		}
+	case 404:
+		if ignoreErrorCode == 404 {
+			result.err = nil
+		} else {
+			result.err = ErrNotFound
+		}
+	case 409:
+		if ignoreErrorCode == 409 {
+			result.err = nil
+		} else {
+			result.err = ErrConflict
+		}
+	}
+	return result
+}
+
+// ResultNoResultSet captures the result from statements that do not expect a ResultSet to be returned.
+//
+// @Available since v0.3.0
+type ResultNoResultSet struct {
+	err                 error
+	affectedRows        int64
+	supportLastInsertId bool
+	lastInsertId        string // holds the "_rid" if the operation returns it
+}
+
+// LastInsertId implements driver.Result/LastInsertId.
+func (r *ResultNoResultSet) LastInsertId() (int64, error) {
+	if r.err != nil {
+		return 0, r.err
+	}
+	if !r.supportLastInsertId {
+		return 0, ErrOperationNotSupported
+	}
+	return 0, fmt.Errorf(`{"last_insert_id":"%s"}`, r.lastInsertId)
+}
+
+// RowsAffected implements driver.Result/RowsAffected.
+func (r *ResultNoResultSet) RowsAffected() (int64, error) {
+	return r.affectedRows, r.err
+}
+
+/*----------------------------------------------------------------------*/
+
+// ResultResultSet captures the result from statements that expect a ResultSet to be returned.
+//
+// @Available since v0.3.0
+type ResultResultSet struct {
+	err         error
+	count       int
+	cursorCount int
+	columnList  []string
+	columnTypes map[string]reflect.Type
+	rowData     []map[string]interface{}
+}
+
+func (r *ResultResultSet) init() *ResultResultSet {
+	if r.rowData == nil {
+		return r
+	}
+	if r.columnTypes == nil {
+		r.columnTypes = make(map[string]reflect.Type)
+	}
+	r.count = len(r.rowData)
+	colMap := make(map[string]bool)
+	for _, item := range r.rowData {
+		for col, val := range item {
+			colMap[col] = true
+			if r.columnTypes[col] == nil {
+				r.columnTypes[col] = reflect.TypeOf(val)
+			}
+		}
+	}
+	r.columnList = make([]string, 0, len(colMap))
+	for col := range colMap {
+		r.columnList = append(r.columnList, col)
+	}
+	sort.Strings(r.columnList)
+
+	return r
+}
+
+// Columns implements driver.Rows/Columns.
+func (r *ResultResultSet) Columns() []string {
+	return r.columnList
+}
+
+// ColumnTypeScanType implements driver.RowsColumnTypeScanType/ColumnTypeScanType
+func (r *ResultResultSet) ColumnTypeScanType(index int) reflect.Type {
+	return r.columnTypes[r.columnList[index]]
+}
+
+// ColumnTypeDatabaseTypeName implements driver.RowsColumnTypeDatabaseTypeName/ColumnTypeDatabaseTypeName
+func (r *ResultResultSet) ColumnTypeDatabaseTypeName(index int) string {
+	return goTypeToCosmosDbType(r.columnTypes[r.columnList[index]])
+}
+
+// Close implements driver.Rows/Close.
+func (r *ResultResultSet) Close() error {
+	return r.err
+}
+
+// Next implements driver.Rows/Next.
+func (r *ResultResultSet) Next(dest []driver.Value) error {
+	if r.err != nil {
+		return r.err
+	}
+	if r.cursorCount >= r.count {
+		return io.EOF
+	}
+	rowData := r.rowData[r.cursorCount]
+	r.cursorCount++
+	for i, colName := range r.columnList {
+		dest[i] = rowData[colName]
+	}
+	return nil
 }

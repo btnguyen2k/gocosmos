@@ -56,47 +56,19 @@ func (s *StmtCreateDatabase) validate() error {
 // Query implements driver.Stmt.Query.
 // This function is not implemented, use Exec instead.
 func (s *StmtCreateDatabase) Query(_ []driver.Value) (driver.Rows, error) {
-	return nil, errors.New("this operation is not supported, please use exec")
+	return nil, ErrQueryNotSupported
 }
 
 // Exec implements driver.Stmt.Exec.
 // Upon successful call, this function return (*ResultCreateDatabase, nil).
 func (s *StmtCreateDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 	restResult := s.conn.restClient.CreateDatabase(DatabaseSpec{Id: s.dbName, Ru: s.ru, MaxRu: s.maxru})
-	result := &ResultCreateDatabase{Successful: restResult.Error() == nil, InsertId: restResult.Rid}
-	err := restResult.Error()
-	switch restResult.StatusCode {
-	case 403:
-		err = ErrForbidden
-	case 409:
-		if s.ifNotExists {
-			err = nil
-		} else {
-			err = ErrConflict
-		}
+	ignoreErrorCode := 0
+	if s.ifNotExists {
+		ignoreErrorCode = 409
 	}
-	return result, err
-}
-
-// ResultCreateDatabase captures the result from CREATE DATABASE operation.
-type ResultCreateDatabase struct {
-	// Successful flags if the operation was successful or not.
-	Successful bool
-	// InsertId holds the "_rid" if the operation was successful.
-	InsertId string
-}
-
-// LastInsertId implements driver.Result.LastInsertId.
-func (r *ResultCreateDatabase) LastInsertId() (int64, error) {
-	return 0, fmt.Errorf("this operation is not supported. {LastInsertId:%s}", r.InsertId)
-}
-
-// RowsAffected implements driver.Result.RowsAffected.
-func (r *ResultCreateDatabase) RowsAffected() (int64, error) {
-	if r.Successful {
-		return 1, nil
-	}
-	return 0, nil
+	result := buildResultNoResultSet(&restResult.RestReponse, true, restResult.Rid, ignoreErrorCode)
+	return result, result.err
 }
 
 /*----------------------------------------------------------------------*/
@@ -148,7 +120,7 @@ func (s *StmtAlterDatabase) validate() error {
 // Query implements driver.Stmt.Query.
 // This function is not implemented, use Exec instead.
 func (s *StmtAlterDatabase) Query(_ []driver.Value) (driver.Rows, error) {
-	return nil, errors.New("this operation is not supported, please use exec")
+	return nil, ErrQueryNotSupported
 }
 
 // Exec implements driver.Stmt.Exec.
@@ -165,36 +137,8 @@ func (s *StmtAlterDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 		return nil, err
 	}
 	restResult := s.conn.restClient.ReplaceOfferForResource(getResult.Rid, s.ru, s.maxru)
-	result := &ResultAlterDatabase{Successful: restResult.Error() == nil}
-	err := restResult.Error()
-	switch restResult.StatusCode {
-	case 403:
-		err = ErrForbidden
-	case 404:
-		err = ErrNotFound
-	}
-	return result, err
-}
-
-// ResultAlterDatabase captures the result from ALTER DATABASE operation.
-//
-// Available since v0.1.1
-type ResultAlterDatabase struct {
-	// Successful flags if the operation was successful or not.
-	Successful bool
-}
-
-// LastInsertId implements driver.Result.LastInsertId.
-func (r *ResultAlterDatabase) LastInsertId() (int64, error) {
-	return 0, fmt.Errorf("this operation is not supported")
-}
-
-// RowsAffected implements driver.Result.RowsAffected.
-func (r *ResultAlterDatabase) RowsAffected() (int64, error) {
-	if r.Successful {
-		return 1, nil
-	}
-	return 0, nil
+	result := buildResultNoResultSet(&restResult.RestReponse, true, restResult.Rid, 0)
+	return result, result.err
 }
 
 /*----------------------------------------------------------------------*/
@@ -219,25 +163,19 @@ func (s *StmtDropDatabase) validate() error {
 // Query implements driver.Stmt.Query.
 // This function is not implemented, use Exec instead.
 func (s *StmtDropDatabase) Query(_ []driver.Value) (driver.Rows, error) {
-	return nil, errors.New("this operation is not supported, please use exec")
+	return nil, ErrQueryNotSupported
 }
 
 // Exec implements driver.Stmt.Exec.
 // This function always return a nil driver.Result.
 func (s *StmtDropDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 	restResult := s.conn.restClient.DeleteDatabase(s.dbName)
-	err := restResult.Error()
-	switch restResult.StatusCode {
-	case 403:
-		err = ErrForbidden
-	case 404:
-		if s.ifExists {
-			err = nil
-		} else {
-			err = ErrNotFound
-		}
+	ignoreErrorCode := 0
+	if s.ifExists {
+		ignoreErrorCode = 404
 	}
-	return nil, err
+	result := buildResultNoResultSet(&restResult.RestReponse, false, "", ignoreErrorCode)
+	return result, result.err
 }
 
 /*----------------------------------------------------------------------*/
@@ -258,7 +196,7 @@ func (s *StmtListDatabases) validate() error {
 // Exec implements driver.Stmt.Exec.
 // This function is not implemented, use Query instead.
 func (s *StmtListDatabases) Exec(_ []driver.Value) (driver.Result, error) {
-	return nil, errors.New("this operation is not supported, please use query")
+	return nil, ErrExecNotSupported
 }
 
 // Query implements driver.Stmt.Query.

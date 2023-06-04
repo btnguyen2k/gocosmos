@@ -65,6 +65,21 @@ var (
 
 	// ErrConflict is returned when the executing operation cause conflict (e.g. duplicated id).
 	ErrConflict = errors.New("StatusCode=409 Conflict")
+
+	// ErrOperationNotSupported is returned to indicate that the operation is not supported.
+	//
+	// @Available since v0.3.0
+	ErrOperationNotSupported = errors.New("this operation is not supported")
+
+	// ErrExecNotSupported is returned to indicate that the Exec/ExecContext operation is not supported.
+	//
+	// @Available since v0.3.0
+	ErrExecNotSupported = errors.New("this operation is not supported, please use Query")
+
+	// ErrQueryNotSupported is returned to indicate that the Query/QueryContext operation is not supported.
+	//
+	// @Available since v0.3.0
+	ErrQueryNotSupported = errors.New("this operation is not supported, please use Exec")
 )
 
 // Driver is Azure Cosmos DB implementation of driver.Driver.
