@@ -264,3 +264,87 @@ func TestStmtDropCollection_parse_defaultDb(t *testing.T) {
 		})
 	}
 }
+
+func TestStmtListCollections_parse(t *testing.T) {
+	testName := "TestStmtListCollections_parse"
+	testData := []struct {
+		name      string
+		sql       string
+		expected  *StmtListCollections
+		mustError bool
+	}{
+		{name: "error_invalid_query1", sql: "LIST COLLECTIONS", mustError: true},
+		{name: "error_invalid_query2", sql: "LIST TABLES", mustError: true},
+		{name: "error_invalid_query3", sql: "LIST COLLECTION", mustError: true},
+		{name: "error_invalid_query4", sql: "LIST TABLE", mustError: true},
+		{name: "error_invalid_query5", sql: "LIST COLLECTIONS FROM", mustError: true},
+		{name: "error_invalid_query6", sql: "LIST TABLES FROM", mustError: true},
+		{name: "error_invalid_query7", sql: "LIST COLLECTION FROM", mustError: true},
+		{name: "error_invalid_query8", sql: "LIST TABLE FROM", mustError: true},
+
+		{name: "basic", sql: "LIST COLLECTIONS from db1", expected: &StmtListCollections{dbName: "db1"}},
+		{name: "collections", sql: "list \n\tcollection \t FROM \t\rdb-2", expected: &StmtListCollections{dbName: "db-2"}},
+		{name: "tables", sql: "LIST tables\n\tFROM\t\rdb_3", expected: &StmtListCollections{dbName: "db_3"}},
+		{name: "table", sql: "list TABLE from db-4_0", expected: &StmtListCollections{dbName: "db-4_0"}},
+	}
+	for _, testCase := range testData {
+		t.Run(testCase.name, func(t *testing.T) {
+			s, err := parseQuery(nil, testCase.sql)
+			if testCase.mustError && err == nil {
+				t.Fatalf("%s failed: parsing must fail", testName+"/"+testCase.name)
+			}
+			if testCase.mustError {
+				return
+			}
+			if err != nil {
+				t.Fatalf("%s failed: %s", testName+"/"+testCase.name, err)
+			}
+			stmt, ok := s.(*StmtListCollections)
+			if !ok {
+				t.Fatalf("%s failed: expected StmtListCollections but received %T", testName+"/"+testCase.name, s)
+			}
+			stmt.Stmt = nil
+			if !reflect.DeepEqual(stmt, testCase.expected) {
+				t.Fatalf("%s failed:\nexpected %#v\nreceived %#v", testName+"/"+testCase.name, testCase.expected, stmt)
+			}
+		})
+	}
+}
+
+func TestStmtListCollections_parse_defaultDb(t *testing.T) {
+	testName := "TestStmtListCollections_parse_defaultDb"
+	testData := []struct {
+		name      string
+		db        string
+		sql       string
+		expected  *StmtListCollections
+		mustError bool
+	}{
+		{name: "basic", db: "mydb", sql: "LIST COLLECTIONS", expected: &StmtListCollections{dbName: "mydb"}},
+		{name: "db_in_query", db: "mydb", sql: "list\r\tcollection FROM\n db-2", expected: &StmtListCollections{dbName: "db-2"}},
+		{name: "tables", db: "mydb", sql: "LIST tables", expected: &StmtListCollections{dbName: "mydb"}},
+		{name: "table_db_in_query", db: "mydb", sql: "list TABLE from db-4_0", expected: &StmtListCollections{dbName: "db-4_0"}},
+	}
+	for _, testCase := range testData {
+		t.Run(testCase.name, func(t *testing.T) {
+			s, err := parseQueryWithDefaultDb(nil, testCase.db, testCase.sql)
+			if testCase.mustError && err == nil {
+				t.Fatalf("%s failed: parsing must fail", testName+"/"+testCase.name)
+			}
+			if testCase.mustError {
+				return
+			}
+			if err != nil {
+				t.Fatalf("%s failed: %s", testName+"/"+testCase.name, err)
+			}
+			stmt, ok := s.(*StmtListCollections)
+			if !ok {
+				t.Fatalf("%s failed: expected StmtListCollections but received %T", testName+"/"+testCase.name, s)
+			}
+			stmt.Stmt = nil
+			if !reflect.DeepEqual(stmt, testCase.expected) {
+				t.Fatalf("%s failed:\nexpected %#v\nreceived %#v", testName+"/"+testCase.name, testCase.expected, stmt)
+			}
+		})
+	}
+}

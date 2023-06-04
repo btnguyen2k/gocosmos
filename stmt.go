@@ -16,20 +16,20 @@ const (
 )
 
 var (
-	reCreateDb = regexp.MustCompile(`(?im)^CREATE\s+DATABASE` + ifNotExists + `\s+` + field + with + `$`)
-	reAlterDb  = regexp.MustCompile(`(?im)^ALTER\s+DATABASE` + `\s+` + field + with + `$`)
-	reDropDb   = regexp.MustCompile(`(?im)^DROP\s+DATABASE` + ifExists + `\s+` + field + `$`)
-	reListDbs  = regexp.MustCompile(`(?im)^LIST\s+DATABASES?$`)
+	reCreateDb = regexp.MustCompile(`(?is)^CREATE\s+DATABASE` + ifNotExists + `\s+` + field + with + `$`)
+	reAlterDb  = regexp.MustCompile(`(?is)^ALTER\s+DATABASE` + `\s+` + field + with + `$`)
+	reDropDb   = regexp.MustCompile(`(?is)^DROP\s+DATABASE` + ifExists + `\s+` + field + `$`)
+	reListDbs  = regexp.MustCompile(`(?is)^LIST\s+DATABASES?$`)
 
-	reCreateColl = regexp.MustCompile(`(?im)^CREATE\s+(COLLECTION|TABLE)` + ifNotExists + `\s+(` + field + `\.)?` + field + with + `$`)
-	reAlterColl  = regexp.MustCompile(`(?im)^ALTER\s+(COLLECTION|TABLE)` + `\s+(` + field + `\.)?` + field + with + `$`)
-	reDropColl   = regexp.MustCompile(`(?im)^DROP\s+(COLLECTION|TABLE)` + ifExists + `\s+(` + field + `\.)?` + field + `$`)
-	reListColls  = regexp.MustCompile(`(?im)^LIST\s+(COLLECTIONS?|TABLES?)(\s+FROM\s+` + field + `)?$`)
+	reCreateColl = regexp.MustCompile(`(?is)^CREATE\s+(COLLECTION|TABLE)` + ifNotExists + `\s+(` + field + `\.)?` + field + with + `$`)
+	reAlterColl  = regexp.MustCompile(`(?is)^ALTER\s+(COLLECTION|TABLE)` + `\s+(` + field + `\.)?` + field + with + `$`)
+	reDropColl   = regexp.MustCompile(`(?is)^DROP\s+(COLLECTION|TABLE)` + ifExists + `\s+(` + field + `\.)?` + field + `$`)
+	reListColls  = regexp.MustCompile(`(?is)^LIST\s+(COLLECTIONS?|TABLES?)(\s+FROM\s+` + field + `)?$`)
 
-	reInsert = regexp.MustCompile(`(?im)^(INSERT|UPSERT)\s+INTO\s+(` + field + `\.)?` + field + `\s*\(([^)]*?)\)\s*VALUES\s*\(([^)]*?)\)$`)
-	reSelect = regexp.MustCompile(`(?im)^SELECT\s+(CROSS\s+PARTITION\s+)?.*?\s+FROM\s+` + field + `.*?` + with + `$`)
-	reUpdate = regexp.MustCompile(`(?im)^UPDATE\s+(` + field + `\.)?` + field + `\s+SET\s+(.*)\s+WHERE\s+id\s*=\s*(.*)$`)
-	reDelete = regexp.MustCompile(`(?im)^DELETE\s+FROM\s+(` + field + `\.)?` + field + `\s+WHERE\s+id\s*=\s*(.*)$`)
+	reInsert = regexp.MustCompile(`(?is)^(INSERT|UPSERT)\s+INTO\s+(` + field + `\.)?` + field + `\s*\(([^)]*?)\)\s*VALUES\s*\(([^)]*?)\)$`)
+	reSelect = regexp.MustCompile(`(?is)^SELECT\s+(CROSS\s+PARTITION\s+)?.*?\s+FROM\s+` + field + `.*?` + with + `$`)
+	reUpdate = regexp.MustCompile(`(?is)^UPDATE\s+(` + field + `\.)?` + field + `\s+SET\s+(.*)\s+WHERE\s+id\s*=\s*(.*)$`)
+	reDelete = regexp.MustCompile(`(?is)^DELETE\s+FROM\s+(` + field + `\.)?` + field + `\s+WHERE\s+id\s*=\s*(.*)$`)
 )
 
 func parseQuery(c *Conn, query string) (driver.Stmt, error) {
