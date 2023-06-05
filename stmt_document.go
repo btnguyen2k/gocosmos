@@ -130,10 +130,9 @@ func (s *StmtInsert) validate() error {
 	return nil
 }
 
-// Exec implements driver.Stmt.Exec.
-// Upon successful call, this function returns (*ResultInsert, nil).
+// Exec implements driver.Stmt/Exec.
 //
-// Note: this function expects the last argument is partition key value.
+// Note: this function expects the _last_ argument is _partition_ key value.
 func (s *StmtInsert) Exec(args []driver.Value) (driver.Result, error) {
 	spec := DocumentSpec{
 		DbName:             s.dbName,
@@ -155,47 +154,18 @@ func (s *StmtInsert) Exec(args []driver.Value) (driver.Result, error) {
 		}
 	}
 	restResult := s.conn.restClient.CreateDocument(spec)
-	result := &ResultInsert{Successful: restResult.Error() == nil}
+	rid := ""
 	if restResult.DocInfo != nil {
-		result.InsertId, _ = restResult.DocInfo["_rid"].(string)
+		rid, _ = restResult.DocInfo["_rid"].(string)
 	}
-	err := restResult.Error()
-	switch restResult.StatusCode {
-	case 403:
-		err = ErrForbidden
-	case 404:
-		err = ErrNotFound
-	case 409:
-		err = ErrConflict
-	}
-	return result, err
+	result := buildResultNoResultSet(&restResult.RestReponse, true, rid, 0)
+	return result, result.err
 }
 
-// Query implements driver.Stmt.Query.
+// Query implements driver.Stmt/Query.
 // This function is not implemented, use Exec instead.
-func (s *StmtInsert) Query(args []driver.Value) (driver.Rows, error) {
-	return nil, errors.New("this operation is not supported, please use exec")
-}
-
-// ResultInsert captures the result from INSERT operation.
-type ResultInsert struct {
-	// Successful flags if the operation was successful or not.
-	Successful bool
-	// InsertId holds the "_rid" if the operation was successful.
-	InsertId string
-}
-
-// LastInsertId implements driver.Result.LastInsertId.
-func (r *ResultInsert) LastInsertId() (int64, error) {
-	return 0, fmt.Errorf("this operation is not supported. {LastInsertId:%s}", r.InsertId)
-}
-
-// RowsAffected implements driver.Result.RowsAffected.
-func (r *ResultInsert) RowsAffected() (int64, error) {
-	if r.Successful {
-		return 1, nil
-	}
-	return 0, nil
+func (s *StmtInsert) Query(_ []driver.Value) (driver.Rows, error) {
+	return nil, ErrQueryNotSupported
 }
 
 /*----------------------------------------------------------------------*/
