@@ -4,7 +4,6 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
-	"io"
 	"strconv"
 )
 
@@ -202,52 +201,54 @@ func (s *StmtListDatabases) Exec(_ []driver.Value) (driver.Result, error) {
 // Query implements driver.Stmt.Query.
 func (s *StmtListDatabases) Query(_ []driver.Value) (driver.Rows, error) {
 	restResult := s.conn.restClient.ListDatabases()
-	err := restResult.Error()
-	var rows driver.Rows
-	if err == nil {
-		rows = &RowsListDatabases{
-			count:       int(restResult.Count),
-			databases:   restResult.Databases,
-			cursorCount: 0,
+	result := &ResultResultSet{
+		err:        restResult.Error(),
+		columnList: []string{"id", "_rid", "_ts", "_self", "_etag", "_colls", "_users"},
+	}
+	if result.err == nil {
+		result.count = len(restResult.Databases)
+		result.rowData = make([]map[string]interface{}, result.count)
+		for i, db := range restResult.Databases {
+			result.rowData[i] = db.toMap()
 		}
 	}
 	switch restResult.StatusCode {
 	case 403:
-		err = ErrForbidden
+		result.err = ErrForbidden
 	}
-	return rows, err
+	return result, result.err
 }
 
-// RowsListDatabases captures the result from LIST DATABASES operation.
-type RowsListDatabases struct {
-	count       int
-	databases   []DbInfo
-	cursorCount int
-}
-
-// Columns implements driver.Rows.Columns.
-func (r *RowsListDatabases) Columns() []string {
-	return []string{"id", "_rid", "_ts", "_self", "_etag", "_colls", "_users"}
-}
-
-// Close implements driver.Rows.Close.
-func (r *RowsListDatabases) Close() error {
-	return nil
-}
-
-// Next implements driver.Rows.Next.
-func (r *RowsListDatabases) Next(dest []driver.Value) error {
-	if r.cursorCount >= r.count {
-		return io.EOF
-	}
-	rowData := r.databases[r.cursorCount]
-	r.cursorCount++
-	dest[0] = rowData.Id
-	dest[1] = rowData.Rid
-	dest[2] = rowData.Ts
-	dest[3] = rowData.Self
-	dest[4] = rowData.Etag
-	dest[5] = rowData.Colls
-	dest[6] = rowData.Users
-	return nil
-}
+// // RowsListDatabases captures the result from LIST DATABASES operation.
+// type RowsListDatabases struct {
+// 	count       int
+// 	databases   []DbInfo
+// 	cursorCount int
+// }
+//
+// // Columns implements driver.Rows.Columns.
+// func (r *RowsListDatabases) Columns() []string {
+// 	return []string{"id", "_rid", "_ts", "_self", "_etag", "_colls", "_users"}
+// }
+//
+// // Close implements driver.Rows.Close.
+// func (r *RowsListDatabases) Close() error {
+// 	return nil
+// }
+//
+// // Next implements driver.Rows.Next.
+// func (r *RowsListDatabases) Next(dest []driver.Value) error {
+// 	if r.cursorCount >= r.count {
+// 		return io.EOF
+// 	}
+// 	rowData := r.databases[r.cursorCount]
+// 	r.cursorCount++
+// 	dest[0] = rowData.Id
+// 	dest[1] = rowData.Rid
+// 	dest[2] = rowData.Ts
+// 	dest[3] = rowData.Self
+// 	dest[4] = rowData.Etag
+// 	dest[5] = rowData.Colls
+// 	dest[6] = rowData.Users
+// 	return nil
+// }

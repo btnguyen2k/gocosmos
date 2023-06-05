@@ -129,69 +129,6 @@ func TestDriver_Close(t *testing.T) {
 
 /*----------------------------------------------------------------------*/
 
-func Test_Exec_ListDatabases(t *testing.T) {
-	name := "Test_Exec_ListDatabases"
-	db := _openDb(t, name)
-	_, err := db.Exec("LIST DATABASES")
-	if err == nil || strings.Index(err.Error(), "not supported") < 0 {
-		t.Fatalf("%s failed: expected 'not support' error, but received %#v", name, err)
-	}
-}
-
-func Test_Query_ListDatabases(t *testing.T) {
-	name := "Test_Query_ListDatabases"
-	db := _openDb(t, name)
-
-	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
-	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp1")
-	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp2")
-	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
-	defer db.Exec("DROP DATABASE IF EXISTS dbtemp1")
-	defer db.Exec("DROP DATABASE IF EXISTS dbtemp2")
-
-	dbRows, err := db.Query("LIST DATABASES")
-	if err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
-	colTypes, err := dbRows.ColumnTypes()
-	if err != nil {
-		t.Fatalf("%s failed: %s", name, err)
-	}
-	numCols := len(colTypes)
-	result := make(map[string]map[string]interface{})
-	for dbRows.Next() {
-		vals := make([]interface{}, numCols)
-		scanVals := make([]interface{}, numCols)
-		for i := 0; i < numCols; i++ {
-			scanVals[i] = &vals[i]
-		}
-		if err := dbRows.Scan(scanVals...); err == nil {
-			row := make(map[string]interface{})
-			for i, v := range colTypes {
-				row[v.Name()] = vals[i]
-			}
-			id := fmt.Sprintf("%s", row["id"])
-			result[id] = row
-		} else if err != sql.ErrNoRows {
-			t.Fatalf("%s failed: %s", name, err)
-		}
-	}
-	_, ok1 := result["dbtemp"]
-	_, ok2 := result["dbtemp1"]
-	_, ok3 := result["dbtemp2"]
-	if !ok1 {
-		t.Fatalf("%s failed: database %s not found", name, "dbtemp")
-	}
-	if !ok2 {
-		t.Fatalf("%s failed: database %s not found", name, "dbtemp1")
-	}
-	if !ok3 {
-		t.Fatalf("%s failed: database %s not found", name, "dbtemp2")
-	}
-}
-
-/*----------------------------------------------------------------------*/
-
 func Test_Query_CreateCollection(t *testing.T) {
 	name := "Test_Query_CreateCollection"
 	db := _openDb(t, name)

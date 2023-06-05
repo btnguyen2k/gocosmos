@@ -251,3 +251,55 @@ func TestStmtDropDatabase_Exec(t *testing.T) {
 		})
 	}
 }
+
+func TestStmtListDatabases_Exec(t *testing.T) {
+	testName := "TestStmtListDatabases_Exec"
+	db := _openDb(t, testName)
+	_, err := db.Query("LIST DATABASES")
+	if err != ErrExecNotSupported {
+		t.Fatalf("%s failed: expected ErrOperationNotSupported, but received %#v", testName, err)
+	}
+}
+
+func TestStmtListDatabases_Query(t *testing.T) {
+	testName := "TestStmtListDatabases_Query"
+	db := _openDb(t, testName)
+	dbnames := []string{"dbtemp", "dbtemp2", "dbtemp1"}
+	for _, dbname := range dbnames {
+		db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbname))
+	}
+	defer func() {
+		for _, dbname := range dbnames {
+			db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname))
+		}
+	}()
+	dbRows, err := db.Query("LIST DATABASES")
+	if err != nil {
+		t.Fatalf("%s failed: %s", testName+"/query", err)
+	}
+	rows, err := _fetchAllRows(dbRows)
+	if err != nil {
+		t.Fatalf("%s failed: %s", testName+"/fetch_rows", err)
+	}
+	ok0, ok1, ok2 := false, false, false
+	for _, row := range rows {
+		if row["id"] == "dbtemp" {
+			ok0 = true
+		}
+		if row["id"] == "dbtemp1" {
+			ok1 = true
+		}
+		if row["id"] == "dbtemp2" {
+			ok2 = true
+		}
+	}
+	if !ok0 {
+		t.Fatalf("%s failed: database %s not found", testName, "dbtemp")
+	}
+	if !ok1 {
+		t.Fatalf("%s failed: database %s not found", testName, "dbtemp1")
+	}
+	if !ok2 {
+		t.Fatalf("%s failed: database %s not found", testName, "dbtemp2")
+	}
+}

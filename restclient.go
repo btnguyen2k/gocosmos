@@ -1158,6 +1158,18 @@ type DbInfo struct {
 	Users string `json:"_users"` // (system-generated property) _users attribute of the database
 }
 
+func (db *DbInfo) toMap() map[string]interface{} {
+	return map[string]interface{}{
+		"id":     db.Id,
+		"_rid":   db.Rid,
+		"_ts":    db.Ts,
+		"_self":  db.Self,
+		"_etag":  db.Etag,
+		"_colls": db.Colls,
+		"_users": db.Users,
+	}
+}
+
 // RespCreateDb captures the response from RestClient.CreateDatabase call.
 type RespCreateDb struct {
 	RestReponse
