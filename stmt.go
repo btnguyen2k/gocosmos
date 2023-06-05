@@ -209,7 +209,7 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 	return nil, fmt.Errorf("invalid query: %s", query)
 }
 
-// Stmt is Azure CosmosDB prepared statement handle.
+// Stmt is Azure Cosmos DB abstract implementation of driver.Stmt.
 type Stmt struct {
 	query    string // the SQL query
 	conn     *Conn  // the connection that this prepared statement is bound to

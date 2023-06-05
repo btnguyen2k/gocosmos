@@ -11,7 +11,7 @@ func TestStmtCreateDatabase_Query(t *testing.T) {
 	db := _openDb(t, testName)
 	_, err := db.Query("CREATE DATABASE dbtemp")
 	if err != ErrQueryNotSupported {
-		t.Fatalf("%s failed: expected ErrOperationNotSupported, but received %#v", testName, err)
+		t.Fatalf("%s failed: expected ErrQueryNotSupported, but received %#v", testName, err)
 	}
 }
 
@@ -96,7 +96,7 @@ func TestStmtAlterDatabase_Query(t *testing.T) {
 	db := _openDb(t, testName)
 	_, err := db.Query("ALTER DATABASE dbtemp WITH ru=400")
 	if err != ErrQueryNotSupported {
-		t.Fatalf("%s failed: expected ErrOperationNotSupported, but received %#v", testName, err)
+		t.Fatalf("%s failed: expected ErrQueryNotSupported, but received %#v", testName, err)
 	}
 }
 
@@ -181,7 +181,7 @@ func TestStmtDropDatabase_Query(t *testing.T) {
 	db := _openDb(t, testName)
 	_, err := db.Query("DROP DATABASE dbtemp")
 	if err != ErrQueryNotSupported {
-		t.Fatalf("%s failed: expected ErrOperationNotSupported, but received %#v", testName, err)
+		t.Fatalf("%s failed: expected ErrQueryNotSupported, but received %#v", testName, err)
 	}
 }
 
@@ -255,9 +255,9 @@ func TestStmtDropDatabase_Exec(t *testing.T) {
 func TestStmtListDatabases_Exec(t *testing.T) {
 	testName := "TestStmtListDatabases_Exec"
 	db := _openDb(t, testName)
-	_, err := db.Query("LIST DATABASES")
+	_, err := db.Exec("LIST DATABASES")
 	if err != ErrExecNotSupported {
-		t.Fatalf("%s failed: expected ErrOperationNotSupported, but received %#v", testName, err)
+		t.Fatalf("%s failed: expected ErrExecNotSupported, but received %#v", testName, err)
 	}
 }
 

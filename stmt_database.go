@@ -7,7 +7,7 @@ import (
 	"strconv"
 )
 
-// StmtCreateDatabase implements "CREATE DATABASE" operation.
+// StmtCreateDatabase implements "CREATE DATABASE" statement.
 //
 // Syntax:
 //
@@ -52,14 +52,13 @@ func (s *StmtCreateDatabase) validate() error {
 	return nil
 }
 
-// Query implements driver.Stmt.Query.
+// Query implements driver.Stmt/Query.
 // This function is not implemented, use Exec instead.
 func (s *StmtCreateDatabase) Query(_ []driver.Value) (driver.Rows, error) {
 	return nil, ErrQueryNotSupported
 }
 
-// Exec implements driver.Stmt.Exec.
-// Upon successful call, this function return (*ResultCreateDatabase, nil).
+// Exec implements driver.Stmt/Exec.
 func (s *StmtCreateDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 	restResult := s.conn.restClient.CreateDatabase(DatabaseSpec{Id: s.dbName, Ru: s.ru, MaxRu: s.maxru})
 	ignoreErrorCode := 0
@@ -72,7 +71,7 @@ func (s *StmtCreateDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 
 /*----------------------------------------------------------------------*/
 
-// StmtAlterDatabase implements "ALTER DATABASE" operation.
+// StmtAlterDatabase implements "ALTER DATABASE" statement.
 //
 // Syntax:
 //
@@ -116,14 +115,13 @@ func (s *StmtAlterDatabase) validate() error {
 	return nil
 }
 
-// Query implements driver.Stmt.Query.
+// Query implements driver.Stmt/Query.
 // This function is not implemented, use Exec instead.
 func (s *StmtAlterDatabase) Query(_ []driver.Value) (driver.Rows, error) {
 	return nil, ErrQueryNotSupported
 }
 
-// Exec implements driver.Stmt.Exec.
-// Upon successful call, this function return (*ResultAlterDatabase, nil).
+// Exec implements driver.Stmt/Exec.
 func (s *StmtAlterDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 	getResult := s.conn.restClient.GetDatabase(s.dbName)
 	if err := getResult.Error(); err != nil {
@@ -142,7 +140,7 @@ func (s *StmtAlterDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 
 /*----------------------------------------------------------------------*/
 
-// StmtDropDatabase implements "DROP DATABASE" operation.
+// StmtDropDatabase implements "DROP DATABASE" statement.
 //
 // Syntax:
 //
@@ -159,14 +157,13 @@ func (s *StmtDropDatabase) validate() error {
 	return nil
 }
 
-// Query implements driver.Stmt.Query.
+// Query implements driver.Stmt/Query.
 // This function is not implemented, use Exec instead.
 func (s *StmtDropDatabase) Query(_ []driver.Value) (driver.Rows, error) {
 	return nil, ErrQueryNotSupported
 }
 
-// Exec implements driver.Stmt.Exec.
-// This function always return a nil driver.Result.
+// Exec implements driver.Stmt/Exec.
 func (s *StmtDropDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 	restResult := s.conn.restClient.DeleteDatabase(s.dbName)
 	ignoreErrorCode := 0
@@ -179,7 +176,7 @@ func (s *StmtDropDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 
 /*----------------------------------------------------------------------*/
 
-// StmtListDatabases implements "LIST DATABASES" operation.
+// StmtListDatabases implements "LIST DATABASES" statement.
 //
 // Syntax:
 //
@@ -192,13 +189,13 @@ func (s *StmtListDatabases) validate() error {
 	return nil
 }
 
-// Exec implements driver.Stmt.Exec.
+// Exec implements driver.Stmt/Exec.
 // This function is not implemented, use Query instead.
 func (s *StmtListDatabases) Exec(_ []driver.Value) (driver.Result, error) {
 	return nil, ErrExecNotSupported
 }
 
-// Query implements driver.Stmt.Query.
+// Query implements driver.Stmt/Query.
 func (s *StmtListDatabases) Query(_ []driver.Value) (driver.Rows, error) {
 	restResult := s.conn.restClient.ListDatabases()
 	result := &ResultResultSet{
@@ -218,37 +215,3 @@ func (s *StmtListDatabases) Query(_ []driver.Value) (driver.Rows, error) {
 	}
 	return result, result.err
 }
-
-// // RowsListDatabases captures the result from LIST DATABASES operation.
-// type RowsListDatabases struct {
-// 	count       int
-// 	databases   []DbInfo
-// 	cursorCount int
-// }
-//
-// // Columns implements driver.Rows.Columns.
-// func (r *RowsListDatabases) Columns() []string {
-// 	return []string{"id", "_rid", "_ts", "_self", "_etag", "_colls", "_users"}
-// }
-//
-// // Close implements driver.Rows.Close.
-// func (r *RowsListDatabases) Close() error {
-// 	return nil
-// }
-//
-// // Next implements driver.Rows.Next.
-// func (r *RowsListDatabases) Next(dest []driver.Value) error {
-// 	if r.cursorCount >= r.count {
-// 		return io.EOF
-// 	}
-// 	rowData := r.databases[r.cursorCount]
-// 	r.cursorCount++
-// 	dest[0] = rowData.Id
-// 	dest[1] = rowData.Rid
-// 	dest[2] = rowData.Ts
-// 	dest[3] = rowData.Self
-// 	dest[4] = rowData.Etag
-// 	dest[5] = rowData.Colls
-// 	dest[6] = rowData.Users
-// 	return nil
-// }

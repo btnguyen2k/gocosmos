@@ -1212,6 +1212,25 @@ type CollInfo struct {
 	GeospatialConfig         map[string]interface{} `json:"geospatialConfig"`         // Geo-spatial configuration settings for collection
 }
 
+func (c *CollInfo) toMap() map[string]interface{} {
+	return map[string]interface{}{
+		"id":                       c.Id,
+		"_rid":                     c.Rid,
+		"_ts":                      c.Ts,
+		"_self":                    c.Self,
+		"_etag":                    c.Etag,
+		"_docs":                    c.Docs,
+		"_sprocs":                  c.Sprocs,
+		"_triggers":                c.Triggers,
+		"_udfs":                    c.Udfs,
+		"_conflicts":               c.Conflicts,
+		"indexingPolicy":           c.IndexingPolicy,
+		"partitionKey":             c.PartitionKey,
+		"conflictResolutionPolicy": c.ConflictResolutionPolicy,
+		"geospatialConfig":         c.GeospatialConfig,
+	}
+}
+
 // RespCreateColl captures the response from RestClient.CreateCollection call.
 type RespCreateColl struct {
 	RestReponse
