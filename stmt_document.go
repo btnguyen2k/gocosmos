@@ -199,9 +199,6 @@ func (s *StmtDelete) parse() error {
 	} else if loc := reValPlaceholder.FindStringIndex(s.idStr); loc != nil {
 		if loc[0] == 0 && loc[1] == len(s.idStr) {
 			index, _ := strconv.Atoi(s.idStr[loc[0]+1:])
-			// if err != nil || index < 1 {
-			// 	return fmt.Errorf("invalid id placeholder literate: %s", s.idStr)
-			// }
 			s.id = placeholder{index}
 			s.numInput++
 		} else {
@@ -221,10 +218,9 @@ func (s *StmtDelete) validate() error {
 	return nil
 }
 
-// Exec implements driver.Stmt.Exec.
-// This function always return nil driver.Result.
+// Exec implements driver.Stmt/Exec.
 //
-// Note: this function expects the last argument is partition key value.
+// Note: this function expects the _last_ argument is _partition_ key value.
 func (s *StmtDelete) Exec(args []driver.Value) (driver.Result, error) {
 	id := s.idStr
 	if s.id != nil {
@@ -234,51 +230,29 @@ func (s *StmtDelete) Exec(args []driver.Value) (driver.Result, error) {
 		}
 		id = fmt.Sprintf("%s", args[ph.index-1])
 	}
-	restClient := s.conn.restClient.DeleteDocument(DocReq{DbName: s.dbName, CollName: s.collName, DocId: id,
+	restResult := s.conn.restClient.DeleteDocument(DocReq{DbName: s.dbName, CollName: s.collName, DocId: id,
 		PartitionKeyValues: []interface{}{args[s.numInput-1]}, // expect the last argument is partition key value
 	})
-	err := restClient.Error()
-	result := &ResultDelete{Successful: err == nil, StatusCode: restClient.StatusCode}
-	switch restClient.StatusCode {
+	result := buildResultNoResultSet(&restResult.RestReponse, false, "", 0)
+	switch restResult.StatusCode {
 	case 403:
-		err = ErrForbidden
+		result.err = ErrForbidden
 	case 404:
 		// consider "document not found" as successful operation
 		// but database/collection not found is not!
-		if strings.Index(fmt.Sprintf("%s", err), "ResourceType: Document") >= 0 {
-			err = nil
+		if strings.Index(fmt.Sprintf("%s", restResult.Error()), "ResourceType: Document") >= 0 {
+			result.err = nil
 		} else {
-			err = ErrNotFound
+			result.err = ErrNotFound
 		}
 	}
-	return result, err
+	return result, result.err
 }
 
-// Query implements driver.Stmt.Query.
+// Query implements driver.Stmt/Query.
 // This function is not implemented, use Exec instead.
-func (s *StmtDelete) Query(args []driver.Value) (driver.Rows, error) {
-	return nil, errors.New("this operation is not supported, please use exec")
-}
-
-// ResultDelete captures the result from DELETE operation.
-type ResultDelete struct {
-	// Successful flags if the operation was successful or not.
-	Successful bool
-	// StatusCode is the HTTP status code returned from CosmosDB.
-	StatusCode int
-}
-
-// LastInsertId implements driver.Result.LastInsertId.
-func (r *ResultDelete) LastInsertId() (int64, error) {
-	return 0, errors.New("this operation is not supported")
-}
-
-// RowsAffected implements driver.Result.RowsAffected.
-func (r *ResultDelete) RowsAffected() (int64, error) {
-	if r.Successful && r.StatusCode < 400 {
-		return 1, nil
-	}
-	return 0, nil
+func (s *StmtDelete) Query(_ []driver.Value) (driver.Rows, error) {
+	return nil, ErrQueryNotSupported
 }
 
 /*----------------------------------------------------------------------*/
