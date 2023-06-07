@@ -270,6 +270,12 @@ func buildResultNoResultSet(restResponse *RestReponse, supportLastInsertId bool,
 		} else {
 			result.err = ErrConflict
 		}
+	case 412:
+		if ignoreErrorCode == 412 {
+			result.err = nil
+		} else {
+			result.err = ErrPreconditionFailure
+		}
 	}
 	return result
 }

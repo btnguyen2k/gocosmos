@@ -66,6 +66,12 @@ var (
 	// ErrConflict is returned when the executing operation cause conflict (e.g. duplicated id).
 	ErrConflict = errors.New("StatusCode=409 Conflict")
 
+	// ErrPreconditionFailure is returned when operation specified an eTag that is different from the version available
+	// at the server, that is, an optimistic concurrency error.
+	//
+	// @Available since v0.3.0
+	ErrPreconditionFailure = errors.New("StatusCode=412 Precondition failure")
+
 	// ErrOperationNotSupported is returned to indicate that the operation is not supported.
 	//
 	// @Available since v0.3.0

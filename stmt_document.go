@@ -235,15 +235,11 @@ func (s *StmtDelete) Exec(args []driver.Value) (driver.Result, error) {
 	})
 	result := buildResultNoResultSet(&restResult.RestReponse, false, "", 0)
 	switch restResult.StatusCode {
-	case 403:
-		result.err = ErrForbidden
 	case 404:
 		// consider "document not found" as successful operation
 		// but database/collection not found is not!
 		if strings.Index(fmt.Sprintf("%s", restResult.Error()), "ResourceType: Document") >= 0 {
 			result.err = nil
-		} else {
-			result.err = ErrNotFound
 		}
 	}
 	return result, result.err
@@ -466,16 +462,9 @@ func (s *StmtUpdate) _parseId() error {
 	if hasPrefix && hasSuffix {
 		s.idStr = strings.TrimSpace(s.idStr[1 : len(s.idStr)-1])
 	} else if loc := reValPlaceholder.FindStringIndex(s.idStr); loc != nil {
-		// if loc[0] == 0 && loc[1] == len(s.idStr) {
 		index, _ := strconv.Atoi(s.idStr[loc[0]+1:])
-		// if err != nil || index < 1 {
-		// 	return fmt.Errorf("invalid id placeholder literate: %s", s.idStr)
-		// }
 		s.id = placeholder{index}
 		s.numInput++
-		// } else {
-		// 	return fmt.Errorf("invalid id literate: %s", s.idStr)
-		// }
 	}
 	return nil
 }
@@ -545,16 +534,12 @@ func (s *StmtUpdate) validate() error {
 	if len(s.fields) == 0 {
 		return errors.New("invalid query: SET clause is empty")
 	}
-	// if len(s.fields) != len(s.values) {
-	// 	return fmt.Errorf("number of field (%d) does not match number of input value (%d)", len(s.fields), len(s.values))
-	// }
 	return nil
 }
 
-// Exec implements driver.Stmt.Exec.
-// Upon successful call, this function returns (*ResultUpdate, nil).
+// Exec implements driver.Stmt/Exec.
 //
-// Note: this function expects the last argument is partition key value.
+// Note: this function expects the _last_ argument is _partition_ key value.
 func (s *StmtUpdate) Exec(args []driver.Value) (driver.Result, error) {
 	// firstly, fetch the document
 	id := s.idStr
@@ -568,15 +553,15 @@ func (s *StmtUpdate) Exec(args []driver.Value) (driver.Result, error) {
 	docReq := DocReq{DbName: s.dbName, CollName: s.collName, DocId: id, PartitionKeyValues: []interface{}{args[len(args)-1]}}
 	getDocResult := s.conn.restClient.GetDocument(docReq)
 	if err := getDocResult.Error(); err != nil {
+		result := buildResultNoResultSet(&getDocResult.RestReponse, false, "", 0)
 		if getDocResult.StatusCode == 404 {
 			// consider "document not found" as successful operation
 			// but database/collection not found is not!
 			if strings.Index(fmt.Sprintf("%s", err), "ResourceType: Document") >= 0 {
-				return &ResultUpdate{Successful: false}, nil
+				result.err = nil
 			}
-			return nil, ErrNotFound
 		}
-		return nil, getDocResult.Error()
+		return result, result.err
 	}
 	etag := getDocResult.DocInfo.Etag()
 	spec := DocumentSpec{DbName: s.dbName, CollName: s.collName, PartitionKeyValues: []interface{}{args[len(args)-1]}, DocumentData: getDocResult.DocInfo.RemoveSystemAttrs()}
@@ -593,48 +578,20 @@ func (s *StmtUpdate) Exec(args []driver.Value) (driver.Result, error) {
 		}
 	}
 	replaceDocResult := s.conn.restClient.ReplaceDocument(etag, spec)
-	result := &ResultUpdate{Successful: replaceDocResult.Error() == nil}
-	err := replaceDocResult.Error()
+	result := buildResultNoResultSet(&replaceDocResult.RestReponse, false, "", 412)
 	switch replaceDocResult.StatusCode {
-	case 403:
-		err = ErrForbidden
-	case 404: // race case, but possible
+	case 404: // rare case, but possible!
 		// consider "document not found" as successful operation
 		// but database/collection not found is not!
-		if strings.Index(fmt.Sprintf("%s", err), "ResourceType: Document") >= 0 {
-			err = nil
-		} else {
-			err = ErrNotFound
+		if strings.Index(fmt.Sprintf("%s", replaceDocResult.Error()), "ResourceType: Document") >= 0 {
+			result.err = nil
 		}
-	case 409:
-		err = ErrConflict
-	case 412:
-		err = nil
 	}
-	return result, err
+	return result, result.err
 }
 
-// Query implements driver.Stmt.Query.
+// Query implements driver.Stmt/Query.
 // This function is not implemented, use Exec instead.
-func (s *StmtUpdate) Query(args []driver.Value) (driver.Rows, error) {
-	return nil, errors.New("this operation is not supported, please use exec")
-}
-
-// ResultUpdate captures the result from UPDATE operation.
-type ResultUpdate struct {
-	// Successful flags if the operation was successful or not.
-	Successful bool
-}
-
-// LastInsertId implements driver.Result.LastInsertId.
-func (r *ResultUpdate) LastInsertId() (int64, error) {
-	return 0, errors.New("this operation is not supported")
-}
-
-// RowsAffected implements driver.Result.RowsAffected.
-func (r *ResultUpdate) RowsAffected() (int64, error) {
-	if r.Successful {
-		return 1, nil
-	}
-	return 0, nil
+func (s *StmtUpdate) Query(_ []driver.Value) (driver.Rows, error) {
+	return nil, ErrQueryNotSupported
 }
