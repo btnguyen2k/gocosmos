@@ -65,13 +65,34 @@ var (
 
 	// ErrConflict is returned when the executing operation cause conflict (e.g. duplicated id).
 	ErrConflict = errors.New("StatusCode=409 Conflict")
+
+	// ErrPreconditionFailure is returned when operation specified an eTag that is different from the version available
+	// at the server, that is, an optimistic concurrency error.
+	//
+	// @Available since v0.2.1
+	ErrPreconditionFailure = errors.New("StatusCode=412 Precondition failure")
+
+	// ErrOperationNotSupported is returned to indicate that the operation is not supported.
+	//
+	// @Available since v0.2.1
+	ErrOperationNotSupported = errors.New("this operation is not supported")
+
+	// ErrExecNotSupported is returned to indicate that the Exec/ExecContext operation is not supported.
+	//
+	// @Available since v0.2.1
+	ErrExecNotSupported = errors.New("this operation is not supported, please use Query")
+
+	// ErrQueryNotSupported is returned to indicate that the Query/QueryContext operation is not supported.
+	//
+	// @Available since v0.2.1
+	ErrQueryNotSupported = errors.New("this operation is not supported, please use Exec")
 )
 
-// Driver is Azure CosmosDB driver for database/sql.
+// Driver is Azure Cosmos DB implementation of driver.Driver.
 type Driver struct {
 }
 
-// Open implements driver.Driver.Open.
+// Open implements driver.Driver/Open.
 //
 // connStr is expected in the following format:
 //

@@ -7,9 +7,9 @@ on:
     branches: [ main ]
 
 jobs:
-  testDriver:
-    name: Test driver
-    runs-on: windows-latest
+  testDriverQueryParsing:
+    name: Test driver query parsing
+    runs-on: ubuntu-latest
     steps:
       - name: Set up Go env
         uses: actions/setup-go@v2
@@ -19,22 +19,15 @@ jobs:
         uses: actions/checkout@v2
       - name: Test
         run: |
-          choco install azure-cosmosdb-emulator
-          & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
-          Start-Sleep -s 60
-          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
-          netstat -nt
-          $env:COSMOSDB_DRIVER='gocosmos'
-          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=='
-          go test -cover -coverprofile="coverage_driver.txt" -v -count 1 -p 1 -run "Test_" .
+          go test -cover -coverprofile="coverage_driver_parse.txt" -v -count 1 -p 1 -run "_parse" .
       - name: Codecov
         uses: codecov/codecov-action@v3
         with:
-          flags: driver
-          name: driver
+          flags: driver_parse
+          name: driver_parse
 
-  testDriverSelect:
-    name: Test driver SELECT query
+  testDriverStmtDatabase:
+    name: Test driver database statements
     runs-on: windows-latest
     steps:
       - name: Set up Go env
@@ -52,12 +45,90 @@ jobs:
           netstat -nt
           $env:COSMOSDB_DRIVER='gocosmos'
           $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=='
-          go test -cover -coverprofile="coverage_driver_select.txt" -v -count 1 -p 1 -run "TestSelect_" .
+          go test -cover -coverprofile="coverage_driver_database.txt" -v -count 1 -p 1 -run "TestStmt.*Databases?_(Exec|Query)" .
       - name: Codecov
         uses: codecov/codecov-action@v3
         with:
-          flags: driver_select
-          name: driver_select
+          flags: driver_database
+          name: driver_database
+
+  testDriverStmtCollection:
+    name: Test driver collection statements
+    runs-on: windows-latest
+    steps:
+      - name: Set up Go env
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.13
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+      - name: Test
+        run: |
+          choco install azure-cosmosdb-emulator
+          & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
+          Start-Sleep -s 60
+          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
+          netstat -nt
+          $env:COSMOSDB_DRIVER='gocosmos'
+          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=='
+          go test -cover -coverprofile="coverage_driver_collection.txt" -v -count 1 -p 1 -run "TestStmt.*Collections?_(Exec|Query)" .
+      - name: Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          flags: driver_collection
+          name: driver_collection
+
+  testDriverStmtDocumentNonQuery:
+    name: Test driver document non-query statements
+    runs-on: windows-latest
+    steps:
+      - name: Set up Go env
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.13
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+      - name: Test
+        run: |
+          choco install azure-cosmosdb-emulator
+          & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
+          Start-Sleep -s 60
+          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
+          netstat -nt
+          $env:COSMOSDB_DRIVER='gocosmos'
+          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=='
+          go test -cover -coverprofile="coverage_driver_document_non_query.txt" -v -count 1 -p 1 -run "TestStmt(Insert|Upsert|Update|Delete)_(Exec|Query)" .
+      - name: Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          flags: driver_document_non_query
+          name: driver_document_non_query
+
+  testDriverStmtDocumentQuery:
+    name: Test driver document query statements
+    runs-on: windows-latest
+    steps:
+      - name: Set up Go env
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.13
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+      - name: Test
+        run: |
+          choco install azure-cosmosdb-emulator
+          & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
+          Start-Sleep -s 60
+          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
+          netstat -nt
+          $env:COSMOSDB_DRIVER='gocosmos'
+          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=='
+          go test -timeout 30m -cover -coverprofile="coverage_driver_document_query.txt" -v -count 1 -p 1 -run "TestStmtSelect_(Exec|Query)" .
+      - name: Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          flags: driver_document_query
+          name: driver_document_query
 
   testRestClientNonQuery:
     name: Test RestClient non-query
@@ -104,7 +175,7 @@ jobs:
           netstat -nt
           $env:COSMOSDB_DRIVER='gocosmos'
           $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=='
-          go test -cover -coverprofile="coverage_restclient_query.txt" -v -count 1 -p 1 -run "TestRestClient_QueryDocuments" .
+          go test -timeout 30m -cover -coverprofile="coverage_restclient_query.txt" -v -count 1 -p 1 -run "TestRestClient_QueryDocuments" .
       - name: Codecov
         uses: codecov/codecov-action@v3
         with:
@@ -113,7 +184,7 @@ jobs:
 
   testOther:
     name: Test other
-    runs-on: windows-latest
+    runs-on: ubuntu-latest
     steps:
       - name: Set up Go env
         uses: actions/setup-go@v2
@@ -123,14 +194,8 @@ jobs:
         uses: actions/checkout@v2
       - name: Test
         run: |
-          choco install azure-cosmosdb-emulator
-          & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
-          Start-Sleep -s 60
-          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
-          netstat -nt
-          $env:COSMOSDB_DRIVER='gocosmos'
-          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=='
-          go test -cover -coverprofile="coverage_other.txt" -v -count 1 -p 1 -run "TestNew" .
+          export COSMOSDB_URL="AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=="
+          go test -cover -coverprofile="coverage_other.txt" -v -count 1 -p 1 -run "TestNew|TestStmt_NumInput|TestDriver_" .
       - name: Codecov
         uses: codecov/codecov-action@v3
         with:

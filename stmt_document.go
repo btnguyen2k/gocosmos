@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -130,10 +128,9 @@ func (s *StmtInsert) validate() error {
 	return nil
 }
 
-// Exec implements driver.Stmt.Exec.
-// Upon successful call, this function returns (*ResultInsert, nil).
+// Exec implements driver.Stmt/Exec.
 //
-// Note: this function expects the last argument is partition key value.
+// Note: this function expects the _last_ argument is _partition_ key value.
 func (s *StmtInsert) Exec(args []driver.Value) (driver.Result, error) {
 	spec := DocumentSpec{
 		DbName:             s.dbName,
@@ -155,47 +152,18 @@ func (s *StmtInsert) Exec(args []driver.Value) (driver.Result, error) {
 		}
 	}
 	restResult := s.conn.restClient.CreateDocument(spec)
-	result := &ResultInsert{Successful: restResult.Error() == nil}
+	rid := ""
 	if restResult.DocInfo != nil {
-		result.InsertId, _ = restResult.DocInfo["_rid"].(string)
+		rid, _ = restResult.DocInfo["_rid"].(string)
 	}
-	err := restResult.Error()
-	switch restResult.StatusCode {
-	case 403:
-		err = ErrForbidden
-	case 404:
-		err = ErrNotFound
-	case 409:
-		err = ErrConflict
-	}
-	return result, err
+	result := buildResultNoResultSet(&restResult.RestReponse, true, rid, 0)
+	return result, result.err
 }
 
-// Query implements driver.Stmt.Query.
+// Query implements driver.Stmt/Query.
 // This function is not implemented, use Exec instead.
-func (s *StmtInsert) Query(args []driver.Value) (driver.Rows, error) {
-	return nil, errors.New("this operation is not supported, please use exec")
-}
-
-// ResultInsert captures the result from INSERT operation.
-type ResultInsert struct {
-	// Successful flags if the operation was successful or not.
-	Successful bool
-	// InsertId holds the "_rid" if the operation was successful.
-	InsertId string
-}
-
-// LastInsertId implements driver.Result.LastInsertId.
-func (r *ResultInsert) LastInsertId() (int64, error) {
-	return 0, fmt.Errorf("this operation is not supported. {LastInsertId:%s}", r.InsertId)
-}
-
-// RowsAffected implements driver.Result.RowsAffected.
-func (r *ResultInsert) RowsAffected() (int64, error) {
-	if r.Successful {
-		return 1, nil
-	}
-	return 0, nil
+func (s *StmtInsert) Query(_ []driver.Value) (driver.Rows, error) {
+	return nil, ErrQueryNotSupported
 }
 
 /*----------------------------------------------------------------------*/
@@ -229,9 +197,6 @@ func (s *StmtDelete) parse() error {
 	} else if loc := reValPlaceholder.FindStringIndex(s.idStr); loc != nil {
 		if loc[0] == 0 && loc[1] == len(s.idStr) {
 			index, _ := strconv.Atoi(s.idStr[loc[0]+1:])
-			// if err != nil || index < 1 {
-			// 	return fmt.Errorf("invalid id placeholder literate: %s", s.idStr)
-			// }
 			s.id = placeholder{index}
 			s.numInput++
 		} else {
@@ -251,10 +216,9 @@ func (s *StmtDelete) validate() error {
 	return nil
 }
 
-// Exec implements driver.Stmt.Exec.
-// This function always return nil driver.Result.
+// Exec implements driver.Stmt/Exec.
 //
-// Note: this function expects the last argument is partition key value.
+// Note: this function expects the _last_ argument is _partition_ key value.
 func (s *StmtDelete) Exec(args []driver.Value) (driver.Result, error) {
 	id := s.idStr
 	if s.id != nil {
@@ -264,51 +228,25 @@ func (s *StmtDelete) Exec(args []driver.Value) (driver.Result, error) {
 		}
 		id = fmt.Sprintf("%s", args[ph.index-1])
 	}
-	restClient := s.conn.restClient.DeleteDocument(DocReq{DbName: s.dbName, CollName: s.collName, DocId: id,
+	restResult := s.conn.restClient.DeleteDocument(DocReq{DbName: s.dbName, CollName: s.collName, DocId: id,
 		PartitionKeyValues: []interface{}{args[s.numInput-1]}, // expect the last argument is partition key value
 	})
-	err := restClient.Error()
-	result := &ResultDelete{Successful: err == nil, StatusCode: restClient.StatusCode}
-	switch restClient.StatusCode {
-	case 403:
-		err = ErrForbidden
+	result := buildResultNoResultSet(&restResult.RestReponse, false, "", 0)
+	switch restResult.StatusCode {
 	case 404:
 		// consider "document not found" as successful operation
 		// but database/collection not found is not!
-		if strings.Index(fmt.Sprintf("%s", err), "ResourceType: Document") >= 0 {
-			err = nil
-		} else {
-			err = ErrNotFound
+		if strings.Index(fmt.Sprintf("%s", restResult.Error()), "ResourceType: Document") >= 0 {
+			result.err = nil
 		}
 	}
-	return result, err
+	return result, result.err
 }
 
-// Query implements driver.Stmt.Query.
+// Query implements driver.Stmt/Query.
 // This function is not implemented, use Exec instead.
-func (s *StmtDelete) Query(args []driver.Value) (driver.Rows, error) {
-	return nil, errors.New("this operation is not supported, please use exec")
-}
-
-// ResultDelete captures the result from DELETE operation.
-type ResultDelete struct {
-	// Successful flags if the operation was successful or not.
-	Successful bool
-	// StatusCode is the HTTP status code returned from CosmosDB.
-	StatusCode int
-}
-
-// LastInsertId implements driver.Result.LastInsertId.
-func (r *ResultDelete) LastInsertId() (int64, error) {
-	return 0, errors.New("this operation is not supported")
-}
-
-// RowsAffected implements driver.Result.RowsAffected.
-func (r *ResultDelete) RowsAffected() (int64, error) {
-	if r.Successful && r.StatusCode < 400 {
-		return 1, nil
-	}
-	return 0, nil
+func (s *StmtDelete) Query(_ []driver.Value) (driver.Rows, error) {
+	return nil, ErrQueryNotSupported
 }
 
 /*----------------------------------------------------------------------*/
@@ -318,7 +256,10 @@ func (r *ResultDelete) RowsAffected() (int64, error) {
 //
 // Syntax:
 //
-//	SELECT [CROSS PARTITION] ... FROM <collection/table-name> ... WITH database|db=<db-name> [WITH collection|table=<collection/table-name>] [WITH cross_partition=true]
+//	SELECT [CROSS PARTITION] ... FROM <collection/table-name> ...
+//	WITH database|db=<db-name>
+//	[WITH collection|table=<collection/table-name>]
+//	[WITH cross_partition=true]
 //
 //	- (extension) If the collection is partitioned, specify "CROSS PARTITION" to allow execution across multiple partitions.
 //	  This clause is not required if query is to be executed on a single partition.
@@ -381,8 +322,7 @@ func (s *StmtSelect) validate() error {
 	return nil
 }
 
-// Query implements driver.Stmt.Query.
-// Upon successful call, this function returns (*ResultSelect, nil).
+// Query implements driver.Stmt/Query.
 func (s *StmtSelect) Query(args []driver.Value) (driver.Rows, error) {
 	params := make([]interface{}, 0)
 	for i, arg := range args {
@@ -400,83 +340,20 @@ func (s *StmtSelect) Query(args []driver.Value) (driver.Rows, error) {
 		CrossPartitionEnabled: s.isCrossPartition,
 	}
 
-	result := s.conn.restClient.QueryDocumentsCrossPartition(query)
-	err := result.Error()
-	var rows driver.Rows
-	if err == nil {
-		documents := result.Documents.AsDocInfoSlice()
-		if documents == nil {
-			documents = make([]DocInfo, len(result.Documents))
-			for i, doc := range result.Documents {
-				var docInfo DocInfo = map[string]interface{}{"$1": doc}
-				documents[i] = docInfo
-			}
-		}
-		for i, doc := range documents {
-			documents[i] = doc.RemoveSystemAttrs()
-		}
-		rows = &ResultSelect{count: len(documents), documents: documents, cursorCount: 0, columnList: make([]string, 0)}
-
-		// build column list
-		columnList := make([]string, 0)
-		columnMap := make(map[string]bool)
-		for _, doc := range documents {
-			for colName := range doc {
-				if _, ok := columnMap[colName]; !ok {
-					columnMap[colName] = true
-					columnList = append(columnList, colName)
-				}
-			}
-		}
-		sort.Strings(columnList)
-		rows.(*ResultSelect).columnList = columnList
+	restResult := s.conn.restClient.QueryDocumentsCrossPartition(query)
+	result := &ResultResultSet{err: restResult.Error(), columnList: make([]string, 0)}
+	if result.err == nil {
+		result.documents = restResult.Documents
+		result.init()
 	}
-	switch result.StatusCode {
-	case 403:
-		err = ErrForbidden
-	case 404:
-		err = ErrNotFound
-		// case 409:
-		// 	err = ErrConflict
-	}
-	return rows, err
+	result.err = normalizeError(restResult.StatusCode, 0, result.err)
+	return result, result.err
 }
 
-// Exec implements driver.Stmt.Exec.
+// Exec implements driver.Stmt/Exec.
 // This function is not implemented, use Query instead.
-func (s *StmtSelect) Exec(args []driver.Value) (driver.Result, error) {
-	return nil, errors.New("this operation is not supported, please use query")
-}
-
-// ResultSelect captures the result from SELECT operation.
-type ResultSelect struct {
-	count       int
-	documents   []DocInfo
-	cursorCount int
-	columnList  []string
-}
-
-// Columns implements driver.Rows.Columns.
-func (r *ResultSelect) Columns() []string {
-	return r.columnList
-}
-
-// Close implements driver.Rows.Close.
-func (r *ResultSelect) Close() error {
-	return nil
-}
-
-// Next implements driver.Rows.Next.
-func (r *ResultSelect) Next(dest []driver.Value) error {
-	if r.cursorCount >= r.count {
-		return io.EOF
-	}
-	rowData := r.documents[r.cursorCount]
-	r.cursorCount++
-	for i, colName := range r.columnList {
-		dest[i] = rowData[colName]
-	}
-	return nil
+func (s *StmtSelect) Exec(_ []driver.Value) (driver.Result, error) {
+	return nil, ErrExecNotSupported
 }
 
 /*----------------------------------------------------------------------*/
@@ -522,16 +399,9 @@ func (s *StmtUpdate) _parseId() error {
 	if hasPrefix && hasSuffix {
 		s.idStr = strings.TrimSpace(s.idStr[1 : len(s.idStr)-1])
 	} else if loc := reValPlaceholder.FindStringIndex(s.idStr); loc != nil {
-		// if loc[0] == 0 && loc[1] == len(s.idStr) {
 		index, _ := strconv.Atoi(s.idStr[loc[0]+1:])
-		// if err != nil || index < 1 {
-		// 	return fmt.Errorf("invalid id placeholder literate: %s", s.idStr)
-		// }
 		s.id = placeholder{index}
 		s.numInput++
-		// } else {
-		// 	return fmt.Errorf("invalid id literate: %s", s.idStr)
-		// }
 	}
 	return nil
 }
@@ -601,16 +471,12 @@ func (s *StmtUpdate) validate() error {
 	if len(s.fields) == 0 {
 		return errors.New("invalid query: SET clause is empty")
 	}
-	// if len(s.fields) != len(s.values) {
-	// 	return fmt.Errorf("number of field (%d) does not match number of input value (%d)", len(s.fields), len(s.values))
-	// }
 	return nil
 }
 
-// Exec implements driver.Stmt.Exec.
-// Upon successful call, this function returns (*ResultUpdate, nil).
+// Exec implements driver.Stmt/Exec.
 //
-// Note: this function expects the last argument is partition key value.
+// Note: this function expects the _last_ argument is _partition_ key value.
 func (s *StmtUpdate) Exec(args []driver.Value) (driver.Result, error) {
 	// firstly, fetch the document
 	id := s.idStr
@@ -624,15 +490,15 @@ func (s *StmtUpdate) Exec(args []driver.Value) (driver.Result, error) {
 	docReq := DocReq{DbName: s.dbName, CollName: s.collName, DocId: id, PartitionKeyValues: []interface{}{args[len(args)-1]}}
 	getDocResult := s.conn.restClient.GetDocument(docReq)
 	if err := getDocResult.Error(); err != nil {
+		result := buildResultNoResultSet(&getDocResult.RestReponse, false, "", 0)
 		if getDocResult.StatusCode == 404 {
 			// consider "document not found" as successful operation
 			// but database/collection not found is not!
 			if strings.Index(fmt.Sprintf("%s", err), "ResourceType: Document") >= 0 {
-				return &ResultUpdate{Successful: false}, nil
+				result.err = nil
 			}
-			return nil, ErrNotFound
 		}
-		return nil, getDocResult.Error()
+		return result, result.err
 	}
 	etag := getDocResult.DocInfo.Etag()
 	spec := DocumentSpec{DbName: s.dbName, CollName: s.collName, PartitionKeyValues: []interface{}{args[len(args)-1]}, DocumentData: getDocResult.DocInfo.RemoveSystemAttrs()}
@@ -649,48 +515,20 @@ func (s *StmtUpdate) Exec(args []driver.Value) (driver.Result, error) {
 		}
 	}
 	replaceDocResult := s.conn.restClient.ReplaceDocument(etag, spec)
-	result := &ResultUpdate{Successful: replaceDocResult.Error() == nil}
-	err := replaceDocResult.Error()
+	result := buildResultNoResultSet(&replaceDocResult.RestReponse, false, "", 412)
 	switch replaceDocResult.StatusCode {
-	case 403:
-		err = ErrForbidden
-	case 404: // race case, but possible
+	case 404: // rare case, but possible!
 		// consider "document not found" as successful operation
 		// but database/collection not found is not!
-		if strings.Index(fmt.Sprintf("%s", err), "ResourceType: Document") >= 0 {
-			err = nil
-		} else {
-			err = ErrNotFound
+		if strings.Index(fmt.Sprintf("%s", replaceDocResult.Error()), "ResourceType: Document") >= 0 {
+			result.err = nil
 		}
-	case 409:
-		err = ErrConflict
-	case 412:
-		err = nil
 	}
-	return result, err
+	return result, result.err
 }
 
-// Query implements driver.Stmt.Query.
+// Query implements driver.Stmt/Query.
 // This function is not implemented, use Exec instead.
-func (s *StmtUpdate) Query(args []driver.Value) (driver.Rows, error) {
-	return nil, errors.New("this operation is not supported, please use exec")
-}
-
-// ResultUpdate captures the result from UPDATE operation.
-type ResultUpdate struct {
-	// Successful flags if the operation was successful or not.
-	Successful bool
-}
-
-// LastInsertId implements driver.Result.LastInsertId.
-func (r *ResultUpdate) LastInsertId() (int64, error) {
-	return 0, errors.New("this operation is not supported")
-}
-
-// RowsAffected implements driver.Result.RowsAffected.
-func (r *ResultUpdate) RowsAffected() (int64, error) {
-	if r.Successful {
-		return 1, nil
-	}
-	return 0, nil
+func (s *StmtUpdate) Query(_ []driver.Value) (driver.Rows, error) {
+	return nil, ErrQueryNotSupported
 }

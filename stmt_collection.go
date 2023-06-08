@@ -4,16 +4,18 @@ import (
 	"database/sql/driver"
 	"errors"
 	"fmt"
-	"io"
 	"regexp"
 	"strconv"
 )
 
-// StmtCreateCollection implements "CREATE COLLECTION" operation.
+// StmtCreateCollection implements "CREATE COLLECTION" statement.
 //
 // Syntax:
 //
-//	CREATE COLLECTION|TABLE [IF NOT EXISTS] [<db-name>.]<collection-name> <WITH [LARGE]PK=partitionKey> [WITH RU|MAXRU=ru] [WITH UK=/path1:/path2,/path3;/path4]
+//	CREATE COLLECTION|TABLE [IF NOT EXISTS] [<db-name>.]<collection-name>
+//	<WITH [LARGE]PK=partitionKey>
+//	[[,] WITH RU|MAXRU=ru]
+//	[[,] WITH UK=/path1:/path2,/path3;/path4]
 //
 // - ru: an integer specifying CosmosDB's collection throughput expressed in RU/s. Supply either RU or MAXRU, not both!
 //
@@ -94,14 +96,13 @@ func (s *StmtCreateCollection) validate() error {
 	return nil
 }
 
-// Query implements driver.Stmt.Query.
+// Query implements driver.Stmt/Query.
 // This function is not implemented, use Exec instead.
 func (s *StmtCreateCollection) Query(_ []driver.Value) (driver.Rows, error) {
-	return nil, errors.New("this operation is not supported, please use exec")
+	return nil, ErrQueryNotSupported
 }
 
-// Exec implements driver.Stmt.Exec.
-// Upon successful call, this function returns (*ResultCreateCollection, nil).
+// Exec implements driver.Stmt/Exec.
 func (s *StmtCreateCollection) Exec(_ []driver.Value) (driver.Result, error) {
 	spec := CollectionSpec{DbName: s.dbName, CollName: s.collName, Ru: s.ru, MaxRu: s.maxru,
 		PartitionKeyInfo: map[string]interface{}{
@@ -120,47 +121,17 @@ func (s *StmtCreateCollection) Exec(_ []driver.Value) (driver.Result, error) {
 	}
 
 	restResult := s.conn.restClient.CreateCollection(spec)
-	result := &ResultCreateCollection{Successful: restResult.Error() == nil, InsertId: restResult.Rid}
-	err := restResult.Error()
-	switch restResult.StatusCode {
-	case 403:
-		err = ErrForbidden
-	case 404:
-		err = ErrNotFound
-	case 409:
-		if s.ifNotExists {
-			err = nil
-		} else {
-			err = ErrConflict
-		}
+	ignoreErrorCode := 0
+	if s.ifNotExists {
+		ignoreErrorCode = 409
 	}
-	return result, err
-}
-
-// ResultCreateCollection captures the result from CREATE COLLECTION operation.
-type ResultCreateCollection struct {
-	// Successful flags if the operation was successful or not.
-	Successful bool
-	// InsertId holds the "_rid" if the operation was successful.
-	InsertId string
-}
-
-// LastInsertId implements driver.Result.LastInsertId.
-func (r *ResultCreateCollection) LastInsertId() (int64, error) {
-	return 0, fmt.Errorf("this operation is not supported. {LastInsertId:%s}", r.InsertId)
-}
-
-// RowsAffected implements driver.Result.RowsAffected.
-func (r *ResultCreateCollection) RowsAffected() (int64, error) {
-	if r.Successful {
-		return 1, nil
-	}
-	return 0, nil
+	result := buildResultNoResultSet(&restResult.RestReponse, true, restResult.Rid, ignoreErrorCode)
+	return result, result.err
 }
 
 /*----------------------------------------------------------------------*/
 
-// StmtAlterCollection implements "ALTER COLLECTION" operation.
+// StmtAlterCollection implements "ALTER COLLECTION" statement.
 //
 // Syntax:
 //
@@ -210,14 +181,13 @@ func (s *StmtAlterCollection) validate() error {
 	return nil
 }
 
-// Query implements driver.Stmt.Query.
+// Query implements driver.Stmt/Query.
 // This function is not implemented, use Exec instead.
 func (s *StmtAlterCollection) Query(_ []driver.Value) (driver.Rows, error) {
-	return nil, errors.New("this operation is not supported, please use exec")
+	return nil, ErrQueryNotSupported
 }
 
-// Exec implements driver.Stmt.Exec.
-// Upon successful call, this function returns (*ResultAlterCollection, nil).
+// Exec implements driver.Stmt/Exec.
 func (s *StmtAlterCollection) Exec(_ []driver.Value) (driver.Result, error) {
 	getResult := s.conn.restClient.GetCollection(s.dbName, s.collName)
 	if err := getResult.Error(); err != nil {
@@ -230,41 +200,13 @@ func (s *StmtAlterCollection) Exec(_ []driver.Value) (driver.Result, error) {
 		return nil, err
 	}
 	restResult := s.conn.restClient.ReplaceOfferForResource(getResult.Rid, s.ru, s.maxru)
-	result := &ResultAlterCollection{Successful: restResult.Error() == nil}
-	err := restResult.Error()
-	switch restResult.StatusCode {
-	case 403:
-		err = ErrForbidden
-	case 404:
-		err = ErrNotFound
-	}
-	return result, err
-}
-
-// ResultAlterCollection captures the result from ALTER COLLECTION operation.
-//
-// Available since v0.1.1
-type ResultAlterCollection struct {
-	// Successful flags if the operation was successful or not.
-	Successful bool
-}
-
-// LastInsertId implements driver.Result.LastInsertId.
-func (r *ResultAlterCollection) LastInsertId() (int64, error) {
-	return 0, fmt.Errorf("this operation is not supported")
-}
-
-// RowsAffected implements driver.Result.RowsAffected.
-func (r *ResultAlterCollection) RowsAffected() (int64, error) {
-	if r.Successful {
-		return 1, nil
-	}
-	return 0, nil
+	result := buildResultNoResultSet(&restResult.RestReponse, true, restResult.Rid, 0)
+	return result, result.err
 }
 
 /*----------------------------------------------------------------------*/
 
-// StmtDropCollection implements "DROP COLLECTION" operation.
+// StmtDropCollection implements "DROP COLLECTION" statement.
 //
 // Syntax:
 //
@@ -285,33 +227,26 @@ func (s *StmtDropCollection) validate() error {
 	return nil
 }
 
-// Query implements driver.Stmt.Query.
+// Query implements driver.Stmt/Query.
 // This function is not implemented, use Exec instead.
 func (s *StmtDropCollection) Query(_ []driver.Value) (driver.Rows, error) {
-	return nil, errors.New("this operation is not supported, please use exec")
+	return nil, ErrQueryNotSupported
 }
 
-// Exec implements driver.Stmt.Exec.
-// This function always return a nil driver.Result.
+// Exec implements driver.Stmt/Exec.
 func (s *StmtDropCollection) Exec(_ []driver.Value) (driver.Result, error) {
 	restResult := s.conn.restClient.DeleteCollection(s.dbName, s.collName)
-	err := restResult.Error()
-	switch restResult.StatusCode {
-	case 403:
-		err = ErrForbidden
-	case 404:
-		if s.ifExists {
-			err = nil
-		} else {
-			err = ErrNotFound
-		}
+	ignoreErrorCode := 0
+	if s.ifExists {
+		ignoreErrorCode = 404
 	}
-	return nil, err
+	result := buildResultNoResultSet(&restResult.RestReponse, false, "", ignoreErrorCode)
+	return result, result.err
 }
 
 /*----------------------------------------------------------------------*/
 
-// StmtListCollections implements "LIST DATABASES" operation.
+// StmtListCollections implements "LIST DATABASES" statement.
 //
 // Syntax:
 //
@@ -328,67 +263,31 @@ func (s *StmtListCollections) validate() error {
 	return nil
 }
 
-// Exec implements driver.Stmt.Exec.
+// Exec implements driver.Stmt/Exec.
 // This function is not implemented, use Query instead.
 func (s *StmtListCollections) Exec(_ []driver.Value) (driver.Result, error) {
-	return nil, errors.New("this operation is not supported, please use query")
+	return nil, ErrExecNotSupported
 }
 
-// Query implements driver.Stmt.Query.
+// Query implements driver.Stmt/Query.
 func (s *StmtListCollections) Query(_ []driver.Value) (driver.Rows, error) {
 	restResult := s.conn.restClient.ListCollections(s.dbName)
-	err := restResult.Error()
-	var rows driver.Rows
-	if err == nil {
-		rows = &RowsListCollections{
-			count:       int(restResult.Count),
-			collections: restResult.Collections,
-			cursorCount: 0,
+	result := &ResultResultSet{
+		err:        restResult.Error(),
+		columnList: []string{"id", "indexingPolicy", "_rid", "_ts", "_self", "_etag", "_docs", "_sprocs", "_triggers", "_udfs", "_conflicts"},
+	}
+	if result.err == nil {
+		result.count = len(restResult.Collections)
+		result.rows = make([]DocInfo, result.count)
+		for i, coll := range restResult.Collections {
+			result.rows[i] = coll.toMap()
 		}
 	}
 	switch restResult.StatusCode {
 	case 403:
-		err = ErrForbidden
+		result.err = ErrForbidden
 	case 404:
-		err = ErrNotFound
+		result.err = ErrNotFound
 	}
-	return rows, err
-}
-
-// RowsListCollections captures the result from LIST COLLECTIONS operation.
-type RowsListCollections struct {
-	count       int
-	collections []CollInfo
-	cursorCount int
-}
-
-// Columns implements driver.Rows.Columns.
-func (r *RowsListCollections) Columns() []string {
-	return []string{"id", "indexingPolicy", "_rid", "_ts", "_self", "_etag", "_docs", "_sprocs", "_triggers", "_udfs", "_conflicts"}
-}
-
-// Close implements driver.Rows.Close.
-func (r *RowsListCollections) Close() error {
-	return nil
-}
-
-// Next implements driver.Rows.Next.
-func (r *RowsListCollections) Next(dest []driver.Value) error {
-	if r.cursorCount >= r.count {
-		return io.EOF
-	}
-	rowData := r.collections[r.cursorCount]
-	r.cursorCount++
-	dest[0] = rowData.Id
-	dest[1] = rowData.IndexingPolicy
-	dest[2] = rowData.Rid
-	dest[3] = rowData.Ts
-	dest[4] = rowData.Self
-	dest[5] = rowData.Etag
-	dest[6] = rowData.Docs
-	dest[7] = rowData.Sprocs
-	dest[8] = rowData.Triggers
-	dest[9] = rowData.Udfs
-	dest[10] = rowData.Conflicts
-	return nil
+	return result, result.err
 }

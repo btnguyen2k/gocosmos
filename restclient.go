@@ -1158,6 +1158,18 @@ type DbInfo struct {
 	Users string `json:"_users"` // (system-generated property) _users attribute of the database
 }
 
+func (db *DbInfo) toMap() map[string]interface{} {
+	return map[string]interface{}{
+		"id":     db.Id,
+		"_rid":   db.Rid,
+		"_ts":    db.Ts,
+		"_self":  db.Self,
+		"_etag":  db.Etag,
+		"_colls": db.Colls,
+		"_users": db.Users,
+	}
+}
+
 // RespCreateDb captures the response from RestClient.CreateDatabase call.
 type RespCreateDb struct {
 	RestReponse
@@ -1198,6 +1210,25 @@ type CollInfo struct {
 	PartitionKey             map[string]interface{} `json:"partitionKey"`             // partitioning configuration settings for collection
 	ConflictResolutionPolicy map[string]interface{} `json:"conflictResolutionPolicy"` // conflict resolution policy settings for collection
 	GeospatialConfig         map[string]interface{} `json:"geospatialConfig"`         // Geo-spatial configuration settings for collection
+}
+
+func (c *CollInfo) toMap() map[string]interface{} {
+	return map[string]interface{}{
+		"id":                       c.Id,
+		"_rid":                     c.Rid,
+		"_ts":                      c.Ts,
+		"_self":                    c.Self,
+		"_etag":                    c.Etag,
+		"_docs":                    c.Docs,
+		"_sprocs":                  c.Sprocs,
+		"_triggers":                c.Triggers,
+		"_udfs":                    c.Udfs,
+		"_conflicts":               c.Conflicts,
+		"indexingPolicy":           c.IndexingPolicy,
+		"partitionKey":             c.PartitionKey,
+		"conflictResolutionPolicy": c.ConflictResolutionPolicy,
+		"geospatialConfig":         c.GeospatialConfig,
+	}
 }
 
 // RespCreateColl captures the response from RestClient.CreateCollection call.

@@ -1,5 +1,9 @@
 # gocosmos release notes
 
+## 2023-06-xx - v0.2.1
+
+- Bug fixes, Refactoring & Enhancements.
+
 ## 2023-03-14 - v0.2.0
 
 - `RestClient`:

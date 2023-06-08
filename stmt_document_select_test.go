@@ -14,41 +14,13 @@ import (
 	"github.com/btnguyen2k/consu/reddo"
 )
 
-func Test_Exec_Select(t *testing.T) {
-	name := "Test_Exec_Select"
-	db := _openDb(t, name)
+func TestStmtSelect_Exec(t *testing.T) {
+	testName := "TestStmtSelect_Exec"
+	db := _openDb(t, testName)
 	_, err := db.Exec("SELECT * FROM c WITH db=db WITH collection=table")
-	if err == nil || strings.Index(err.Error(), "not supported") < 0 {
-		t.Fatalf("%s failed: expected 'not support' error, but received %#v", name, err)
+	if err != ErrExecNotSupported {
+		t.Fatalf("%s failed: expected ErrQueryNotSupported, but received %#v", testName, err)
 	}
-}
-
-/*----------------------------------------------------------------------*/
-
-func _fetchAllRows(dbRows *sql.Rows) ([]map[string]interface{}, error) {
-	colTypes, err := dbRows.ColumnTypes()
-	if err != nil {
-		return nil, err
-	}
-	numCols := len(colTypes)
-	rows := make([]map[string]interface{}, 0)
-	for dbRows.Next() {
-		vals := make([]interface{}, numCols)
-		scanVals := make([]interface{}, numCols)
-		for i := 0; i < numCols; i++ {
-			scanVals[i] = &vals[i]
-		}
-		if err := dbRows.Scan(scanVals...); err == nil {
-			row := make(map[string]interface{})
-			for i, v := range colTypes {
-				row[v.Name()] = vals[i]
-			}
-			rows = append(rows, row)
-		} else if err != sql.ErrNoRows {
-			return nil, err
-		}
-	}
-	return rows, nil
 }
 
 /*----------------------------------------------------------------------*/
@@ -119,8 +91,8 @@ func _testSelectPkValue(t *testing.T, testName string, db *sql.DB, collname stri
 	}
 }
 
-func TestSelect_PkValue_SmallRU(t *testing.T) {
-	testName := "TestSelect_PkValue_SmallRU"
+func TestStmtSelect_Query_PkValue_SmallRU(t *testing.T) {
+	testName := "TestStmtSelect_Query_PkValue_SmallRU"
 	dbname := testDb
 	collname := testTable
 	client := _newRestClient(t, testName)
@@ -134,8 +106,8 @@ func TestSelect_PkValue_SmallRU(t *testing.T) {
 	_testSelectPkValue(t, testName, db, collname)
 }
 
-func TestSelect_PkValue_LargeRU(t *testing.T) {
-	testName := "TestSelect_PkValue_LargeRU"
+func TestStmtSelect_Query_PkValue_LargeRU(t *testing.T) {
+	testName := "TestStmtSelect_Query_PkValue_LargeRU"
 	dbname := testDb
 	collname := testTable
 	client := _newRestClient(t, testName)
@@ -207,8 +179,8 @@ func _testSelectCrossPartition(t *testing.T, testName string, db *sql.DB, collna
 	}
 }
 
-func TestSelect_CrossPartition_SmallRU(t *testing.T) {
-	testName := "TestSelect_CrossPartition_SmallRU"
+func TestStmtSelect_Query_CrossPartition_SmallRU(t *testing.T) {
+	testName := "TestStmtSelect_Query_CrossPartition_SmallRU"
 	dbname := testDb
 	collname := testTable
 	client := _newRestClient(t, testName)
@@ -222,8 +194,8 @@ func TestSelect_CrossPartition_SmallRU(t *testing.T) {
 	_testSelectCrossPartition(t, testName, db, collname)
 }
 
-func TestSelect_CrossPartition_LargeRU(t *testing.T) {
-	testName := "TestSelect_CrossPartition_LargeRU"
+func TestStmtSelect_Query_CrossPartition_LargeRU(t *testing.T) {
+	testName := "TestStmtSelect_Query_CrossPartition_LargeRU"
 	dbname := testDb
 	collname := testTable
 	client := _newRestClient(t, testName)
@@ -299,8 +271,8 @@ func _testSelectPaging(t *testing.T, testName string, db *sql.DB, collname strin
 	}
 }
 
-func TestSelect_Paging_SmallRU(t *testing.T) {
-	testName := "TestSelect_Paging_SmallRU"
+func TestStmtSelect_Query_Paging_SmallRU(t *testing.T) {
+	testName := "TestStmtSelect_Query_Paging_SmallRU"
 	dbname := testDb
 	collname := testTable
 	client := _newRestClient(t, testName)
@@ -315,8 +287,8 @@ func TestSelect_Paging_SmallRU(t *testing.T) {
 	_testSelectPaging(t, testName, db, collname, pkranges)
 }
 
-func TestSelect_Paging_LargeRU(t *testing.T) {
-	testName := "TestSelect_Paging_LargeRU"
+func TestStmtSelect_Query_Paging_LargeRU(t *testing.T) {
+	testName := "TestStmtSelect_Query_Paging_LargeRU"
 	dbname := testDb
 	collname := testTable
 	client := _newRestClient(t, testName)
@@ -402,8 +374,8 @@ func _testSelectDatasetFamilies(t *testing.T, testName string, db *sql.DB, colln
 	_testSelectCustomDataset(t, testName, testCases, db, collname)
 }
 
-func TestSelect_DatasetFamilies_SmallRU(t *testing.T) {
-	testName := "TestSelect_DatasetFamilies_SmallRU"
+func TestStmtSelect_Query_DatasetFamilies_SmallRU(t *testing.T) {
+	testName := "TestStmtSelect_Query_DatasetFamilies_SmallRU"
 	client := _newRestClient(t, testName)
 	dbname := testDb
 	collname := testTable
@@ -417,8 +389,8 @@ func TestSelect_DatasetFamilies_SmallRU(t *testing.T) {
 	_testSelectDatasetFamilies(t, testName, db, collname)
 }
 
-func TestSelect_DatasetFamilies_LargeRU(t *testing.T) {
-	testName := "TestSelect_DatasetFamilies_LargeRU"
+func TestStmtSelect_Query_DatasetFamilies_LargeRU(t *testing.T) {
+	testName := "TestStmtSelect_Query_DatasetFamilies_LargeRU"
 	client := _newRestClient(t, testName)
 	dbname := testDb
 	collname := testTable
@@ -446,8 +418,8 @@ func _testSelectDatasetNutrition(t *testing.T, testName string, db *sql.DB, coll
 	_testSelectCustomDataset(t, testName, testCases, db, collname)
 }
 
-func TestSelect_DatasetNutrition_SmallRU(t *testing.T) {
-	testName := "TestSelect_DatasetNutrition_SmallRU"
+func TestStmtSelect_Query_DatasetNutrition_SmallRU(t *testing.T) {
+	testName := "TestStmtSelect_Query_DatasetNutrition_SmallRU"
 	client := _newRestClient(t, testName)
 	dbname := testDb
 	collname := testTable
@@ -461,8 +433,8 @@ func TestSelect_DatasetNutrition_SmallRU(t *testing.T) {
 	_testSelectDatasetNutrition(t, testName, db, collname)
 }
 
-func TestSelect_DatasetNutrition_LargeRU(t *testing.T) {
-	testName := "TestSelect_DatasetNutrition_LargeRU"
+func TestStmtSelect_Query_DatasetNutrition_LargeRU(t *testing.T) {
+	testName := "TestStmtSelect_Query_DatasetNutrition_LargeRU"
 	client := _newRestClient(t, testName)
 	dbname := testDb
 	collname := testTable
@@ -478,264 +450,179 @@ func TestSelect_DatasetNutrition_LargeRU(t *testing.T) {
 
 /*----------------------------------------------------------------------*/
 
-func Test_Query_Select(t *testing.T) {
-	name := "Test_Query_Select"
-	db := _openDb(t, name)
-
+func TestStmtSelect_Query(t *testing.T) {
+	testName := "TestStmtSelect_Query"
+	db := _openDb(t, testName)
+	dbname := "dbtemp"
 	db.Exec("DROP DATABASE IF EXISTS db_not_exists")
-	db.Exec("DROP DATABASE IF EXISTS dbtemp")
-	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
-	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
+	db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname))
+	db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbname))
+	defer db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname))
 	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
+		t.Fatalf("%s failed: %s", testName, err)
 	}
 
 	for i := 0; i < 100; i++ {
 		id := fmt.Sprintf("%02d", i)
 		username := "user" + strconv.Itoa(i%4)
-		db.Exec("INSERT INTO dbtemp.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4)", id, username, "user"+id+"@domain.com", i, username)
+		db.Exec(fmt.Sprintf("INSERT INTO %s.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4)", dbname), id, username, "user"+id+"@domain.com", i, username)
 	}
 
-	if dbRows, err := db.Query(`SELECT * FROM c WHERE c.username="user0" AND c.id>"30" ORDER BY c.id WITH database=dbtemp WITH collection=tbltemp`); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
+	if dbRows, err := db.Query(fmt.Sprintf(`SELECT * FROM c WHERE c.username="user0" AND c.id>"30" ORDER BY c.id WITH database=%s WITH collection=tbltemp`, dbname)); err != nil {
+		t.Fatalf("%s failed: %s", testName, err)
 	} else {
-		colTypes, err := dbRows.ColumnTypes()
+		rows, err := _fetchAllRows(dbRows)
 		if err != nil {
-			t.Fatalf("%s failed: %s", name, err)
+			t.Fatalf("%s failed: %s", testName, err)
 		}
-		numCols := len(colTypes)
-		rows := make(map[string]map[string]interface{})
-		for dbRows.Next() {
-			vals := make([]interface{}, numCols)
-			scanVals := make([]interface{}, numCols)
-			for i := 0; i < numCols; i++ {
-				scanVals[i] = &vals[i]
-			}
-			if err := dbRows.Scan(scanVals...); err == nil {
-				row := make(map[string]interface{})
-				for i, v := range colTypes {
-					row[v.Name()] = vals[i]
-				}
-				id := fmt.Sprintf("%s", row["id"])
-				rows[id] = row
-			} else if err != sql.ErrNoRows {
-				t.Fatalf("%s failed: %s", name, err)
-			}
-		}
+
 		if len(rows) != 17 {
-			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 17, len(rows))
+			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", testName, 17, len(rows))
 		}
-		for k := range rows {
-			if k <= "30" {
-				t.Fatalf("%s failed: document #%s should not be returned", name, k)
+		for _, row := range rows {
+			id := row["id"].(string)
+			if id <= "30" {
+				t.Fatalf("%s failed: document #%s should not be returned", testName, id)
 			}
 		}
 	}
 
-	if dbRows, err := db.Query(`SELECT CROSS PARTITION * FROM tbltemp c WHERE c.username>"user1" AND c.id>"53" WITH database=dbtemp`); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
+	if dbRows, err := db.Query(fmt.Sprintf(`SELECT CROSS PARTITION * FROM tbltemp c WHERE c.username>"user1" AND c.id>"53" WITH database=%s`, dbname)); err != nil {
+		t.Fatalf("%s failed: %s", testName, err)
 	} else {
-		colTypes, err := dbRows.ColumnTypes()
+		rows, err := _fetchAllRows(dbRows)
 		if err != nil {
-			t.Fatalf("%s failed: %s", name, err)
+			t.Fatalf("%s failed: %s", testName, err)
 		}
-		numCols := len(colTypes)
-		rows := make(map[string]map[string]interface{})
-		for dbRows.Next() {
-			vals := make([]interface{}, numCols)
-			scanVals := make([]interface{}, numCols)
-			for i := 0; i < numCols; i++ {
-				scanVals[i] = &vals[i]
-			}
-			if err := dbRows.Scan(scanVals...); err == nil {
-				row := make(map[string]interface{})
-				for i, v := range colTypes {
-					row[v.Name()] = vals[i]
-				}
-				id := fmt.Sprintf("%s", row["id"])
-				rows[id] = row
-			} else if err != sql.ErrNoRows {
-				t.Fatalf("%s failed: %s", name, err)
-			}
-		}
+
 		if len(rows) != 24 {
-			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 24, len(rows))
+			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", testName, 24, len(rows))
 		}
-		for k := range rows {
-			if k <= "53" {
-				t.Fatalf("%s failed: document #%s should not be returned", name, k)
+		for _, row := range rows {
+			id := row["id"].(string)
+			if id <= "53" {
+				t.Fatalf("%s failed: document #%s should not be returned", testName, id)
 			}
 		}
 	}
 
-	if _, err := db.Query(`SELECT * FROM c WITH db=dbtemp WITH collection=tbl_not_found`); err != ErrNotFound {
-		t.Fatalf("%s failed: expected ErrNotFound but received %#v", name, err)
+	if _, err := db.Query(fmt.Sprintf(`SELECT * FROM c WITH db=%s WITH collection=tbl_not_found`, dbname)); err != ErrNotFound {
+		t.Fatalf("%s failed: expected ErrNotFound but received %#v", testName, err)
 	}
 
 	if _, err := db.Query(`SELECT * FROM c WITH db=db_not_found WITH collection=tbltemp`); err != ErrNotFound {
-		t.Fatalf("%s failed: expected ErrNotFound but received %#v", name, err)
+		t.Fatalf("%s failed: expected ErrNotFound but received %#v", testName, err)
 	}
 }
 
-func Test_Query_SelectLongList(t *testing.T) {
-	name := "Test_Query_SelectLongList"
-	db := _openDb(t, name)
-
+func TestStmtSelect_Query_SelectLongList(t *testing.T) {
+	testName := "TestStmtSelect_Query_SelectLongList"
+	db := _openDb(t, testName)
+	dbname := "dbtemp"
 	db.Exec("DROP DATABASE IF EXISTS db_not_exists")
-	db.Exec("DROP DATABASE IF EXISTS dbtemp")
-	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
-	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
-	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
+	db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname))
+	db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbname))
+	defer db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname))
+	if _, err := db.Exec(fmt.Sprintf("CREATE COLLECTION %s.tbltemp WITH pk=/username WITH uk=/email", dbname)); err != nil {
+		t.Fatalf("%s failed: %s", testName, err)
 	}
 
 	for i := 0; i < 1000; i++ {
 		id := fmt.Sprintf("%03d", i)
 		username := "user" + strconv.Itoa(i%4)
-		db.Exec("INSERT INTO dbtemp.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4)", id, username, "user"+id+"@domain.com", i, username)
+		db.Exec(fmt.Sprintf("INSERT INTO %s.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4)", dbname), id, username, "user"+id+"@domain.com", i, username)
 	}
 
-	if dbRows, err := db.Query(`SELECT * FROM c WHERE c.username="user0" AND c.id>"030" ORDER BY c.id WITH database=dbtemp WITH collection=tbltemp`); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
+	if dbRows, err := db.Query(fmt.Sprintf(`SELECT * FROM c WHERE c.username="user0" AND c.id>"030" ORDER BY c.id WITH database=%s WITH collection=tbltemp`, dbname)); err != nil {
+		t.Fatalf("%s failed: %s", testName, err)
 	} else {
-		colTypes, err := dbRows.ColumnTypes()
+		rows, err := _fetchAllRows(dbRows)
 		if err != nil {
-			t.Fatalf("%s failed: %s", name, err)
+			t.Fatalf("%s failed: %s", testName, err)
 		}
-		numCols := len(colTypes)
-		rows := make(map[string]map[string]interface{})
-		for dbRows.Next() {
-			vals := make([]interface{}, numCols)
-			scanVals := make([]interface{}, numCols)
-			for i := 0; i < numCols; i++ {
-				scanVals[i] = &vals[i]
-			}
-			if err := dbRows.Scan(scanVals...); err == nil {
-				row := make(map[string]interface{})
-				for i, v := range colTypes {
-					row[v.Name()] = vals[i]
-				}
-				id := fmt.Sprintf("%s", row["id"])
-				rows[id] = row
-			} else if err != sql.ErrNoRows {
-				t.Fatalf("%s failed: %s", name, err)
-			}
-		}
+
 		if len(rows) != 242 {
-			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 242, len(rows))
+			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", testName, 242, len(rows))
 		}
-		for k := range rows {
-			if k <= "030" {
-				t.Fatalf("%s failed: document #%s should not be returned", name, k)
+		for _, row := range rows {
+			id := row["id"].(string)
+			if id <= "030" {
+				t.Fatalf("%s failed: document #%s should not be returned", testName, id)
 			}
 		}
 	}
 }
 
-func Test_Query_SelectPlaceholder(t *testing.T) {
-	name := "Test_Query_SelectPlaceholder"
-	db := _openDb(t, name)
-
+func TestStmtSelect_Query_SelectPlaceholder(t *testing.T) {
+	testName := "TestStmtSelect_Query_SelectPlaceholder"
+	db := _openDb(t, testName)
+	dbname := "dbtemp"
 	db.Exec("DROP DATABASE IF EXISTS db_not_exists")
-	db.Exec("DROP DATABASE IF EXISTS dbtemp")
-	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
-	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
-	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
+	db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname))
+	db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbname))
+	defer db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname))
+	if _, err := db.Exec(fmt.Sprintf("CREATE COLLECTION %s.tbltemp WITH pk=/username WITH uk=/email", dbname)); err != nil {
+		t.Fatalf("%s failed: %s", testName, err)
 	}
 
 	for i := 0; i < 100; i++ {
 		id := fmt.Sprintf("%02d", i)
 		username := "user" + strconv.Itoa(i%4)
-		db.Exec("INSERT INTO dbtemp.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4)", id, username, "user"+id+"@domain.com", i, username)
+		db.Exec(fmt.Sprintf("INSERT INTO %s.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4)", dbname), id, username, "user"+id+"@domain.com", i, username)
 	}
 
-	if dbRows, err := db.Query(`SELECT * FROM c WHERE c.username=$2 AND c.id>:1 ORDER BY c.id WITH database=dbtemp WITH collection=tbltemp`, "30", "user0"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
+	if dbRows, err := db.Query(fmt.Sprintf(`SELECT * FROM c WHERE c.username=$2 AND c.id>:1 ORDER BY c.id WITH database=%s WITH collection=tbltemp`, dbname), "30", "user0"); err != nil {
+		t.Fatalf("%s failed: %s", testName, err)
 	} else {
-		colTypes, err := dbRows.ColumnTypes()
+		rows, err := _fetchAllRows(dbRows)
 		if err != nil {
-			t.Fatalf("%s failed: %s", name, err)
+			t.Fatalf("%s failed: %s", testName, err)
 		}
-		numCols := len(colTypes)
-		rows := make(map[string]map[string]interface{})
-		for dbRows.Next() {
-			vals := make([]interface{}, numCols)
-			scanVals := make([]interface{}, numCols)
-			for i := 0; i < numCols; i++ {
-				scanVals[i] = &vals[i]
-			}
-			if err := dbRows.Scan(scanVals...); err == nil {
-				row := make(map[string]interface{})
-				for i, v := range colTypes {
-					row[v.Name()] = vals[i]
-				}
-				id := fmt.Sprintf("%s", row["id"])
-				rows[id] = row
-			} else if err != sql.ErrNoRows {
-				t.Fatalf("%s failed: %s", name, err)
-			}
-		}
+
 		if len(rows) != 17 {
-			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 17, len(rows))
+			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", testName, 17, len(rows))
 		}
-		for k := range rows {
-			if k <= "30" {
-				t.Fatalf("%s failed: document #%s should not be returned", name, k)
+		for _, row := range rows {
+			id := row["id"].(string)
+			if id <= "30" {
+				t.Fatalf("%s failed: document #%s should not be returned", testName, id)
 			}
 		}
 	}
 
-	if dbRows, err := db.Query(`SELECT CROSS PARTITION * FROM tbltemp WHERE tbltemp.username>@1 AND tbltemp.grade>:2 WITH database=dbtemp`, "user1", 53); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
+	if dbRows, err := db.Query(fmt.Sprintf(`SELECT CROSS PARTITION * FROM tbltemp WHERE tbltemp.username>@1 AND tbltemp.grade>:2 WITH database=%s`, dbname), "user1", 53); err != nil {
+		t.Fatalf("%s failed: %s", testName, err)
 	} else {
-		colTypes, err := dbRows.ColumnTypes()
+		rows, err := _fetchAllRows(dbRows)
 		if err != nil {
-			t.Fatalf("%s failed: %s", name, err)
+			t.Fatalf("%s failed: %s", testName, err)
 		}
-		numCols := len(colTypes)
-		rows := make(map[string]map[string]interface{})
-		for dbRows.Next() {
-			vals := make([]interface{}, numCols)
-			scanVals := make([]interface{}, numCols)
-			for i := 0; i < numCols; i++ {
-				scanVals[i] = &vals[i]
-			}
-			if err := dbRows.Scan(scanVals...); err == nil {
-				row := make(map[string]interface{})
-				for i, v := range colTypes {
-					row[v.Name()] = vals[i]
-				}
-				id := fmt.Sprintf("%s", row["id"])
-				rows[id] = row
-			} else if err != sql.ErrNoRows {
-				t.Fatalf("%s failed: %s", name, err)
-			}
-		}
+
 		if len(rows) != 24 {
-			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 24, len(rows))
+			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", testName, 24, len(rows))
 		}
-		for k := range rows {
-			if k <= "53" {
-				t.Fatalf("%s failed: document #%s should not be returned", name, k)
+		for _, row := range rows {
+			id := row["id"].(string)
+			if id <= "53" {
+				t.Fatalf("%s failed: document #%s should not be returned", testName, id)
 			}
 		}
 	}
 
-	if _, err := db.Query(`SELECT * FROM c WHERE c.username=$2 AND c.id>:10 ORDER BY c.id WITH database=dbtemp WITH collection=tbltemp`, "30", "user0"); err == nil || strings.Index(err.Error(), "no placeholder") < 0 {
-		t.Fatalf("%s failed: expecting 'no placeholder' but received %s", name, err)
+	if _, err := db.Query(fmt.Sprintf(`SELECT * FROM c WHERE c.username=$2 AND c.id>:10 ORDER BY c.id WITH database=%s WITH collection=tbltemp`, dbname), "30", "user0"); err == nil || strings.Index(err.Error(), "no placeholder") < 0 {
+		t.Fatalf("%s failed: expecting 'no placeholder' but received %s", testName, err)
 	}
 }
 
-func Test_Query_SelectPkranges(t *testing.T) {
-	name := "Test_Query_SelectPkranges"
-	db := _openDb(t, name)
-
-	db.Exec("DROP DATABASE IF EXISTS dbtemp")
-	db.Exec("CREATE DATABASE IF NOT EXISTS dbtemp")
-	defer db.Exec("DROP DATABASE IF EXISTS dbtemp")
-	if _, err := db.Exec("CREATE COLLECTION dbtemp.tbltemp WITH pk=/username WITH uk=/email"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
+func TestStmtSelect_Query_SelectPkranges(t *testing.T) {
+	testName := "TestStmtSelect_Query_SelectPkranges"
+	db := _openDb(t, testName)
+	dbname := "dbtemp"
+	db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname))
+	db.Exec(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS %s", dbname))
+	defer db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname))
+	if _, err := db.Exec(fmt.Sprintf("CREATE COLLECTION %s.tbltemp WITH pk=/username WITH uk=/email", dbname)); err != nil {
+		t.Fatalf("%s failed: %s", testName, err)
 	}
 
 	var wait sync.WaitGroup
@@ -747,78 +634,43 @@ func Test_Query_SelectPkranges(t *testing.T) {
 			id := fmt.Sprintf("%04d", i)
 			username := "user" + fmt.Sprintf("%02x", i%d)
 			email := "user" + strconv.Itoa(i) + "@domain.com"
-			db.Exec("INSERT INTO dbtemp.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4)", id, username, email, i, username)
+			db.Exec(fmt.Sprintf("INSERT INTO %s.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4)", dbname), id, username, email, i, username)
 			wait.Done()
 		}(i)
 	}
 	wait.Wait()
 
-	query := `SELECT CROSS PARTITION * FROM c WHERE c.id>$1 ORDER BY c.id OFFSET 5 LIMIT 23 WITH database=dbtemp WITH collection=tbltemp`
+	query := fmt.Sprintf(`SELECT CROSS PARTITION * FROM c WHERE c.id>$1 ORDER BY c.id OFFSET 5 LIMIT 23 WITH database=%s WITH collection=tbltemp`, dbname)
 	if dbRows, err := db.Query(query, "0123"); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
+		t.Fatalf("%s failed: %s", testName, err)
 	} else {
-		colTypes, err := dbRows.ColumnTypes()
+		rows, err := _fetchAllRows(dbRows)
 		if err != nil {
-			t.Fatalf("%s failed: %s", name, err)
+			t.Fatalf("%s failed: %s", testName, err)
 		}
-		numCols := len(colTypes)
-		rows := make(map[string]map[string]interface{})
-		for dbRows.Next() {
-			vals := make([]interface{}, numCols)
-			scanVals := make([]interface{}, numCols)
-			for i := 0; i < numCols; i++ {
-				scanVals[i] = &vals[i]
-			}
-			if err := dbRows.Scan(scanVals...); err == nil {
-				row := make(map[string]interface{})
-				for i, v := range colTypes {
-					row[v.Name()] = vals[i]
-				}
-				id := fmt.Sprintf("%s", row["id"])
-				rows[id] = row
-			} else if err != sql.ErrNoRows {
-				t.Fatalf("%s failed: %s", name, err)
-			}
-		}
+
 		if len(rows) != 23 {
-			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 23, len(rows))
+			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", testName, 23, len(rows))
 		}
-		for k := range rows {
-			if k <= "0123" {
-				t.Fatalf("%s failed: document #%s should not be returned", name, k)
+		for _, row := range rows {
+			id := row["id"].(string)
+			if id <= "0123" {
+				t.Fatalf("%s failed: document #%s should not be returned", testName, id)
 			}
 		}
 	}
 
-	query = `SELECT c.username, sum(c.index) FROM tbltemp c WHERE c.id<"0123" GROUP BY c.username OFFSET 110 LIMIT 20 WITH database=dbtemp WITH cross_partition=true`
+	query = fmt.Sprintf(`SELECT c.username, sum(c.index) FROM tbltemp c WHERE c.id<"0123" GROUP BY c.username OFFSET 110 LIMIT 20 WITH database=%s WITH cross_partition=true`, dbname)
 	if dbRows, err := db.Query(query); err != nil {
-		t.Fatalf("%s failed: %s", name, err)
+		t.Fatalf("%s failed: %s", testName, err)
 	} else {
-		colTypes, err := dbRows.ColumnTypes()
+		rows, err := _fetchAllRows(dbRows)
 		if err != nil {
-			t.Fatalf("%s failed: %s", name, err)
+			t.Fatalf("%s failed: %s", testName, err)
 		}
-		numCols := len(colTypes)
-		rows := make(map[string]map[string]interface{})
-		for dbRows.Next() {
-			vals := make([]interface{}, numCols)
-			scanVals := make([]interface{}, numCols)
-			for i := 0; i < numCols; i++ {
-				scanVals[i] = &vals[i]
-			}
-			if err := dbRows.Scan(scanVals...); err == nil {
-				row := make(map[string]interface{})
-				for i, v := range colTypes {
-					row[v.Name()] = vals[i]
-				}
-				id := fmt.Sprintf("%s", row["username"])
-				rows[id] = row
-			} else if err != sql.ErrNoRows {
-				t.Fatalf("%s failed: %s", name, err)
-			}
-		}
+
 		if len(rows) != 13 {
-			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", name, 13, len(rows))
+			t.Fatalf("%s failed: <num-document> expected %#v but received %#v", testName, 13, len(rows))
 		}
 	}
 }
