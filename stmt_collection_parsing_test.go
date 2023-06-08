@@ -40,7 +40,7 @@ func TestStmtCreateCollection_parse(t *testing.T) {
 				return
 			}
 			if err != nil {
-				t.Fatalf("%s failed: %s", testName+"/"+testCase.name, err)
+				t.Fatalf("%s failed: %s\n%s", testName+"/"+testCase.name, err, testCase.sql)
 			}
 			stmt, ok := s.(*StmtCreateCollection)
 			if !ok {

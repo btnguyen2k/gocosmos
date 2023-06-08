@@ -15,7 +15,6 @@ const (
 	ifNotExists = `(\s+IF\s+NOT\s+EXISTS)?`
 	ifExists    = `(\s+IF\s+EXISTS)?`
 	with        = `(\s+WITH\s+` + field + `\s*=\s*([\w/\.\*,;:'"-]+)((\s+|\s*,\s+|\s+,\s*)WITH\s+` + field + `\s*=\s*([\w/\.\*,;:'"-]+))*)?`
-	// with        = `((\s+WITH\s+([\w-]+)\s*=\s*([\w/\.,;:'"-]+))*)`
 )
 
 var (
@@ -217,15 +216,21 @@ type Stmt struct {
 	withOpts map[string]string
 }
 
-var reWithOpt = regexp.MustCompile(`(?i)WITH\s+([\w-]+)\s*=\s*([\w/\.,;:'"-]+)`)
+var reWithOpts = regexp.MustCompile(`(?is)^(\s+|\s*,\s+|\s+,\s*)WITH\s+` + field + `\s*=\s*([\w/\.\*,;:'"-]+)`)
 
 // parseWithOpts parses "WITH..." clause and store result in withOpts map.
 // This function returns no error. Sub-implementations may override this behavior.
 func (s *Stmt) parseWithOpts(withOptsStr string) error {
+	withOptsStr = " " + withOptsStr
 	s.withOpts = make(map[string]string)
-	tokens := reWithOpt.FindAllStringSubmatch(withOptsStr, -1)
-	for _, token := range tokens {
-		s.withOpts[strings.TrimSpace(strings.ToUpper(token[1]))] = strings.TrimSpace(token[2])
+	for {
+		matches := reWithOpts.FindStringSubmatch(withOptsStr)
+		if matches == nil {
+			break
+		}
+		k := strings.TrimSpace(strings.ToUpper(matches[2]))
+		s.withOpts[k] = strings.TrimSuffix(strings.TrimSpace(matches[3]), ",")
+		withOptsStr = withOptsStr[len(matches[0]):]
 	}
 	return nil
 }

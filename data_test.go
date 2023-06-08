@@ -28475,7 +28475,7 @@ const _testDataVolcano = `
 
 func _initDataNutrition(t *testing.T, testName string, client *RestClient, db, container string) {
 	dataListNutrition := make([]DocInfo, 0)
-	dataMapNutrition := make(map[string]DocInfo)
+	dataMapNutrition := sync.Map{}
 	err := json.Unmarshal([]byte(_testDataNutrition), &dataListNutrition)
 	if err != nil {
 		t.Fatalf("%s failed: %s", testName, err)
@@ -28493,7 +28493,7 @@ func _initDataNutrition(t *testing.T, testName string, client *RestClient, db, c
 			defer wg.Done()
 			for doc := range buff {
 				docId := doc["id"].(string)
-				dataMapNutrition[docId] = doc
+				dataMapNutrition.Store(docId, doc)
 				if result := client.CreateDocument(DocumentSpec{DbName: db, CollName: container, PartitionKeyValues: []interface{}{docId}, DocumentData: doc}); result.Error() != nil {
 					t.Fatalf("%s failed: (%#v) %s", testName, id, result.Error())
 				}
@@ -28524,7 +28524,12 @@ func _initDataNutrition(t *testing.T, testName string, client *RestClient, db, c
 		fmt.Printf("\t[DEBUG] Dur: %.3f / Rate: %.3f\n", d.Seconds(), r)
 		time.Sleep(1*time.Second + time.Duration(rand.Intn(1234))*time.Millisecond)
 	}
-	fmt.Printf("\tDataset: %#v / (checksum) Number of records: %#v\n", "Nutrition", len(dataMapNutrition))
+	count := 0
+	dataMapNutrition.Range(func(_, _ interface{}) bool {
+		count++
+		return true
+	})
+	fmt.Printf("\tDataset: %#v / (checksum) Number of records: %#v\n", "Nutrition", count)
 }
 
 func _initDataNutritionSmallRU(t *testing.T, testName string, client *RestClient, db, container string) {
