@@ -28501,8 +28501,8 @@ func _initDataNutrition(t *testing.T, testName string, client *RestClient, db, c
 				for {
 					now := time.Now()
 					d := now.Sub(start)
-					r := float64(numDocWritten) / (d.Seconds() + 0.01)
-					if r <= 123.0 {
+					r := float64(numDocWritten) / (d.Seconds() + 0.001)
+					if r <= 81.19 {
 						break
 					}
 					fmt.Printf("\t[DEBUG] too fast, slowing down...(Id: %d / NumDocs: %d / Dur: %.3f / Rate: %.3f)\n", id, numDocWritten, d.Seconds(), r)
@@ -28520,7 +28520,7 @@ func _initDataNutrition(t *testing.T, testName string, client *RestClient, db, c
 	{
 		now := time.Now()
 		d := now.Sub(start)
-		r := float64(numDocWritten) / (d.Seconds() + 0.01)
+		r := float64(numDocWritten) / (d.Seconds() + 0.001)
 		fmt.Printf("\t[DEBUG] Dur: %.3f / Rate: %.3f\n", d.Seconds(), r)
 		time.Sleep(1*time.Second + time.Duration(rand.Intn(1234))*time.Millisecond)
 	}
