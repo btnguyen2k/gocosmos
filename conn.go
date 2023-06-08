@@ -24,7 +24,7 @@ func (c *Conn) Prepare(query string) (driver.Stmt, error) {
 
 // PrepareContext implements driver.ConnPrepareContext/PrepareContext.
 //
-// @Available since v0.3.0
+// @Available since v0.2.1
 func (c *Conn) PrepareContext(_ context.Context, query string) (driver.Stmt, error) {
 	return parseQueryWithDefaultDb(c, c.defaultDb, query)
 }
@@ -41,7 +41,7 @@ func (c *Conn) Begin() (driver.Tx, error) {
 
 // BeginTx implements driver.ConnBeginTx/BeginTx.
 //
-// @Available since v0.3.0
+// @Available since v0.2.1
 func (c *Conn) BeginTx(_ context.Context, _ driver.TxOptions) (driver.Tx, error) {
 	return nil, errors.New("transaction is not supported")
 }

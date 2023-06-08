@@ -104,6 +104,32 @@ jobs:
           flags: driver_document_non_query
           name: driver_document_non_query
 
+  testDriverStmtDocumentQuery:
+    name: Test driver document query statements
+    runs-on: windows-latest
+    steps:
+      - name: Set up Go env
+        uses: actions/setup-go@v2
+        with:
+          go-version: ^1.13
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v2
+      - name: Test
+        run: |
+          choco install azure-cosmosdb-emulator
+          & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
+          Start-Sleep -s 60
+          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
+          netstat -nt
+          $env:COSMOSDB_DRIVER='gocosmos'
+          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw=='
+          go test -cover -coverprofile="coverage_driver_document_query.txt" -v -count 1 -p 1 -run "TestStmtSelect_(Exec|Query)" .
+      - name: Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          flags: driver_document_query
+          name: driver_document_query
+
   testDriverSelect:
     name: Test driver SELECT query
     runs-on: windows-latest

@@ -5,9 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 )
@@ -258,7 +256,10 @@ func (s *StmtDelete) Query(_ []driver.Value) (driver.Rows, error) {
 //
 // Syntax:
 //
-//	SELECT [CROSS PARTITION] ... FROM <collection/table-name> ... WITH database|db=<db-name> [WITH collection|table=<collection/table-name>] [WITH cross_partition=true]
+//	SELECT [CROSS PARTITION] ... FROM <collection/table-name> ...
+//	WITH database|db=<db-name>
+//	[WITH collection|table=<collection/table-name>]
+//	[WITH cross_partition=true]
 //
 //	- (extension) If the collection is partitioned, specify "CROSS PARTITION" to allow execution across multiple partitions.
 //	  This clause is not required if query is to be executed on a single partition.
@@ -321,8 +322,7 @@ func (s *StmtSelect) validate() error {
 	return nil
 }
 
-// Query implements driver.Stmt.Query.
-// Upon successful call, this function returns (*ResultSelect, nil).
+// Query implements driver.Stmt/Query.
 func (s *StmtSelect) Query(args []driver.Value) (driver.Rows, error) {
 	params := make([]interface{}, 0)
 	for i, arg := range args {
@@ -340,83 +340,20 @@ func (s *StmtSelect) Query(args []driver.Value) (driver.Rows, error) {
 		CrossPartitionEnabled: s.isCrossPartition,
 	}
 
-	result := s.conn.restClient.QueryDocumentsCrossPartition(query)
-	err := result.Error()
-	var rows driver.Rows
-	if err == nil {
-		documents := result.Documents.AsDocInfoSlice()
-		if documents == nil {
-			documents = make([]DocInfo, len(result.Documents))
-			for i, doc := range result.Documents {
-				var docInfo DocInfo = map[string]interface{}{"$1": doc}
-				documents[i] = docInfo
-			}
-		}
-		for i, doc := range documents {
-			documents[i] = doc.RemoveSystemAttrs()
-		}
-		rows = &ResultSelect{count: len(documents), documents: documents, cursorCount: 0, columnList: make([]string, 0)}
-
-		// build column list
-		columnList := make([]string, 0)
-		columnMap := make(map[string]bool)
-		for _, doc := range documents {
-			for colName := range doc {
-				if _, ok := columnMap[colName]; !ok {
-					columnMap[colName] = true
-					columnList = append(columnList, colName)
-				}
-			}
-		}
-		sort.Strings(columnList)
-		rows.(*ResultSelect).columnList = columnList
+	restResult := s.conn.restClient.QueryDocumentsCrossPartition(query)
+	result := &ResultResultSet{err: restResult.Error(), columnList: make([]string, 0)}
+	if result.err == nil {
+		result.documents = restResult.Documents
+		result.init()
 	}
-	switch result.StatusCode {
-	case 403:
-		err = ErrForbidden
-	case 404:
-		err = ErrNotFound
-		// case 409:
-		// 	err = ErrConflict
-	}
-	return rows, err
+	result.err = normalizeError(restResult.StatusCode, 0, result.err)
+	return result, result.err
 }
 
-// Exec implements driver.Stmt.Exec.
+// Exec implements driver.Stmt/Exec.
 // This function is not implemented, use Query instead.
-func (s *StmtSelect) Exec(args []driver.Value) (driver.Result, error) {
-	return nil, errors.New("this operation is not supported, please use query")
-}
-
-// ResultSelect captures the result from SELECT operation.
-type ResultSelect struct {
-	count       int
-	documents   []DocInfo
-	cursorCount int
-	columnList  []string
-}
-
-// Columns implements driver.Rows.Columns.
-func (r *ResultSelect) Columns() []string {
-	return r.columnList
-}
-
-// Close implements driver.Rows.Close.
-func (r *ResultSelect) Close() error {
-	return nil
-}
-
-// Next implements driver.Rows.Next.
-func (r *ResultSelect) Next(dest []driver.Value) error {
-	if r.cursorCount >= r.count {
-		return io.EOF
-	}
-	rowData := r.documents[r.cursorCount]
-	r.cursorCount++
-	for i, colName := range r.columnList {
-		dest[i] = rowData[colName]
-	}
-	return nil
+func (s *StmtSelect) Exec(_ []driver.Value) (driver.Result, error) {
+	return nil, ErrExecNotSupported
 }
 
 /*----------------------------------------------------------------------*/

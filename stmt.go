@@ -242,6 +242,36 @@ func (s *Stmt) NumInput() int {
 
 /*----------------------------------------------------------------------*/
 
+func normalizeError(statusCode, ignoreErrorCode int, err error) error {
+	switch statusCode {
+	case 403:
+		if ignoreErrorCode == 403 {
+			return nil
+		} else {
+			return ErrForbidden
+		}
+	case 404:
+		if ignoreErrorCode == 404 {
+			return nil
+		} else {
+			return ErrNotFound
+		}
+	case 409:
+		if ignoreErrorCode == 409 {
+			return nil
+		} else {
+			return ErrConflict
+		}
+	case 412:
+		if ignoreErrorCode == 412 {
+			return nil
+		} else {
+			return ErrPreconditionFailure
+		}
+	}
+	return err
+}
+
 func buildResultNoResultSet(restResponse *RestReponse, supportLastInsertId bool, rid string, ignoreErrorCode int) *ResultNoResultSet {
 	result := &ResultNoResultSet{
 		err:                 restResponse.Error(),
@@ -251,38 +281,13 @@ func buildResultNoResultSet(restResponse *RestReponse, supportLastInsertId bool,
 	if result.err == nil {
 		result.affectedRows = 1
 	}
-	switch restResponse.StatusCode {
-	case 403:
-		if ignoreErrorCode == 403 {
-			result.err = nil
-		} else {
-			result.err = ErrForbidden
-		}
-	case 404:
-		if ignoreErrorCode == 404 {
-			result.err = nil
-		} else {
-			result.err = ErrNotFound
-		}
-	case 409:
-		if ignoreErrorCode == 409 {
-			result.err = nil
-		} else {
-			result.err = ErrConflict
-		}
-	case 412:
-		if ignoreErrorCode == 412 {
-			result.err = nil
-		} else {
-			result.err = ErrPreconditionFailure
-		}
-	}
+	result.err = normalizeError(restResponse.StatusCode, ignoreErrorCode, result.err)
 	return result
 }
 
 // ResultNoResultSet captures the result from statements that do not expect a ResultSet to be returned.
 //
-// @Available since v0.3.0
+// @Available since v0.2.1
 type ResultNoResultSet struct {
 	err                 error
 	affectedRows        int64
@@ -310,26 +315,44 @@ func (r *ResultNoResultSet) RowsAffected() (int64, error) {
 
 // ResultResultSet captures the result from statements that expect a ResultSet to be returned.
 //
-// @Available since v0.3.0
+// @Available since v0.2.1
 type ResultResultSet struct {
 	err         error
 	count       int
 	cursorCount int
 	columnList  []string
 	columnTypes map[string]reflect.Type
-	rowData     []map[string]interface{}
+	rows        []DocInfo
+	documents   QueriedDocs
 }
 
 func (r *ResultResultSet) init() *ResultResultSet {
-	if r.rowData == nil {
+	if r.rows == nil && r.documents == nil {
 		return r
 	}
+
+	if r.rows == nil {
+		documents := r.documents.AsDocInfoSlice()
+		if documents == nil {
+			// special case: result from a query like "SELECT COUNT(...)"
+			documents = make([]DocInfo, len(r.documents))
+			for i, doc := range r.documents {
+				var docInfo DocInfo = map[string]interface{}{"$1": doc}
+				documents[i] = docInfo
+			}
+		}
+		for i, doc := range documents {
+			documents[i] = doc.RemoveSystemAttrs()
+		}
+		r.rows = documents
+	}
+
 	if r.columnTypes == nil {
 		r.columnTypes = make(map[string]reflect.Type)
 	}
-	r.count = len(r.rowData)
+	r.count = len(r.rows)
 	colMap := make(map[string]bool)
-	for _, item := range r.rowData {
+	for _, item := range r.rows {
 		for col, val := range item {
 			colMap[col] = true
 			if r.columnTypes[col] == nil {
@@ -374,7 +397,7 @@ func (r *ResultResultSet) Next(dest []driver.Value) error {
 	if r.cursorCount >= r.count {
 		return io.EOF
 	}
-	rowData := r.rowData[r.cursorCount]
+	rowData := r.rows[r.cursorCount]
 	r.cursorCount++
 	for i, colName := range r.columnList {
 		dest[i] = rowData[colName]

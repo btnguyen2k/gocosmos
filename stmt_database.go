@@ -204,9 +204,9 @@ func (s *StmtListDatabases) Query(_ []driver.Value) (driver.Rows, error) {
 	}
 	if result.err == nil {
 		result.count = len(restResult.Databases)
-		result.rowData = make([]map[string]interface{}, result.count)
+		result.rows = make([]DocInfo, result.count)
 		for i, db := range restResult.Databases {
-			result.rowData[i] = db.toMap()
+			result.rows[i] = db.toMap()
 		}
 	}
 	switch restResult.StatusCode {

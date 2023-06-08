@@ -278,9 +278,9 @@ func (s *StmtListCollections) Query(_ []driver.Value) (driver.Rows, error) {
 	}
 	if result.err == nil {
 		result.count = len(restResult.Collections)
-		result.rowData = make([]map[string]interface{}, result.count)
+		result.rows = make([]DocInfo, result.count)
 		for i, coll := range restResult.Collections {
-			result.rowData[i] = coll.toMap()
+			result.rows[i] = coll.toMap()
 		}
 	}
 	switch restResult.StatusCode {

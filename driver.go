@@ -69,22 +69,22 @@ var (
 	// ErrPreconditionFailure is returned when operation specified an eTag that is different from the version available
 	// at the server, that is, an optimistic concurrency error.
 	//
-	// @Available since v0.3.0
+	// @Available since v0.2.1
 	ErrPreconditionFailure = errors.New("StatusCode=412 Precondition failure")
 
 	// ErrOperationNotSupported is returned to indicate that the operation is not supported.
 	//
-	// @Available since v0.3.0
+	// @Available since v0.2.1
 	ErrOperationNotSupported = errors.New("this operation is not supported")
 
 	// ErrExecNotSupported is returned to indicate that the Exec/ExecContext operation is not supported.
 	//
-	// @Available since v0.3.0
+	// @Available since v0.2.1
 	ErrExecNotSupported = errors.New("this operation is not supported, please use Query")
 
 	// ErrQueryNotSupported is returned to indicate that the Query/QueryContext operation is not supported.
 	//
-	// @Available since v0.3.0
+	// @Available since v0.2.1
 	ErrQueryNotSupported = errors.New("this operation is not supported, please use Exec")
 )
 
