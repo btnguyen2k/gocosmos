@@ -7,7 +7,7 @@ import (
 
 const (
 	// Version of package gocosmos.
-	Version = "0.3.0"
+	Version = "0.2.1"
 )
 
 func goTypeToCosmosDbType(typ reflect.Type) string {
