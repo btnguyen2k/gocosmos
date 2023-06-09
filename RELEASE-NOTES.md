@@ -1,6 +1,6 @@
-# gocosmos release notes
+# gocosmos - Release notes
 
-## 2023-06-xx - v0.2.1
+## 2023-06-09 - v0.2.1
 
 - Bug fixes, Refactoring & Enhancements.
 
