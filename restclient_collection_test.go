@@ -65,6 +65,54 @@ func TestRestClient_CreateCollection(t *testing.T) {
 	}
 }
 
+func TestRestClient_CreateCollection_SubPartitions(t *testing.T) {
+	name := "TestRestClient_CreateCollection_SubPartitions"
+	client := _newRestClient(t, name)
+
+	dbname := testDb
+	collname := testTable
+	collspecList := []CollectionSpec{
+		// Hierarchical Partition Keys
+		{DbName: dbname, CollName: collname, PartitionKeyInfo: map[string]interface{}{"paths": []string{"/TenantId", "/UserId"}, "kind": "MultiHash", "version": 2}},
+		{DbName: dbname, CollName: collname, MaxRu: 4000, PartitionKeyInfo: map[string]interface{}{"paths": []string{"/TenantId", "/UserId", "/SessionId"}, "kind": "MultiHash", "version": 2}},
+	}
+	for _, collspec := range collspecList {
+		client.DeleteDatabase(dbname)
+		client.CreateDatabase(DatabaseSpec{Id: dbname})
+		var collInfo CollInfo
+		if result := client.CreateCollection(collspec); result.Error() != nil {
+			t.Fatalf("%s failed: %s", name, result.Error())
+		} else if result.Id != collname {
+			t.Fatalf("%s failed: <coll-id> expected %#v but received %#v", name+"/CreateDatabase", collname, result.Id)
+		} else if result.Rid == "" || result.Self == "" || result.Etag == "" || result.Docs == "" ||
+			result.Sprocs == "" || result.Triggers == "" || result.Udfs == "" || result.Conflicts == "" ||
+			result.Ts <= 0 || len(result.IndexingPolicy) == 0 || len(result.PartitionKey) == 0 {
+			t.Fatalf("%s failed: invalid collinfo returned %#v", name, result.CollInfo)
+		} else {
+			collInfo = result.CollInfo
+		}
+
+		if collspec.Ru > 0 || collspec.MaxRu > 0 {
+			if result := client.GetOfferForResource(collInfo.Rid); result.Error() != nil {
+				t.Fatalf("%s failed: %s", name, result.Error())
+			} else {
+				if ru, maxru := result.OfferThroughput(), result.MaxThroughputEverProvisioned(); collspec.Ru > 0 && (collspec.Ru != ru || collspec.Ru != maxru) {
+					t.Fatalf("%s failed: <offer-throughput> expected %#v but expected {ru:%#v, maxru:%#v}", name, collspec.Ru, ru, maxru)
+				}
+				if ru, maxru := result.OfferThroughput(), result.MaxThroughputEverProvisioned(); collspec.MaxRu > 0 && (collspec.MaxRu != ru*10 || collspec.MaxRu != maxru) {
+					t.Fatalf("%s failed: <max-throughput> expected %#v but expected {ru:%#v, maxru:%#v}", name, collspec.MaxRu, ru, maxru)
+				}
+			}
+		}
+
+		if result := client.CreateCollection(collspec); result.CallErr != nil {
+			t.Fatalf("%s failed: %s", name, result.CallErr)
+		} else if result.StatusCode != 409 {
+			t.Fatalf("%s failed: <status-code> expected %#v but received %#v", name, 409, result.StatusCode)
+		}
+	}
+}
+
 func TestRestClient_ChangeOfferCollection(t *testing.T) {
 	name := "TestRestClient_ChangeOfferCollection"
 	client := _newRestClient(t, name)

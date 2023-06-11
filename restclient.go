@@ -31,7 +31,13 @@ const (
 	settingVersion            = "VERSION"
 	settingAutoId             = "AUTOID"
 	settingInsecureSkipVerify = "INSECURESKIPVERIFY"
-	defaultApiVersion         = "2018-12-31"
+
+	// DefaultApiVersion holds the default REST API version if not specified in the connection string.
+	//
+	// See: https://learn.microsoft.com/en-us/rest/api/cosmos-db/#supported-rest-api-versions
+	//
+	// @Available since v0.3.0
+	DefaultApiVersion = "2020-07-15"
 )
 
 // NewRestClient constructs a new RestClient instance from the supplied connection string.
@@ -41,7 +47,7 @@ const (
 //
 //	AccountEndpoint=<cosmosdb-restapi-endpoint>;AccountKey=<account-key>[;TimeoutMs=<timeout-in-ms>][;Version=<cosmosdb-api-version>][;AutoId=<true/false>][;InsecureSkipVerify=<true/false>]
 //
-// If not supplied, default value for TimeoutMs is 10 seconds, Version is defaultApiVersion (which is "2018-12-31"), AutoId is true, and InsecureSkipVerify is false
+// If not supplied, default value for TimeoutMs is 10 seconds, Version is DefaultApiVersion (which is "2020-07-15"), AutoId is true, and InsecureSkipVerify is false
 //
 // - AutoId is added since v0.1.2
 // - InsecureSkipVerify is added since v0.1.4
@@ -75,7 +81,7 @@ func NewRestClient(httpClient *http.Client, connStr string) (*RestClient, error)
 	}
 	apiVersion := params[settingVersion]
 	if apiVersion == "" {
-		apiVersion = defaultApiVersion
+		apiVersion = DefaultApiVersion
 	}
 	autoId, err := strconv.ParseBool(params[settingAutoId])
 	if err != nil {

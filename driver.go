@@ -98,7 +98,7 @@ type Driver struct {
 //
 //	AccountEndpoint=<cosmosdb-restapi-endpoint>;AccountKey=<account-key>[;TimeoutMs=<timeout-in-ms>][;Version=<cosmosdb-api-version>][;DefaultDb=<db-name>][;AutoId=<true/false>][;InsecureSkipVerify=<true/false>]
 //
-// If not supplied, default value for TimeoutMs is 10 seconds, Version is defaultApiVersion (which is "2018-12-31"), AutoId is true, and InsecureSkipVerify is false
+// If not supplied, default value for TimeoutMs is 10 seconds, Version is DefaultApiVersion (which is "2020-07-15"), AutoId is true, and InsecureSkipVerify is false
 //
 // - DefaultDb is added since v0.1.1
 // - AutoId is added since v0.1.2

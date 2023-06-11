@@ -27,8 +27,9 @@ func TestStmtCreateCollection_parse(t *testing.T) {
 
 		{name: "basic", sql: "CREATE COLLECTION db1.table1 WITH pk=/id", expected: &StmtCreateCollection{dbName: "db1", collName: "table1", pk: "/id"}},
 		{name: "table_with_ru", sql: "create\ntable\rdb-2.table_2 WITH\tPK=/email WITH\r\nru=100", expected: &StmtCreateCollection{dbName: "db-2", collName: "table_2", pk: "/email", ru: 100}},
-		{name: "if_not_exists_large_pk_with_maxru", sql: "CREATE collection\nIF\rNOT\t\nEXISTS\n\tdb_3.table-3 with largePK=/id WITH\t\rmaxru=100", expected: &StmtCreateCollection{dbName: "db_3", collName: "table-3", ifNotExists: true, isLargePk: true, pk: "/id", maxru: 100}},
-		{name: "table_if_not_exists_large_pk_with_uk", sql: "create TABLE if not exists db-0_1.table_0-1 WITH LARGEpk=/a/b/c with uk=/a:/b,/c/d;/e/f/g", expected: &StmtCreateCollection{dbName: "db-0_1", collName: "table_0-1", ifNotExists: true, isLargePk: true, pk: "/a/b/c", uk: [][]string{{"/a"}, {"/b", "/c/d"}, {"/e/f/g"}}}},
+		{name: "if_not_exists_large_pk_with_maxru", sql: "CREATE collection\nIF\rNOT\t\nEXISTS\n\tdb_3.table-3 with largePK=/id WITH\t\rmaxru=100", expected: &StmtCreateCollection{dbName: "db_3", collName: "table-3", ifNotExists: true, pk: "/id", maxru: 100}},
+		{name: "table_if_not_exists_large_pk_with_uk", sql: "create TABLE if not exists db-0_1.table_0-1 WITH LARGEpk=/a/b/c with uk=/a:/b,/c/d;/e/f/g", expected: &StmtCreateCollection{dbName: "db-0_1", collName: "table_0-1", ifNotExists: true, pk: "/a/b/c", uk: [][]string{{"/a"}, {"/b", "/c/d"}, {"/e/f/g"}}}},
+		{name: "subpartitions", sql: "CREATE COLLECTION db1.table1 WITH pk=/TenantId,/UserId,/SessionId", expected: &StmtCreateCollection{dbName: "db1", collName: "table1", pk: "/TenantId,/UserId,/SessionId"}},
 	}
 	for _, testCase := range testData {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -68,8 +69,9 @@ func TestStmtCreateCollection_parse_defaultDb(t *testing.T) {
 
 		{name: "basic", db: "mydb", sql: "CREATE COLLECTION table1 WITH pk=/id", expected: &StmtCreateCollection{dbName: "mydb", collName: "table1", pk: "/id"}},
 		{name: "db_in_query", db: "mydb", sql: "create\ntable\r\ndb2.table_2 WITH\r\t\nPK=/email WITH\nru=100", expected: &StmtCreateCollection{dbName: "db2", collName: "table_2", pk: "/email", ru: 100}},
-		{name: "if_not_exists", db: "mydb", sql: "CREATE collection\nIF\nNOT\t\nEXISTS\n\ttable-3 with largePK=/id WITH\tmaxru=100", expected: &StmtCreateCollection{dbName: "mydb", collName: "table-3", ifNotExists: true, isLargePk: true, pk: "/id", maxru: 100}},
-		{name: "db_in_query_if_not_exists", db: "mydb", sql: "create TABLE if not exists db3.table_0-1 WITH LARGEpk=/a/b/c with uk=/a:/b,/c/d;/e/f/g", expected: &StmtCreateCollection{dbName: "db3", collName: "table_0-1", ifNotExists: true, isLargePk: true, pk: "/a/b/c", uk: [][]string{{"/a"}, {"/b", "/c/d"}, {"/e/f/g"}}}},
+		{name: "if_not_exists", db: "mydb", sql: "CREATE collection\nIF\nNOT\t\nEXISTS\n\ttable-3 with largePK=/id WITH\tmaxru=100", expected: &StmtCreateCollection{dbName: "mydb", collName: "table-3", ifNotExists: true, pk: "/id", maxru: 100}},
+		{name: "db_in_query_if_not_exists", db: "mydb", sql: "create TABLE if not exists db3.table_0-1 WITH LARGEpk=/a/b/c with uk=/a:/b,/c/d;/e/f/g", expected: &StmtCreateCollection{dbName: "db3", collName: "table_0-1", ifNotExists: true, pk: "/a/b/c", uk: [][]string{{"/a"}, {"/b", "/c/d"}, {"/e/f/g"}}}},
+		{name: "subpartitions", db: "mydb", sql: "CREATE COLLECTION table1 WITH pk=/TenantId,/UserId", expected: &StmtCreateCollection{dbName: "mydb", collName: "table1", pk: "/TenantId,/UserId"}},
 	}
 	for _, testCase := range testData {
 		t.Run(testCase.name, func(t *testing.T) {

@@ -77,7 +77,7 @@ AccountEndpoint=<cosmosdb-endpoint>
 - `AccountEndpoint`: (required) endpoint to access Cosmos DB. For example, the endpoint for Azure Cosmos DB Emulator running on local is `https://localhost:8081/`.
 - `AccountKey`: (required) account key to authenticate.
 - `TimeoutMs`: (optional) operation timeout in milliseconds. Default value is `10 seconds` if not specified.
-- `Version`: (optional) version of Cosmos DB to use. Default value is `2018-12-31` if not specified. See: https://learn.microsoft.com/rest/api/cosmos-db/#supported-rest-api-versions.
+- `Version`: (optional) version of Cosmos DB to use. Default value is `2020-07-15` if not specified. See: https://learn.microsoft.com/rest/api/cosmos-db/#supported-rest-api-versions.
 - `DefaultDb`: (optional, available since [v0.1.1](RELEASE-NOTES.md)) specify the default database used in Cosmos DB operations. Alias `Db` can also be used instead of `DefaultDb`.
 - `AutoId`: (optional, available since [v0.1.2](RELEASE-NOTES.md)) see [auto id](#auto-id) session.
 - `InsecureSkipVerify`: (optional, available since [v0.1.4](RELEASE-NOTES.md)) if `true`, disable CA verification for https endpoint (useful to run against test/dev env with local/docker Cosmos DB emulator).
@@ -156,7 +156,7 @@ AccountEndpoint=<cosmosdb-endpoint>
 - `AccountEndpoint`: (required) endpoint to access Cosmos DB. For example, the endpoint for Azure Cosmos DB Emulator running on local is `https://localhost:8081/`.
 - `AccountKey`: (required) account key to authenticate.
 - `TimeoutMs`: (optional) operation timeout in milliseconds. Default value is `10 seconds` if not specified.
-- `Version`: (optional) version of Cosmos DB to use. Default value is `2018-12-31` if not specified. See: https://learn.microsoft.com/rest/api/cosmos-db/#supported-rest-api-versions.
+- `Version`: (optional) version of Cosmos DB to use. Default value is `2020-07-15` if not specified. See: https://learn.microsoft.com/rest/api/cosmos-db/#supported-rest-api-versions.
 - `AutoId`: (optional, available since [v0.1.2](RELEASE-NOTES.md)) see [auto id](#auto-id) session.
 - `InsecureSkipVerify`: (optional, available since [v0.1.4](RELEASE-NOTES.md)) if `true`, disable CA verification for https endpoint (useful to run against test/dev env with local/docker Cosmos DB emulator).
 

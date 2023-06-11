@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // StmtCreateCollection implements "CREATE COLLECTION" statement.
@@ -13,15 +14,15 @@ import (
 // Syntax:
 //
 //	CREATE COLLECTION|TABLE [IF NOT EXISTS] [<db-name>.]<collection-name>
-//	<WITH [LARGE]PK=partitionKey>
+//	<WITH PK=partitionKey>
 //	[[,] WITH RU|MAXRU=ru]
 //	[[,] WITH UK=/path1:/path2,/path3;/path4]
 //
 // - ru: an integer specifying CosmosDB's collection throughput expressed in RU/s. Supply either RU or MAXRU, not both!
 //
-// - If "IF NOT EXISTS" is specified, Exec will silently swallow the error "409 Conflict".
+// - partitionKey is either single (single value of /path) or hierarchical, up to 3 path levels, levels are separated by commas, for example: /path1,/path2,/path3.
 //
-// - Use LARGEPK if partitionKey is larger than 100 bytes.
+// - If "IF NOT EXISTS" is specified, Exec will silently swallow the error "409 Conflict".
 //
 // - Use UK to define unique keys. Each unique key consists a list of paths separated by comma (,). Unique keys are separated by colons (:) or semi-colons (;).
 type StmtCreateCollection struct {
@@ -29,7 +30,6 @@ type StmtCreateCollection struct {
 	dbName      string
 	collName    string // collection name
 	ifNotExists bool
-	isLargePk   bool
 	ru, maxru   int
 	pk          string     // partition key
 	uk          [][]string // unique keys
@@ -42,20 +42,16 @@ func (s *StmtCreateCollection) parse() error {
 	}
 
 	// partition key
-	pk, okPk := s.withOpts["PK"]
-	largePk, okLargePk := s.withOpts["LARGEPK"]
-	if pk != "" && largePk != "" {
+	pk, largepk := s.withOpts["PK"], s.withOpts["LARGEPK"]
+	if pk != "" && largepk != "" && pk != largepk {
 		return fmt.Errorf("only one of PK or LARGEPK must be specified")
 	}
-	if !okPk && !okLargePk && pk == "" && largePk == "" {
-		return fmt.Errorf("invalid or missting PartitionKey value: %s%s", s.withOpts["PK"], s.withOpts["LARGEPK"])
+	s.pk = s.withOpts["PK"]
+	if s.pk == "" {
+		s.pk = s.withOpts["LARGEPK"]
 	}
-	if okPk && pk != "" {
-		s.pk = pk
-	}
-	if okLargePk && largePk != "" {
-		s.pk = largePk
-		s.isLargePk = true
+	if s.pk == "" {
+		return fmt.Errorf("missting PartitionKey value")
 	}
 
 	// request unit
@@ -104,13 +100,17 @@ func (s *StmtCreateCollection) Query(_ []driver.Value) (driver.Rows, error) {
 
 // Exec implements driver.Stmt/Exec.
 func (s *StmtCreateCollection) Exec(_ []driver.Value) (driver.Result, error) {
+	pkPaths := strings.Split(s.pk, ",")
+	pkType := "Hash"
+	if len(pkPaths) > 1 {
+		pkType = "MultiHash"
+	}
 	spec := CollectionSpec{DbName: s.dbName, CollName: s.collName, Ru: s.ru, MaxRu: s.maxru,
 		PartitionKeyInfo: map[string]interface{}{
-			"paths": []string{s.pk},
-			"kind":  "Hash",
-		}}
-	if s.isLargePk {
-		spec.PartitionKeyInfo["Version"] = 2
+			"paths":   pkPaths,
+			"kind":    pkType,
+			"version": 2,
+		},
 	}
 	if len(s.uk) > 0 {
 		uniqueKeys := make([]interface{}, 0)

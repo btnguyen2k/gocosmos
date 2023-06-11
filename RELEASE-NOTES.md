@@ -1,5 +1,11 @@
 # gocosmos - Release notes
 
+## 2003-06-0x - v0.3.0
+
+- Change default API version to `2020-07-15`.
+- Add Hierarchical Partition Keys (sub-partitions) support.
+- PartitionKey version 1 is no longer used (hence large PK is always enabled).
+
 ## 2023-06-09 - v0.2.1
 
 - Bug fixes, Refactoring & Enhancements.

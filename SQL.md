@@ -168,7 +168,9 @@ fmt.Println(dbresult.RowsAffected())
 
 - Upon successful execution, `RowsAffected()` returns `(1, nil)`.
 - This statement returns error `ErrConflict` if the specified collection already existed. If `IF NOT EXISTS` is specified, `RowsAffected()` returns `(0, nil)`.
-- Partition key must be specified using `WITH pk=<partition-key>`. If partition key is larger than 100 bytes, use `WITH pk=<partition-key>` instead.
+- Partition key must be specified using `WITH pk=<partition-key>`.
+  - Since [v0.3.0](RELEASE-NOTES.md), large pk is always enabled, `WITH largepk` is for backward compatibility only.
+  - Since [v0.3.0](RELEASE-NOTES.md), Hierarchical Partition Key is supported, using `WITH pk=/path1,/path2...` (up to 3 path levels).
 - Provisioned capacity can be optionally specified via `WITH RU=<ru>` or `WITH MAXRU=<ru>`.
   - Only one of `RU` and `MAXRU` options should be specified, _not both_; error is returned if both optiosn are specified.
 - Unique keys are optionally specified via `WITH uk=/uk1_path:/uk2_path1,/uk2_path2:/uk3_path`. Each unique key is a comma-separated list of paths (e.g. `/uk_path1,/uk_path2`); unique keys are separated by colons (e.g. `/uk1:/uk2:/uk3`).
