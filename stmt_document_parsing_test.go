@@ -158,127 +158,160 @@ $1, :3, @2)`,
 	}
 }
 
-// func TestStmtUpsert_parse(t *testing.T) {
-// 	testName := "TestStmtUpsert_parse"
-// 	testData := []struct {
-// 		name      string
-// 		sql       string
-// 		expected  *StmtInsert
-// 		mustError bool
-// 	}{
-// 		{name: "error_no_collection", sql: `UPSERT INTO db (a,b,c) VALUES (1,2,3)`, mustError: true},
-// 		{name: "error_values", sql: `UPSERT INTO db.table (a,b,c)`, mustError: true},
-// 		{name: "error_columns", sql: `UPSERT INTO db.table VALUES (1,2,3)`, mustError: true},
-// 		{name: "error_invalid_string", sql: `UPSERT INTO db.table (a) VALUES ('a string')`, mustError: true},
-// 		{name: "error_invalid_string2", sql: `UPSERT INTO db.table (a) VALUES ("a string")`, mustError: true},
-// 		{name: "error_invalid_string3", sql: `UPSERT INTO db.table (a) VALUES ("{key:value}")`, mustError: true},
-// 		{name: "error_num_values_not_matched", sql: `UPSERT INTO db.table (a,b) VALUES (1,2,3)`, mustError: true},
-// 		{name: "error_invalid_number", sql: `UPSERT INTO db.table (a,b) VALUES (0x1qa,2)`, mustError: true},
-// 		{name: "error_invalid_string", sql: `UPSERT INTO db.table (a,b) VALUES ("cannot \\"unquote",2)`, mustError: true},
-//
-// 		{
-// 			name: "basic",
-// 			sql: `UPSERT INTO
-// db1.table1 (a,
-// b, c, d, e,
-// f) VALUES
-// 	(null, 1.0, true,
-//   "\"a string 'with' \\\"quote\\\"\"", "{\"key\":\"value\"}", "[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]")`,
-// 			expected: &StmtInsert{dbName: "db1", collName: "table1", isUpsert: true, fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`}}},
-// 		},
-// 		{
-// 			name: "with_placeholders",
-// 			sql: `UPSERT
-// INTO db-2.table_2 (
-// a,b,c) VALUES ($1,
-// 	:3, @2)`,
-// 			expected: &StmtInsert{dbName: "db-2", collName: "table_2", isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
-// 		},
-// 	}
-// 	for _, testCase := range testData {
-// 		t.Run(testCase.name, func(t *testing.T) {
-// 			s, err := parseQuery(nil, testCase.sql)
-// 			if testCase.mustError && err == nil {
-// 				t.Fatalf("%s failed: parsing must fail", testName+"/"+testCase.name)
-// 			}
-// 			if testCase.mustError {
-// 				return
-// 			}
-// 			if err != nil {
-// 				t.Fatalf("%s failed: %s", testName+"/"+testCase.name, err)
-// 			}
-// 			stmt, ok := s.(*StmtInsert)
-// 			if !ok {
-// 				t.Fatalf("%s failed: expected StmtInsert but received %T", testName+"/"+testCase.name, s)
-// 			}
-// 			stmt.Stmt = nil
-// 			stmt.fieldsStr = ""
-// 			stmt.valuesStr = ""
-// 			if !reflect.DeepEqual(stmt, testCase.expected) {
-// 				t.Fatalf("%s failed:\nexpected %#v\nreceived %#v", testName+"/"+testCase.name, testCase.expected, stmt)
-// 			}
-// 		})
-// 	}
-// }
-//
-// func TestStmtUpsert_parse_defaultDb(t *testing.T) {
-// 	testName := "TestStmtUpsert_parse_defaultDb"
-// 	testData := []struct {
-// 		name      string
-// 		db        string
-// 		sql       string
-// 		expected  *StmtInsert
-// 		mustError bool
-// 	}{
-// 		{name: "error_invalid_query", sql: `UPSERT INTO .table (a,b) VALUES (1,2)`, mustError: true},
-// 		{name: "error_invalid_query2", sql: `UPSERT INTO db. (a,b) VALUES (1,2)`, mustError: true},
-//
-// 		{
-// 			name: "basic",
-// 			db:   "mydb",
-// 			sql: `UPSERT INTO
-// table1 (a,
-// b, c, d, e,
-// f) VALUES
-// 	(null, 1.0, true,
-//   "\"a string 'with' \\\"quote\\\"\"", "{\"key\":\"value\"}", "[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]")`,
-// 			expected: &StmtInsert{dbName: "mydb", collName: "table1", isUpsert: true, fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`}}},
-// 		},
-// 		{
-// 			name: "with_placeholders_table_in_query",
-// 			db:   "mydb",
-// 			sql: `UPSERT
-// INTO db-2.table_2 (
-// a,b,c) VALUES ($1,
-// 	:3, @2)`,
-// 			expected: &StmtInsert{dbName: "db-2", collName: "table_2", isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
-// 		},
-// 	}
-// 	for _, testCase := range testData {
-// 		t.Run(testCase.name, func(t *testing.T) {
-// 			s, err := parseQueryWithDefaultDb(nil, testCase.db, testCase.sql)
-// 			if testCase.mustError && err == nil {
-// 				t.Fatalf("%s failed: parsing must fail", testName+"/"+testCase.name)
-// 			}
-// 			if testCase.mustError {
-// 				return
-// 			}
-// 			if err != nil {
-// 				t.Fatalf("%s failed: %s", testName+"/"+testCase.name, err)
-// 			}
-// 			stmt, ok := s.(*StmtInsert)
-// 			if !ok {
-// 				t.Fatalf("%s failed: expected StmtInsert but received %T", testName+"/"+testCase.name, s)
-// 			}
-// 			stmt.Stmt = nil
-// 			stmt.fieldsStr = ""
-// 			stmt.valuesStr = ""
-// 			if !reflect.DeepEqual(stmt, testCase.expected) {
-// 				t.Fatalf("%s failed:\nexpected %#v\nreceived %#v", testName+"/"+testCase.name, testCase.expected, stmt)
-// 			}
-// 		})
-// 	}
-// }
+func TestStmtUpsert_parse(t *testing.T) {
+	testName := "TestStmtUpsert_parse"
+	testData := []struct {
+		name      string
+		sql       string
+		expected  *StmtInsert
+		mustError bool
+	}{
+		{name: "error_no_collection", sql: `UPSERT INTO db (a,b,c) VALUES (1,2,3)`, mustError: true},
+		{name: "error_values", sql: `UPSERT INTO db.table (a,b,c)`, mustError: true},
+		{name: "error_columns", sql: `UPSERT INTO db.table VALUES (1,2,3)`, mustError: true},
+		{name: "error_invalid_string", sql: `UPSERT INTO db.table (a) VALUES ('a string')`, mustError: true},
+		{name: "error_invalid_string2", sql: `UPSERT INTO db.table (a) VALUES ("a string")`, mustError: true},
+		{name: "error_invalid_string3", sql: `UPSERT INTO db.table (a) VALUES ("{key:value}")`, mustError: true},
+		{name: "error_num_values_not_matched", sql: `UPSERT INTO db.table (a,b) VALUES (1,2,3)`, mustError: true},
+		{name: "error_invalid_number", sql: `UPSERT INTO db.table (a,b) VALUES (0x1qa,2)`, mustError: true},
+		{name: "error_invalid_string", sql: `UPSERT INTO db.table (a,b) VALUES ("cannot \\"unquote",2)`, mustError: true},
+
+		{
+			name: "basic",
+			sql: `UPSERT INTO
+db1.table1 (a,
+b, c, d, e,
+f) VALUES
+	(null, 1.0, true,
+  "\"a string 'with' \\\"quote\\\"\"", "{\"key\":\"value\"}", "[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]")`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db1", collName: "table1"}, isUpsert: true, fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`}}},
+		},
+		{
+			name: "with_placeholders",
+			sql: `UPSERT
+INTO db-2.table_2 (
+a,b,c) VALUES ($1,
+	:3, @2)`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db-2", collName: "table_2"}, isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+		{
+			name:     "singlepk",
+			sql:      `UPSERT INTO db.table (a,b,c) VALUES (:1, :3, :2) WITH singlePK`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+		{
+			name:     "single_pk",
+			sql:      `UPSERT INTO db.table (a,b,c) VALUES (:1, :3, :2) WITH SINGLE_PK`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+		{
+			name:     "singlepk_single_pk",
+			sql:      `UPSERT INTO db.table (a,b,c) VALUES (:1, :3, :2) WITH SINGLE_PK, with singlePK`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+	}
+	for _, testCase := range testData {
+		t.Run(testCase.name, func(t *testing.T) {
+			s, err := parseQuery(nil, testCase.sql)
+			if testCase.mustError && err == nil {
+				t.Fatalf("%s failed: parsing must fail", testName+"/"+testCase.name)
+			}
+			if testCase.mustError {
+				return
+			}
+			if err != nil {
+				t.Fatalf("%s failed: %s", testName+"/"+testCase.name, err)
+			}
+			stmt, ok := s.(*StmtInsert)
+			if !ok {
+				t.Fatalf("%s failed: expected StmtInsert but received %T", testName+"/"+testCase.name, s)
+			}
+			stmt.Stmt = nil
+			stmt.fieldsStr = ""
+			stmt.valuesStr = ""
+			if !reflect.DeepEqual(stmt, testCase.expected) {
+				t.Fatalf("%s failed:\nexpected %#v\nreceived %#v", testName+"/"+testCase.name, testCase.expected, stmt)
+			}
+		})
+	}
+}
+
+func TestStmtUpsert_parse_defaultDb(t *testing.T) {
+	testName := "TestStmtUpsert_parse_defaultDb"
+	testData := []struct {
+		name      string
+		db        string
+		sql       string
+		expected  *StmtInsert
+		mustError bool
+	}{
+		{name: "error_invalid_query", sql: `UPSERT INTO .table (a,b) VALUES (1,2)`, mustError: true},
+		{name: "error_invalid_query2", sql: `UPSERT INTO db. (a,b) VALUES (1,2)`, mustError: true},
+
+		{
+			name: "basic",
+			db:   "mydb",
+			sql: `UPSERT INTO
+table1 (a,
+b, c, d, e,
+f) VALUES
+	(null, 1.0, true,
+  "\"a string 'with' \\\"quote\\\"\"", "{\"key\":\"value\"}", "[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]")`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table1"}, isUpsert: true, fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`}}},
+		},
+		{
+			name: "with_placeholders_table_in_query",
+			db:   "mydb",
+			sql: `UPSERT
+INTO db-2.table_2 (
+a,b,c) VALUES ($1,
+	:3, @2)`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db-2", collName: "table_2"}, isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+		{
+			name:     "singlepk",
+			db:       "mydb",
+			sql:      `UPSERT INTO db.table (a,b,c) VALUES ($1, :3, @2) WITH SINGLEPK`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+		{
+			name:     "single_pk",
+			db:       "mydb",
+			sql:      `UPSERT INTO table (a,b,c) VALUES ($1, :3, @2) WITH single_pk`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table", isSinglePathPk: true, numPkPaths: 1}, isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+		{
+			name:     "singlepk_single_pk",
+			db:       "mydb",
+			sql:      `UPSERT INTO db.table (a,b,c) VALUES ($1, :3, @2) WITH single_pk WITH singlePK`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+	}
+	for _, testCase := range testData {
+		t.Run(testCase.name, func(t *testing.T) {
+			s, err := parseQueryWithDefaultDb(nil, testCase.db, testCase.sql)
+			if testCase.mustError && err == nil {
+				t.Fatalf("%s failed: parsing must fail", testName+"/"+testCase.name)
+			}
+			if testCase.mustError {
+				return
+			}
+			if err != nil {
+				t.Fatalf("%s failed: %s", testName+"/"+testCase.name, err)
+			}
+			stmt, ok := s.(*StmtInsert)
+			if !ok {
+				t.Fatalf("%s failed: expected StmtInsert but received %T", testName+"/"+testCase.name, s)
+			}
+			stmt.Stmt = nil
+			stmt.fieldsStr = ""
+			stmt.valuesStr = ""
+			if !reflect.DeepEqual(stmt, testCase.expected) {
+				t.Fatalf("%s failed:\nexpected %#v/%#v\nreceived %#v/%#v", testName+"/"+testCase.name, testCase.expected.StmtCRUD, testCase.expected, stmt.StmtCRUD, stmt)
+			}
+		})
+	}
+}
 
 func TestStmtDelete_parse(t *testing.T) {
 	testName := "TestStmtDelete_parse"

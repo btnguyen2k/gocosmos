@@ -343,7 +343,10 @@ Description: insert a new document or replace an existing one.
 Syntax & Usage: similar to [INSERT](#insert).
 
 ```sql
-UPSERT INTO [<db-name>.]<collection-name> (<field1>, <field2>,...<fieldN>) VALUES (<value1>, <value2>,...<valueN>)
+UPSERT INTO [<db-name>.]<collection-name>
+(<field1>, <field2>,...<fieldN>)
+VALUES (<value1>, <value2>,...<valueN>)
+[WITH singlePK|SINGLE_PK]
 ```
 
 [Back to top](#top)
