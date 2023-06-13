@@ -46,13 +46,13 @@ func TestStmtInsert_Exec(t *testing.T) {
 		},
 		{
 			name:         "insert_conflict_pk",
-			sql:          fmt.Sprintf(`INSERT INTO %s.tbltemp (id,username,email,grade,actived) VALUES ("\"1\"", "\"user\"", "\"user@domain2.com\"", 8, false)`, dbname),
+			sql:          fmt.Sprintf(`INSERT INTO %s.tbltemp (id,username,email,grade,actived) VALUES ("\"1\"", "\"user\"", "\"user@domain2.com\"", 8, false) WITH singlePK`, dbname),
 			args:         []interface{}{"user"},
 			mustConflict: true,
 		},
 		{
 			name:         "insert_conflict_uk",
-			sql:          fmt.Sprintf(`INSERT INTO %s.tbltemp (id,username,email,grade,actived) VALUES ("\"2\"", "\"user\"", "\"user@domain1.com\"", 9, false)`, dbname),
+			sql:          fmt.Sprintf(`INSERT INTO %s.tbltemp (id,username,email,grade,actived) VALUES ("\"2\"", "\"user\"", "\"user@domain1.com\"", 9, false) WITH SINGLE_PK`, dbname),
 			args:         []interface{}{"user"},
 			mustConflict: true,
 		},
@@ -82,13 +82,13 @@ func TestStmtInsert_Exec(t *testing.T) {
 		},
 		{
 			name:         "insert_conflict_pk_placeholders",
-			sql:          fmt.Sprintf(`INSERT INTO %s.tbltemp (id, username, email, grade, actived, data) VALUES (:1, $2, @3, @4, $5, :6)`, dbname),
+			sql:          fmt.Sprintf(`INSERT INTO %s.tbltemp (id, username, email, grade, actived, data) VALUES (:1, $2, @3, @4, $5, :6) WITH SINGLE_PK`, dbname),
 			args:         []interface{}{"1", "user", "user@domain2.com", 2, false, nil, "user"},
 			mustConflict: true,
 		},
 		{
 			name:         "insert_conflict_uk_placeholders",
-			sql:          fmt.Sprintf(`INSERT INTO %s.tbltemp (id, username, email, grade, actived, data) VALUES (:1, $2, @3, @4, $5, :6)`, dbname),
+			sql:          fmt.Sprintf(`INSERT INTO %s.tbltemp (id, username, email, grade, actived, data) VALUES (:1, $2, @3, @4, $5, :6) WITH singlePK`, dbname),
 			args:         []interface{}{"2", "user", "user@domain1.com", 3, false, nil, "user"},
 			mustConflict: true,
 		},
@@ -184,7 +184,7 @@ func TestStmtInsert_Exec_DefaultDb(t *testing.T) {
 				fmt.Sprintf("CREATE DATABASE %s", dbname),
 				fmt.Sprintf("CREATE COLLECTION %s.tbltemp WITH pk=/username WITH uk=/email", dbname),
 			},
-			sql:          `INSERT INTO tbltemp (id, username, email, grade, actived) VALUES ("\"1\"", "\"user\"", "\"user@domain1.com\"", 7, true)`,
+			sql:          `INSERT INTO tbltemp (id, username, email, grade, actived) VALUES ("\"1\"", "\"user\"", "\"user@domain1.com\"", 7, true)  WITH SINGLE_PK`,
 			args:         []interface{}{"user"},
 			affectedRows: 1,
 		},
@@ -214,7 +214,7 @@ func TestStmtInsert_Exec_DefaultDb(t *testing.T) {
 				fmt.Sprintf("CREATE DATABASE %s", dbname),
 				fmt.Sprintf("CREATE COLLECTION %s.tbltemp WITH pk=/username WITH uk=/email", dbname),
 			},
-			sql:          `INSERT INTO tbltemp (id, username, email, grade, actived, data) VALUES (:1, $2, @3, @4, $5, :6)`,
+			sql:          `INSERT INTO tbltemp (id, username, email, grade, actived, data) VALUES (:1, $2, @3, @4, $5, :6) WITH singlePK`,
 			args:         []interface{}{"1", "user", "user@domain1.com", 1, true, map[string]interface{}{"str": "a string", "num": 1.23, "bool": true, "date": time.Now()}, "user"},
 			affectedRows: 1,
 		},
@@ -240,6 +240,102 @@ func TestStmtInsert_Exec_DefaultDb(t *testing.T) {
 			name:      "error_invalid_value_index",
 			sql:       `INSERT INTO tbltemp (id, username, email, grade, actived, data) VALUES (:1, $2, @3, @4, $5, :10)`,
 			args:      []interface{}{"2", "user", "user@domain1.com", 3, false, nil, "user"},
+			mustError: "invalid value index",
+		},
+	}
+	for _, testCase := range testData {
+		t.Run(testCase.name, func(t *testing.T) {
+			for _, initSql := range testCase.initSqls {
+				_, err := db.Exec(initSql)
+				if err != nil {
+					t.Fatalf("%s failed: {error: %s / sql: %s}", testName+"/"+testCase.name+"/init", err, initSql)
+				}
+			}
+			execResult, err := db.Exec(testCase.sql, testCase.args...)
+			if testCase.mustConflict && err != ErrConflict {
+				t.Fatalf("%s failed: expect ErrConflict but received %#v", testName+"/"+testCase.name+"/exec", err)
+			}
+			if testCase.mustNotFound && err != ErrNotFound {
+				t.Fatalf("%s failed: expect ErrNotFound but received %#v", testName+"/"+testCase.name+"/exec", err)
+			}
+			if testCase.mustConflict || testCase.mustNotFound {
+				return
+			}
+			if testCase.mustError != "" {
+				if err == nil || strings.Index(err.Error(), testCase.mustError) < 0 {
+					t.Fatalf("%s failed: expected '%s' bur received %#v", testCase.name, testCase.mustError, err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("%s failed: %s", testName+"/"+testCase.name+"/exec", err)
+			}
+			affectedRows, err := execResult.RowsAffected()
+			if err != nil {
+				t.Fatalf("%s failed: %s", testName+"/"+testCase.name+"/rows_affected", err)
+			}
+			if affectedRows != testCase.affectedRows {
+				t.Fatalf("%s failed: expected %#v affected-rows but received %#v", testName+"/"+testCase.name, testCase.affectedRows, affectedRows)
+			}
+			_, err = execResult.LastInsertId()
+			if err == nil {
+				t.Fatalf("%s failed: expected LastInsertId but received nil", testName+"/"+testCase.name)
+			}
+			lastInsertId := make(map[string]interface{})
+			err = json.Unmarshal([]byte(err.Error()), &lastInsertId)
+			if err != nil {
+				t.Fatalf("%s failed: %s", testName+"/"+testCase.name+"/LastInsertId", err)
+			}
+			if len(lastInsertId) != 1 {
+				t.Fatalf("%s failed - LastInsertId: %#v", testName+"/"+testCase.name+"/LastInsertId", lastInsertId)
+			}
+		})
+	}
+}
+
+func TestStmtInsert_SubPartitions(t *testing.T) {
+	testName := "TestStmtInsert_SubPartitions"
+	db := _openDb(t, testName)
+	dbname := "dbtemp"
+	defer db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname))
+	testData := []struct {
+		name         string
+		initSqls     []string
+		sql          string
+		args         []interface{}
+		mustConflict bool
+		mustNotFound bool
+		mustError    string
+		affectedRows int64
+	}{
+		{
+			name: "insert_new",
+			initSqls: []string{
+				"DROP DATABASE IF EXISTS db_not_exists",
+				fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname),
+				fmt.Sprintf("CREATE DATABASE %s", dbname),
+				fmt.Sprintf("CREATE COLLECTION %s.tbltemp WITH pk=/app,/username WITH uk=/email", dbname),
+			},
+			sql:          fmt.Sprintf(`INSERT INTO %s.tbltemp (id, app, username, email, grade, actived, data) VALUES (:1, $2, @3, :4, $5, @6, :7)`, dbname),
+			args:         []interface{}{"1", "app", "user", "user@domain1.com", 1, true, map[string]interface{}{"str": "a string", "num": 1.23, "bool": true, "date": time.Now()}, "app", "user"},
+			affectedRows: 1,
+		},
+		{
+			name:         "insert_conflict_pk_",
+			sql:          fmt.Sprintf(`INSERT INTO %s.tbltemp (id, app, username, email, grade, actived, data) VALUES (:1, $2, @3, :4, $5, @6, :7)`, dbname),
+			args:         []interface{}{"1", "app", "user", "user@domain2.com", 2, false, nil, "app", "user"},
+			mustConflict: true,
+		},
+		{
+			name:         "insert_conflict_uk",
+			sql:          fmt.Sprintf(`INSERT INTO %s.tbltemp (id, app, username, email, grade, actived, data) VALUES (:1, $2, @3, :4, $5, @6, :7)`, dbname),
+			args:         []interface{}{"2", "app", "user", "user@domain1.com", 3, false, nil, "app", "user"},
+			mustConflict: true,
+		},
+		{
+			name:      "error_invalid_value_index",
+			sql:       fmt.Sprintf(`INSERT INTO %s.tbltemp (id, app, username, email, grade, actived, data) VALUES (:1, $2, @3, @4, $5, $6, :10)`, dbname),
+			args:      []interface{}{"2", "app", "user", "user@domain1.com", 3, false, nil, "app", "user"},
 			mustError: "invalid value index",
 		},
 	}

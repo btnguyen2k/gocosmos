@@ -1200,6 +1200,35 @@ type RespListDb struct {
 	Databases   []DbInfo `json:"Databases"`
 }
 
+// PkInfo holds partitioning configuration settings for a collection.
+//
+// @Available since v0.3.0
+type PkInfo map[string]interface{}
+
+func (pk PkInfo) Kind() string {
+	kind, err := reddo.ToString(pk["kind"])
+	if err == nil {
+		return kind
+	}
+	return ""
+}
+
+func (pk PkInfo) Version() int {
+	version, err := reddo.ToInt(pk["version"])
+	if err == nil {
+		return int(version)
+	}
+	return 0
+}
+
+func (pk PkInfo) Paths() []string {
+	paths, err := reddo.ToSlice(pk["paths"], reddo.TypeString)
+	if err == nil {
+		return paths.([]string)
+	}
+	return nil
+}
+
 // CollInfo captures info of a Cosmos DB collection.
 type CollInfo struct {
 	Id                       string                 `json:"id"`                       // user-generated unique name for the collection
@@ -1213,7 +1242,7 @@ type CollInfo struct {
 	Udfs                     string                 `json:"_udfs"`                    // (system-generated property) _udfs attribute of the collection
 	Conflicts                string                 `json:"_conflicts"`               // (system-generated property) _conflicts attribute of the collection
 	IndexingPolicy           map[string]interface{} `json:"indexingPolicy"`           // indexing policy settings for collection
-	PartitionKey             map[string]interface{} `json:"partitionKey"`             // partitioning configuration settings for collection
+	PartitionKey             PkInfo                 `json:"partitionKey"`             // partitioning configuration settings for collection
 	ConflictResolutionPolicy map[string]interface{} `json:"conflictResolutionPolicy"` // conflict resolution policy settings for collection
 	GeospatialConfig         map[string]interface{} `json:"geospatialConfig"`         // Geo-spatial configuration settings for collection
 }

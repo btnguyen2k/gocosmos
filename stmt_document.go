@@ -65,6 +65,41 @@ func _parseValue(input string, separator rune) (value interface{}, leftOver stri
 	return nil, input, errors.New("cannot parse query, invalid token at: " + input)
 }
 
+// StmtCRUD is abstract implementation of "INSERT|UPSERT|UPDATE|DELETE|SELECT" operations.
+//
+// @Available since v0.3.0
+type StmtCRUD struct {
+	*Stmt
+	dbName         string
+	collName       string
+	numPkPaths     int // number of PK paths
+	isSinglePathPk bool
+}
+
+func (s *StmtCRUD) extractPkValuesFromArgs(args ...driver.Value) []interface{} {
+	n := len(args)
+	result := make([]interface{}, s.numPkPaths)
+	for i := n - s.numPkPaths; i < n; i++ {
+		result[i-n+s.numPkPaths] = args[i]
+	}
+	return result
+}
+
+func (s *StmtCRUD) fetchPkInfo() error {
+	if s.numPkPaths > 0 || s.conn == nil || s.isSinglePathPk {
+		if s.isSinglePathPk {
+			s.numPkPaths = 1
+		}
+		return nil
+	}
+
+	getCollResult := s.conn.restClient.GetCollection(s.dbName, s.collName)
+	if getCollResult.Error() == nil {
+		s.numPkPaths = len(getCollResult.CollInfo.PartitionKey.Paths())
+	}
+	return normalizeError(getCollResult.StatusCode, 0, getCollResult.Error())
+}
+
 // StmtInsert implements "INSERT" operation.
 //
 // Syntax:
@@ -88,9 +123,7 @@ func _parseValue(input string, separator rune) (value interface{}, leftOver stri
 // CosmosDB automatically creates a few extra fields for the insert document.
 // See https://docs.microsoft.com/en-us/azure/cosmos-db/account-databases-containers-items#properties-of-an-item.
 type StmtInsert struct {
-	*Stmt
-	dbName    string
-	collName  string
+	*StmtCRUD
 	isUpsert  bool
 	fieldsStr string
 	valuesStr string
@@ -98,10 +131,20 @@ type StmtInsert struct {
 	values    []interface{}
 }
 
-func (s *StmtInsert) parse() error {
+func (s *StmtInsert) parse(withOptsStr string) error {
+	if err := s.parseWithOpts(withOptsStr); err != nil {
+		return err
+	}
+	_, ok1 := s.withOpts["SINGLEPK"]
+	_, ok2 := s.withOpts["SINGLE_PK"]
+	s.isSinglePathPk = ok1 || ok2
+	if s.isSinglePathPk {
+		s.numPkPaths = 1
+	}
+
 	s.fields = regexp.MustCompile(`[,\s]+`).Split(s.fieldsStr, -1)
 	s.values = make([]interface{}, 0)
-	s.numInput = 1
+	s.numInput = 0
 	for temp := strings.TrimSpace(s.valuesStr); temp != ""; temp = strings.TrimSpace(temp) {
 		value, leftOver, err := _parseValue(temp, ',')
 		if err == nil {
@@ -130,13 +173,20 @@ func (s *StmtInsert) validate() error {
 
 // Exec implements driver.Stmt/Exec.
 //
-// Note: this function expects the _last_ argument is _partition_ key value.
+// Note: this function expects the _partition key values are placed at the end_ of the argument list.
 func (s *StmtInsert) Exec(args []driver.Value) (driver.Result, error) {
+	if err := s.fetchPkInfo(); err != nil {
+		return nil, err
+	}
+	if len(args) != s.numInput+s.numPkPaths {
+		return nil, fmt.Errorf("expected %d arguments, got %d", s.numInput+s.numPkPaths, len(args))
+	}
+
 	spec := DocumentSpec{
 		DbName:             s.dbName,
 		CollName:           s.collName,
 		IsUpsert:           s.isUpsert,
-		PartitionKeyValues: []interface{}{args[s.numInput-1]}, // expect the last argument is partition key value
+		PartitionKeyValues: s.extractPkValuesFromArgs(args...),
 		DocumentData:       make(map[string]interface{}),
 	}
 	for i := 0; i < len(s.fields); i++ {

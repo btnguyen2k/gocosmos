@@ -14,7 +14,7 @@ const (
 	field       = `([\w\-]+)`
 	ifNotExists = `(\s+IF\s+NOT\s+EXISTS)?`
 	ifExists    = `(\s+IF\s+EXISTS)?`
-	with        = `(\s+WITH\s+` + field + `\s*=\s*([\w/\.\*,;:'"-]+)((\s+|\s*,\s+|\s+,\s*)WITH\s+` + field + `\s*=\s*([\w/\.\*,;:'"-]+))*)?`
+	with        = `(\s+WITH\s+` + field + `(\s*=\s*([\w/\.\*,;:'"-]+))?((\s+|\s*,\s+|\s+,\s*)WITH\s+` + field + `(\s*=\s*([\w/\.\*,;:'"-]+))*)?)?`
 )
 
 var (
@@ -28,7 +28,7 @@ var (
 	reDropColl   = regexp.MustCompile(`(?is)^DROP\s+(COLLECTION|TABLE)` + ifExists + `\s+(` + field + `\.)?` + field + `$`)
 	reListColls  = regexp.MustCompile(`(?is)^LIST\s+(COLLECTIONS?|TABLES?)(\s+FROM\s+` + field + `)?$`)
 
-	reInsert = regexp.MustCompile(`(?is)^(INSERT|UPSERT)\s+INTO\s+(` + field + `\.)?` + field + `\s*\(([^)]*?)\)\s*VALUES\s*\(([^)]*?)\)$`)
+	reInsert = regexp.MustCompile(`(?is)^(INSERT|UPSERT)\s+INTO\s+(` + field + `\.)?` + field + `\s*\(([^)]*?)\)\s*VALUES\s*\(([^)]*?)\)` + with + `$`)
 	reSelect = regexp.MustCompile(`(?is)^SELECT\s+(CROSS\s+PARTITION\s+)?.*?\s+FROM\s+` + field + `.*?` + with + `$`)
 	reUpdate = regexp.MustCompile(`(?is)^UPDATE\s+(` + field + `\.)?` + field + `\s+SET\s+(.*)\s+WHERE\s+id\s*=\s*(.*)$`)
 	reDelete = regexp.MustCompile(`(?is)^DELETE\s+FROM\s+(` + field + `\.)?` + field + `\s+WHERE\s+id\s*=\s*(.*)$`)
@@ -142,17 +142,19 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 	if re := reInsert; re.MatchString(query) {
 		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtInsert{
-			Stmt:      &Stmt{query: query, conn: c, numInput: 0},
+			StmtCRUD: &StmtCRUD{
+				Stmt:     &Stmt{query: query, conn: c, numInput: 0},
+				dbName:   strings.TrimSpace(groups[0][3]),
+				collName: strings.TrimSpace(groups[0][4]),
+			},
 			isUpsert:  strings.ToUpper(strings.TrimSpace(groups[0][1])) == "UPSERT",
-			dbName:    strings.TrimSpace(groups[0][3]),
-			collName:  strings.TrimSpace(groups[0][4]),
 			fieldsStr: strings.TrimSpace(groups[0][5]),
 			valuesStr: strings.TrimSpace(groups[0][6]),
 		}
 		if stmt.dbName == "" {
 			stmt.dbName = defaultDb
 		}
-		if err := stmt.parse(); err != nil {
+		if err := stmt.parse(groups[0][7]); err != nil {
 			return nil, err
 		}
 		return stmt, stmt.validate()
@@ -212,11 +214,11 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 type Stmt struct {
 	query    string // the SQL query
 	conn     *Conn  // the connection that this prepared statement is bound to
-	numInput int    // number of placeholder parameters
+	numInput int    // number of placeholder parameters, INCLUDING PK values!
 	withOpts map[string]string
 }
 
-var reWithOpts = regexp.MustCompile(`(?is)^(\s+|\s*,\s+|\s+,\s*)WITH\s+` + field + `\s*=\s*([\w/\.\*,;:'"-]+)`)
+var reWithOpts = regexp.MustCompile(`(?is)^(\s+|\s*,\s+|\s+,\s*)WITH\s+` + field + `(\s*=\s*([\w/\.\*,;:'"-]+))?`)
 
 // parseWithOpts parses "WITH..." clause and store result in withOpts map.
 // This function returns no error. Sub-implementations may override this behavior.
@@ -229,7 +231,7 @@ func (s *Stmt) parseWithOpts(withOptsStr string) error {
 			break
 		}
 		k := strings.TrimSpace(strings.ToUpper(matches[2]))
-		s.withOpts[k] = strings.TrimSuffix(strings.TrimSpace(matches[3]), ",")
+		s.withOpts[k] = strings.TrimSuffix(strings.TrimSpace(matches[4]), ",")
 		withOptsStr = withOptsStr[len(matches[0]):]
 	}
 	return nil
@@ -242,7 +244,7 @@ func (s *Stmt) Close() error {
 
 // NumInput implements driver.Stmt/NumInput.
 func (s *Stmt) NumInput() int {
-	return s.numInput
+	return -1
 }
 
 /*----------------------------------------------------------------------*/

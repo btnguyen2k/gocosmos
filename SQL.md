@@ -297,10 +297,15 @@ Description: insert a new document into an existing collection.
 Syntax:
 
 ```sql
-INSERT INTO [<db-name>.]<collection-name> (<field1>, <field2>,...<fieldN>) VALUES (<value1>, <value2>,...<valueN>)
+INSERT INTO [<db-name>.]<collection-name>
+(<field1>, <field2>,...<fieldN>)
+VALUES (<value1>, <value2>,...<valueN>)
+[WITH singlePK|SINGLE_PK]
 ```
 
 > `<db-name>` can be ommitted if `DefaultDb` is supplied in the Data Source Name (DSN).
+
+Since [v0.3.0](RELEASE-NOTES.md), `gocosmos` supports [Hierarchical Partition Keys](https://learn.microsoft.com/en-us/azure/cosmos-db/hierarchical-partition-keys) (or sub-partitions). If the collection is known not to have sub-partitions, supplying `WITH singlePK` (or `WITH SINGLE_PK`) can save one roundtrip to Cosmos DB server.
 
 Example:
 ```go
@@ -314,8 +319,7 @@ fmt.Println(dbresult.RowsAffected())
 
 > Use `sql.DB.Exec` to execute the statement, `Query` will return error.
 
-> Value of partition key _must_ be supplied at the last argument of `db.Exec()` call.
-
+> Values of partition key _must_ be supplied at the end of the argument list when invoking `db.Exec()`.
 
 <a id="value"></a>A value is either:
 - a placeholder - which is a number prefixed by `$` or `@` or `:`, for example `$1`, `@2` or `:3`. Placeholders are 1-based index, that means starting from 1.
