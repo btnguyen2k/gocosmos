@@ -104,7 +104,7 @@ func (s *StmtCRUD) fetchPkInfo() error {
 //
 // Syntax:
 //
-//	INSERT|UPSERT INTO <db-name>.<collection-name> (<field-list>) VALUES (<value-list>)
+//	INSERT|UPSERT INTO <db-name>.<collection-name> (<field-list>) VALUES (<value-list>) [WITH singlePK|SINGLE_PK]
 //
 //	- values are comma separated.
 //	- a value is either:
@@ -222,21 +222,29 @@ func (s *StmtInsert) Query(_ []driver.Value) (driver.Rows, error) {
 //
 // Syntax:
 //
-//	DELETE FROM <db-name>.<collection-name> WHERE id=<id-value>
+//	DELETE FROM <db-name>.<collection-name> WHERE id=<id-value> [WITH singlePK|SINGLE_PK]
 //
 // - Currently DELETE only removes one document specified by id.
 //
 // - <id-value> is treated as string. `WHERE id=abc` has the same effect as `WHERE id="abc"`.
 type StmtDelete struct {
-	*Stmt
-	dbName   string
-	collName string
-	idStr    string
-	id       interface{}
+	*StmtCRUD
+	idStr string
+	id    interface{}
 }
 
-func (s *StmtDelete) parse() error {
-	s.numInput = 1
+func (s *StmtDelete) parse(withOptsStr string) error {
+	if err := s.parseWithOpts(withOptsStr); err != nil {
+		return err
+	}
+	_, ok1 := s.withOpts["SINGLEPK"]
+	_, ok2 := s.withOpts["SINGLE_PK"]
+	s.isSinglePathPk = ok1 || ok2
+	if s.isSinglePathPk {
+		s.numPkPaths = 1
+	}
+
+	s.numInput = 0
 	hasPrefix := strings.HasPrefix(s.idStr, `"`)
 	hasSuffix := strings.HasSuffix(s.idStr, `"`)
 	if hasPrefix != hasSuffix {
@@ -268,8 +276,15 @@ func (s *StmtDelete) validate() error {
 
 // Exec implements driver.Stmt/Exec.
 //
-// Note: this function expects the _last_ argument is _partition_ key value.
+// Note: this function expects the _partition key values are placed at the end_ of the argument list.
 func (s *StmtDelete) Exec(args []driver.Value) (driver.Result, error) {
+	if err := s.fetchPkInfo(); err != nil {
+		return nil, err
+	}
+	if len(args) != s.numInput+s.numPkPaths {
+		return nil, fmt.Errorf("expected %d arguments, got %d", s.numInput+s.numPkPaths, len(args))
+	}
+
 	id := s.idStr
 	if s.id != nil {
 		ph := s.id.(placeholder)
@@ -279,7 +294,7 @@ func (s *StmtDelete) Exec(args []driver.Value) (driver.Result, error) {
 		id = fmt.Sprintf("%s", args[ph.index-1])
 	}
 	restResult := s.conn.restClient.DeleteDocument(DocReq{DbName: s.dbName, CollName: s.collName, DocId: id,
-		PartitionKeyValues: []interface{}{args[s.numInput-1]}, // expect the last argument is partition key value
+		PartitionKeyValues: s.extractPkValuesFromArgs(args...),
 	})
 	result := buildResultNoResultSet(&restResult.RestReponse, false, "", 0)
 	switch restResult.StatusCode {

@@ -335,7 +335,7 @@ func TestStmtDelete_parse(t *testing.T) {
 			sql: `DELETE FROM 
 db1.table1 WHERE 
 	id=abc`,
-			expected: &StmtDelete{dbName: "db1", collName: "table1", idStr: "abc"},
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db1", collName: "table1"}, idStr: "abc"},
 		},
 		{
 			name: "basic2",
@@ -343,14 +343,29 @@ db1.table1 WHERE
 	DELETE 
 FROM db-2.table_2
 	WHERE     id="def"`,
-			expected: &StmtDelete{dbName: "db-2", collName: "table_2", idStr: "def"},
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db-2", collName: "table_2"}, idStr: "def"},
 		},
 		{
 			name: "basic3",
 			sql: `DELETE FROM 
 db_3-0.table-3_0 WHERE 
 	id=@2`,
-			expected: &StmtDelete{dbName: "db_3-0", collName: "table-3_0", idStr: "@2", id: placeholder{2}},
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db_3-0", collName: "table-3_0"}, idStr: "@2", id: placeholder{2}},
+		},
+		{
+			name:     "singlepk",
+			sql:      `DELETE FROM db.table WHERE id=@2 WITH singlePK`,
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, idStr: "@2", id: placeholder{2}},
+		},
+		{
+			name:     "single_pk",
+			sql:      `DELETE FROM db.table WHERE id=@2 with Single_PK`,
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, idStr: "@2", id: placeholder{2}},
+		},
+		{
+			name:     "singlepk_single_pk",
+			sql:      `DELETE FROM db.table WHERE id=@2 with SinglePK WITH SINGLE_PK`,
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, idStr: "@2", id: placeholder{2}},
 		},
 	}
 	for _, testCase := range testData {
@@ -395,7 +410,7 @@ func TestStmtDelete_parse_defaultDb(t *testing.T) {
 			sql: `DELETE FROM 
 table1 WHERE 
 	id=abc`,
-			expected: &StmtDelete{dbName: "mydb", collName: "table1", idStr: "abc"},
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table1"}, idStr: "abc"},
 		},
 		{
 			name: "db_in_query",
@@ -404,7 +419,7 @@ table1 WHERE
 	DELETE 
 FROM db-2.table_2
 	WHERE     id="def"`,
-			expected: &StmtDelete{dbName: "db-2", collName: "table_2", idStr: "def"},
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db-2", collName: "table_2"}, idStr: "def"},
 		},
 		{
 			name: "placeholder",
@@ -412,7 +427,25 @@ FROM db-2.table_2
 			sql: `DELETE FROM 
 db_3-0.table-3_0 WHERE 
 	id=@2`,
-			expected: &StmtDelete{dbName: "db_3-0", collName: "table-3_0", idStr: "@2", id: placeholder{2}},
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db_3-0", collName: "table-3_0"}, idStr: "@2", id: placeholder{2}},
+		},
+		{
+			name:     "singlepk",
+			db:       "mydb",
+			sql:      `DELETE FROM table WHERE id=@2 With singlePk`,
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table", isSinglePathPk: true, numPkPaths: 1}, idStr: "@2", id: placeholder{2}},
+		},
+		{
+			name:     "single_pk",
+			db:       "mydb",
+			sql:      `DELETE FROM db.table WHERE id=@2 With single_Pk`,
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, idStr: "@2", id: placeholder{2}},
+		},
+		{
+			name:     "singlepk_single_pk",
+			db:       "mydb",
+			sql:      `DELETE FROM table WHERE id=@2 With single_Pk, With SinglePK`,
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table", isSinglePathPk: true, numPkPaths: 1}, idStr: "@2", id: placeholder{2}},
 		},
 	}
 	for _, testCase := range testData {

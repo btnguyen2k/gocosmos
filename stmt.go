@@ -31,7 +31,7 @@ var (
 	reInsert = regexp.MustCompile(`(?is)^(INSERT|UPSERT)\s+INTO\s+(` + field + `\.)?` + field + `\s*\(([^)]*?)\)\s*VALUES\s*\(([^)]*?)\)` + with + `$`)
 	reSelect = regexp.MustCompile(`(?is)^SELECT\s+(CROSS\s+PARTITION\s+)?.*?\s+FROM\s+` + field + `.*?` + with + `$`)
 	reUpdate = regexp.MustCompile(`(?is)^UPDATE\s+(` + field + `\.)?` + field + `\s+SET\s+(.*)\s+WHERE\s+id\s*=\s*(.*)$`)
-	reDelete = regexp.MustCompile(`(?is)^DELETE\s+FROM\s+(` + field + `\.)?` + field + `\s+WHERE\s+id\s*=\s*(.*)$`)
+	reDelete = regexp.MustCompile(`(?is)^DELETE\s+FROM\s+(` + field + `\.)?` + field + `\s+WHERE\s+id\s*=\s*(.*?)` + with + `$`)
 )
 
 func parseQuery(c *Conn, query string) (driver.Stmt, error) {
@@ -193,15 +193,17 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 	if re := reDelete; re.MatchString(query) {
 		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtDelete{
-			Stmt:     &Stmt{query: query, conn: c, numInput: 0},
-			dbName:   strings.TrimSpace(groups[0][2]),
-			collName: strings.TrimSpace(groups[0][3]),
-			idStr:    strings.TrimSpace(groups[0][4]),
+			StmtCRUD: &StmtCRUD{
+				Stmt:     &Stmt{query: query, conn: c, numInput: 0},
+				dbName:   strings.TrimSpace(groups[0][2]),
+				collName: strings.TrimSpace(groups[0][3]),
+			},
+			idStr: strings.TrimSpace(groups[0][4]),
 		}
 		if stmt.dbName == "" {
 			stmt.dbName = defaultDb
 		}
-		if err := stmt.parse(); err != nil {
+		if err := stmt.parse(groups[0][5]); err != nil {
 			return nil, err
 		}
 		return stmt, stmt.validate()
