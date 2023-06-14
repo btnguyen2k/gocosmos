@@ -100,6 +100,20 @@ func (s *StmtCRUD) fetchPkInfo() error {
 	return normalizeError(getCollResult.StatusCode, 0, getCollResult.Error())
 }
 
+func (s *StmtCRUD) parseWithOpts(withOptsStr string) error {
+	if err := s.Stmt.parseWithOpts(withOptsStr); err != nil {
+		return err
+	}
+	_, ok1 := s.withOpts["SINGLEPK"]
+	_, ok2 := s.withOpts["SINGLE_PK"]
+	s.isSinglePathPk = ok1 || ok2
+	if s.isSinglePathPk {
+		s.numPkPaths = 1
+	}
+	s.numInput = 0
+	return nil
+}
+
 // StmtInsert implements "INSERT" operation.
 //
 // Syntax:
@@ -135,16 +149,9 @@ func (s *StmtInsert) parse(withOptsStr string) error {
 	if err := s.parseWithOpts(withOptsStr); err != nil {
 		return err
 	}
-	_, ok1 := s.withOpts["SINGLEPK"]
-	_, ok2 := s.withOpts["SINGLE_PK"]
-	s.isSinglePathPk = ok1 || ok2
-	if s.isSinglePathPk {
-		s.numPkPaths = 1
-	}
 
 	s.fields = regexp.MustCompile(`[,\s]+`).Split(s.fieldsStr, -1)
 	s.values = make([]interface{}, 0)
-	s.numInput = 0
 	for temp := strings.TrimSpace(s.valuesStr); temp != ""; temp = strings.TrimSpace(temp) {
 		value, leftOver, err := _parseValue(temp, ',')
 		if err == nil {
@@ -237,14 +244,7 @@ func (s *StmtDelete) parse(withOptsStr string) error {
 	if err := s.parseWithOpts(withOptsStr); err != nil {
 		return err
 	}
-	_, ok1 := s.withOpts["SINGLEPK"]
-	_, ok2 := s.withOpts["SINGLE_PK"]
-	s.isSinglePathPk = ok1 || ok2
-	if s.isSinglePathPk {
-		s.numPkPaths = 1
-	}
 
-	s.numInput = 0
 	hasPrefix := strings.HasPrefix(s.idStr, `"`)
 	hasSuffix := strings.HasSuffix(s.idStr, `"`)
 	if hasPrefix != hasSuffix {
@@ -427,7 +427,7 @@ func (s *StmtSelect) Exec(_ []driver.Value) (driver.Result, error) {
 //
 // Syntax:
 //
-//	UPDATE <db-name>.<collection-name> SET <field-name>=<value>[,<field-name>=<value>]*, WHERE id=<id-value>
+//	UPDATE <db-name>.<collection-name> SET <field-name1>=<value1>[,<field-nameN>=<valueN>]* WHERE id=<id-value> [WITH singlePK|SINGLE_PK]
 //
 //	- <id-value> is treated as a string. `WHERE id=abc` has the same effect as `WHERE id="abc"`.
 //	- <value> is either:
@@ -445,9 +445,7 @@ func (s *StmtSelect) Exec(_ []driver.Value) (driver.Result, error) {
 //
 // Currently UPDATE only updates one document specified by id.
 type StmtUpdate struct {
-	*Stmt
-	dbName    string
-	collName  string
+	*StmtCRUD
 	updateStr string
 	idStr     string
 	id        interface{}
@@ -512,8 +510,10 @@ func (s *StmtUpdate) _parseUpdateClause() error {
 	return nil
 }
 
-func (s *StmtUpdate) parse() error {
-	s.numInput = 1
+func (s *StmtUpdate) parse(withOptsStr string) error {
+	if err := s.parseWithOpts(withOptsStr); err != nil {
+		return err
+	}
 
 	if err := s._parseId(); err != nil {
 		return err
@@ -541,8 +541,15 @@ func (s *StmtUpdate) validate() error {
 
 // Exec implements driver.Stmt/Exec.
 //
-// Note: this function expects the _last_ argument is _partition_ key value.
+// Note: this function expects the _partition key values are placed at the end_ of the argument list.
 func (s *StmtUpdate) Exec(args []driver.Value) (driver.Result, error) {
+	if err := s.fetchPkInfo(); err != nil {
+		return nil, err
+	}
+	if len(args) != s.numInput+s.numPkPaths {
+		return nil, fmt.Errorf("expected %d arguments, got %d", s.numInput+s.numPkPaths, len(args))
+	}
+
 	// firstly, fetch the document
 	id := s.idStr
 	if s.id != nil {
@@ -552,7 +559,7 @@ func (s *StmtUpdate) Exec(args []driver.Value) (driver.Result, error) {
 		}
 		id = fmt.Sprintf("%s", args[ph.index-1])
 	}
-	docReq := DocReq{DbName: s.dbName, CollName: s.collName, DocId: id, PartitionKeyValues: []interface{}{args[len(args)-1]}}
+	docReq := DocReq{DbName: s.dbName, CollName: s.collName, DocId: id, PartitionKeyValues: s.extractPkValuesFromArgs(args...)}
 	getDocResult := s.conn.restClient.GetDocument(docReq)
 	if err := getDocResult.Error(); err != nil {
 		result := buildResultNoResultSet(&getDocResult.RestReponse, false, "", 0)
@@ -565,8 +572,10 @@ func (s *StmtUpdate) Exec(args []driver.Value) (driver.Result, error) {
 		}
 		return result, result.err
 	}
+
+	// secondly, update the fetched document
 	etag := getDocResult.DocInfo.Etag()
-	spec := DocumentSpec{DbName: s.dbName, CollName: s.collName, PartitionKeyValues: []interface{}{args[len(args)-1]}, DocumentData: getDocResult.DocInfo.RemoveSystemAttrs()}
+	spec := DocumentSpec{DbName: s.dbName, CollName: s.collName, PartitionKeyValues: s.extractPkValuesFromArgs(args...), DocumentData: getDocResult.DocInfo.RemoveSystemAttrs()}
 	for i := 0; i < len(s.fields); i++ {
 		switch s.values[i].(type) {
 		case placeholder:

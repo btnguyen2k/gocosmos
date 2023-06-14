@@ -614,7 +614,7 @@ SET a=null, b=
   d="\"a string 'with' \\\"quote\\\"\"", e="{\"key\":\"value\"}"
 ,f="[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]" WHERE
 	id="abc"`,
-			expected: &StmtUpdate{dbName: "db1", collName: "table1", updateStr: `a=null, b=
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "db1", collName: "table1"}, updateStr: `a=null, b=
 	1.0, c=true, 
   d="\"a string 'with' \\\"quote\\\"\"", e="{\"key\":\"value\"}"
 ,f="[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]"`, fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`}}, idStr: "abc"},
@@ -625,8 +625,23 @@ SET a=null, b=
 SET a=$1, b=
 	$2, c=:3, d=0 WHERE
 	id=@4`,
-			expected: &StmtUpdate{dbName: "db-1", collName: "table_1", updateStr: `a=$1, b=
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "db-1", collName: "table_1"}, updateStr: `a=$1, b=
 	$2, c=:3, d=0`, fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0}, idStr: "@4", id: placeholder{4}},
+		},
+		{
+			name:     "singlepk",
+			sql:      `UPDATE db.table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 with SinglePk`,
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, updateStr: `a=$1, b=$2, c=:3, d=0`, fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0}, idStr: "@4", id: placeholder{4}},
+		},
+		{
+			name:     "single_pk",
+			sql:      `UPDATE db.table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 WITH SINGLE_PK`,
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, updateStr: `a=$1, b=$2, c=:3, d=0`, fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0}, idStr: "@4", id: placeholder{4}},
+		},
+		{
+			name:     "singlepk_single_pk",
+			sql:      `UPDATE db.table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 with SINGLE_PK, With SinglePk`,
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, updateStr: `a=$1, b=$2, c=:3, d=0`, fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0}, idStr: "@4", id: placeholder{4}},
 		},
 	}
 	for _, testCase := range testData {
@@ -674,7 +689,7 @@ SET a=null, b=
   d="\"a string 'with' \\\"quote\\\"\"", e="{\"key\":\"value\"}"
 ,f="[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]" WHERE
 	id="abc"`,
-			expected: &StmtUpdate{dbName: "mydb", collName: "table1", updateStr: `a=null, b=
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table1"}, updateStr: `a=null, b=
 	1.0, c=true, 
   d="\"a string 'with' \\\"quote\\\"\"", e="{\"key\":\"value\"}"
 ,f="[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]"`, fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`}}, idStr: "abc"}},
@@ -685,8 +700,26 @@ SET a=null, b=
 SET a=$1, b=
 	$2, c=:3, d=0 WHERE
 	id=@4`,
-			expected: &StmtUpdate{dbName: "db-1", collName: "table_1", updateStr: `a=$1, b=
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "db-1", collName: "table_1"}, updateStr: `a=$1, b=
 	$2, c=:3, d=0`, fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0}, idStr: "@4", id: placeholder{4}},
+		},
+		{
+			name:     "singlepk",
+			db:       "mydb",
+			sql:      `UPDATE table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 with SinglePk`,
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table", isSinglePathPk: true, numPkPaths: 1}, updateStr: `a=$1, b=$2, c=:3, d=0`, fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0}, idStr: "@4", id: placeholder{4}},
+		},
+		{
+			name:     "single_pk",
+			db:       "mydb",
+			sql:      `UPDATE db.table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 WITH SINGLE_PK`,
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, updateStr: `a=$1, b=$2, c=:3, d=0`, fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0}, idStr: "@4", id: placeholder{4}},
+		},
+		{
+			name:     "singlepk_single_pk",
+			db:       "mydb",
+			sql:      `UPDATE table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 with SINGLE_PK, With SinglePk`,
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table", isSinglePathPk: true, numPkPaths: 1}, updateStr: `a=$1, b=$2, c=:3, d=0`, fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0}, idStr: "@4", id: placeholder{4}},
 		},
 	}
 	for _, testCase := range testData {

@@ -358,7 +358,9 @@ Description: delete an existing document.
 Syntax:
 
 ```sql
-DELETE FROM [<db-name>.]<collection-name> WHERE id=<id-value> [WITH singlePK|SINGLE_PK]
+DELETE FROM [<db-name>.]<collection-name>
+WHERE id=<id-value>
+[WITH singlePK|SINGLE_PK]
 ```
 
 > `<db-name>` can be ommitted if `DefaultDb` is supplied in the Data Source Name (DSN).
@@ -392,10 +394,15 @@ Description: update an existing document.
 Syntax:
 
 ```sql
-UPDATE [<db-name>.]<collection-name> SET <fiel1>=<value1>[,<field2>=<value2>,...<fieldN>=<valueN>] WHERE id=<id-value>
+UPDATE [<db-name>.]<collection-name>
+SET <fiel1>=<value1>[,<field2>=<value2>,...<fieldN>=<valueN>]
+WHERE id=<id-value>
+[WITH singlePK|SINGLE_PK]
 ```
 
 > `<db-name>` can be ommitted if `DefaultDb` is supplied in the Data Source Name (DSN).
+
+Since [v0.3.0](RELEASE-NOTES.md), `gocosmos` supports [Hierarchical Partition Keys](https://learn.microsoft.com/en-us/azure/cosmos-db/hierarchical-partition-keys) (or sub-partitions). If the collection is known not to have sub-partitions, supplying `WITH singlePK` (or `WITH SINGLE_PK`) can save one roundtrip to Cosmos DB server.
 
 Example:
 ```go
@@ -409,7 +416,7 @@ fmt.Println(dbresult.RowsAffected())
 
 > Use `sql.DB.Exec` to execute the statement, `Query` will return error.
 
-> Value of partition key _must_ be supplied at the last argument of `db.Exec()` call.
+> Values of partition keys _must_ be supplied at the end of the argument list when invoking `db.Exec()`.
 
 - `UPDATE` modifies only one document specified by id.
 - Upon successful execution, `RowsAffected()` returns `(1, nil)`. If no document matched, `RowsAffected()` returns `(0, nil)`.
