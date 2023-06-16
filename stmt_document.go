@@ -384,15 +384,15 @@ func (s *StmtSelect) parse(withOptsStr string) error {
 	if err := s.onlyOneWithOption("database is specified more than once, only one of DATABASE or DB should be specified", "DATABASE", "DB"); err != nil {
 		return err
 	}
+	if err := s.onlyOneWithOption("collection is specified more than once, only one of COLLECTION or TABLE should be specified", "COLLECTION", "TABLE"); err != nil {
+		return err
+	}
 
 	for k, v := range s.withOpts {
 		switch k {
 		case "DATABASE", "DB":
 			s.dbName = v
 		case "COLLECTION", "TABLE":
-			if s.collName != "" && s.collName != "c" && s.collName != "C" {
-				return errors.New("collection is specified more than once, only one of COLLECTION or TABLE should be specified")
-			}
 			s.collName = v
 		case "CROSS_PARTITION", "CROSSPARTITION":
 			if s.isCrossPartition {
