@@ -19,6 +19,8 @@ func TestStmtCreateDatabase_parse(t *testing.T) {
 		{name: "error_if_exists", sql: "CREATE DATABASE if exists db0", mustError: true},
 		{name: "error_if_not_exist", sql: "CREATE DATABASE IF NOT EXIST db0", mustError: true},
 		{name: "error_ru_and_maxru", sql: "CREATE DATABASE db0 with RU=400, WITH MAXru=4000", mustError: true},
+		{name: "error_invalid_with", sql: "CREATE DATABASE db0 with a", mustError: true},
+		{name: "error_invalid_with2", sql: "CREATE DATABASE db0 with a=1", mustError: true},
 
 		{name: "basic", sql: "CREATE DATABASE  db1", expected: &StmtCreateDatabase{dbName: "db1"}},
 		{name: "with_ru", sql: "create\ndatabase\n db-2 \nWITH \n ru=100", expected: &StmtCreateDatabase{dbName: "db-2", ru: 100}},
@@ -44,7 +46,6 @@ func TestStmtCreateDatabase_parse(t *testing.T) {
 				t.Fatalf("%s failed: expected StmtCreateDatabase but received %T", testName+"/"+testCase.name, s)
 			}
 			stmt.Stmt = nil
-			stmt.withOptsStr = ""
 			if !reflect.DeepEqual(stmt, testCase.expected) {
 				t.Fatalf("%s failed:\nexpected %#v\nreceived %#v", testName+"/"+testCase.name, testCase.expected, stmt)
 			}
@@ -62,6 +63,8 @@ func TestStmtAlterDatabase_parse(t *testing.T) {
 	}{
 		{name: "error_no_ru_maxru", sql: "ALTER database db0", mustError: true},
 		{name: "error_ru_and_maxru", sql: "ALTER database db0 WITH RU=400, WITH maxRU=4000", mustError: true},
+		{name: "error_invalid_with", sql: "ALTER database db0 WITH RU=400, WITH a", mustError: true},
+		{name: "error_invalid_with2", sql: "ALTER database db0 WITH RU=400 WITH a=1", mustError: true},
 
 		{name: "with_ru", sql: "ALTER\rdatabase\ndb1\tWITH ru=400", expected: &StmtAlterDatabase{dbName: "db1", ru: 400}},
 		{name: "with_maxru", sql: "alter DATABASE db-1 with maxru=4000", expected: &StmtAlterDatabase{dbName: "db-1", maxru: 4000}},
@@ -83,7 +86,6 @@ func TestStmtAlterDatabase_parse(t *testing.T) {
 				t.Fatalf("%s failed: expected StmtAlterDatabase but received %T", testName+"/"+testCase.name, s)
 			}
 			stmt.Stmt = nil
-			stmt.withOptsStr = ""
 			if !reflect.DeepEqual(stmt, testCase.expected) {
 				t.Fatalf("%s failed:\nexpected %#v\nreceived %#v", testName+"/"+testCase.name, testCase.expected, stmt)
 			}

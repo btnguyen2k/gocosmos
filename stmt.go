@@ -14,7 +14,7 @@ const (
 	field       = `([\w\-]+)`
 	ifNotExists = `(\s+IF\s+NOT\s+EXISTS)?`
 	ifExists    = `(\s+IF\s+EXISTS)?`
-	with        = `(\s+WITH\s+` + field + `(\s*=\s*([\w/\.\*,;:'"-]+))?((\s+|\s*,\s+|\s+,\s*)WITH\s+` + field + `(\s*=\s*([\w/\.\*,;:'"-]+))*)?)?`
+	with        = `(\s+WITH\s+.*)?`
 )
 
 var (
@@ -46,9 +46,8 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 			Stmt:        &Stmt{query: query, conn: c, numInput: 0},
 			dbName:      strings.TrimSpace(groups[0][2]),
 			ifNotExists: strings.TrimSpace(groups[0][1]) != "",
-			withOptsStr: strings.TrimSpace(groups[0][3]),
 		}
-		if err := stmt.parse(); err != nil {
+		if err := stmt.parse(strings.TrimSpace(groups[0][3])); err != nil {
 			return nil, err
 		}
 		return stmt, stmt.validate()
@@ -56,11 +55,10 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 	if re := reAlterDb; re.MatchString(query) {
 		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtAlterDatabase{
-			Stmt:        &Stmt{query: query, conn: c, numInput: 0},
-			dbName:      strings.TrimSpace(groups[0][1]),
-			withOptsStr: strings.TrimSpace(groups[0][2]),
+			Stmt:   &Stmt{query: query, conn: c, numInput: 0},
+			dbName: strings.TrimSpace(groups[0][1]),
 		}
-		if err := stmt.parse(); err != nil {
+		if err := stmt.parse(strings.TrimSpace(groups[0][2])); err != nil {
 			return nil, err
 		}
 		return stmt, stmt.validate()
@@ -88,12 +86,11 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 			ifNotExists: strings.TrimSpace(groups[0][2]) != "",
 			dbName:      strings.TrimSpace(groups[0][4]),
 			collName:    strings.TrimSpace(groups[0][5]),
-			withOptsStr: strings.TrimSpace(groups[0][6]),
 		}
 		if stmt.dbName == "" {
 			stmt.dbName = defaultDb
 		}
-		if err := stmt.parse(); err != nil {
+		if err := stmt.parse(strings.TrimSpace(groups[0][6])); err != nil {
 			return nil, err
 		}
 		return stmt, stmt.validate()
@@ -101,15 +98,14 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 	if re := reAlterColl; re.MatchString(query) {
 		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtAlterCollection{
-			Stmt:        &Stmt{query: query, conn: c, numInput: 0},
-			dbName:      strings.TrimSpace(groups[0][3]),
-			collName:    strings.TrimSpace(groups[0][4]),
-			withOptsStr: strings.TrimSpace(groups[0][5]),
+			Stmt:     &Stmt{query: query, conn: c, numInput: 0},
+			dbName:   strings.TrimSpace(groups[0][3]),
+			collName: strings.TrimSpace(groups[0][4]),
 		}
 		if stmt.dbName == "" {
 			stmt.dbName = defaultDb
 		}
-		if err := stmt.parse(); err != nil {
+		if err := stmt.parse(strings.TrimSpace(groups[0][5])); err != nil {
 			return nil, err
 		}
 		return stmt, stmt.validate()
@@ -220,6 +216,18 @@ type Stmt struct {
 	conn     *Conn  // the connection that this prepared statement is bound to
 	numInput int    // number of placeholder parameters, INCLUDING PK values!
 	withOpts map[string]string
+}
+
+func (s *Stmt) onlyOneWithOption(errmsg string, optKeys ...string) error {
+	ok := false
+	for _, k := range optKeys {
+		_, exist := s.withOpts[k]
+		if ok && exist {
+			return fmt.Errorf(errmsg)
+		}
+		ok = ok || exist
+	}
+	return nil
 }
 
 var reWithOpts = regexp.MustCompile(`(?is)^(\s+|\s*,\s+|\s+,\s*)WITH\s+` + field + `(\s*=\s*([\w/\.\*,;:'"-]+))?`)

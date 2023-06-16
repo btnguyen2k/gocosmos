@@ -24,6 +24,7 @@ func TestStmtCreateCollection_parse(t *testing.T) {
 		{name: "error_invalid_maxru2", sql: "CREATE COLLECTION db.table WITH pk=/id WITH maxru=-1", mustError: true},
 		{name: "error_no_collection", sql: "CREATE TABLE db WITH pk=/id", mustError: true},
 		{name: "error_if_not_exist", sql: "CREATE TABLE IF NOT EXIST db.table WITH pk=/id", mustError: true},
+		{name: "error_invalid_with", sql: "CREATE TABLE db.table WITH pk=/id, WITH a=1", mustError: true},
 
 		{name: "basic", sql: "CREATE COLLECTION db1.table1 WITH pk=/id", expected: &StmtCreateCollection{dbName: "db1", collName: "table1", pk: "/id"}},
 		{name: "table_with_ru", sql: "create\ntable\rdb-2.table_2 WITH\tPK=/email WITH\r\nru=100", expected: &StmtCreateCollection{dbName: "db-2", collName: "table_2", pk: "/email", ru: 100}},
@@ -48,7 +49,6 @@ func TestStmtCreateCollection_parse(t *testing.T) {
 				t.Fatalf("%s failed: expected StmtCreateCollection but received %T", testName+"/"+testCase.name, s)
 			}
 			stmt.Stmt = nil
-			stmt.withOptsStr = ""
 			if !reflect.DeepEqual(stmt, testCase.expected) {
 				t.Fatalf("%s failed:\nexpected %#v\nreceived %#v", testName+"/"+testCase.name, testCase.expected, stmt)
 			}
@@ -66,6 +66,7 @@ func TestStmtCreateCollection_parse_defaultDb(t *testing.T) {
 		mustError bool
 	}{
 		{name: "error_invalid_query", db: "mydb", sql: "CREATE TABLE .mytable WITH pk=/id", mustError: true},
+		{name: "error_invalid_with", db: "mydb", sql: "CREATE TABLE mytable WITH pk=/id WITH a", mustError: true},
 
 		{name: "basic", db: "mydb", sql: "CREATE COLLECTION table1 WITH pk=/id", expected: &StmtCreateCollection{dbName: "mydb", collName: "table1", pk: "/id"}},
 		{name: "db_in_query", db: "mydb", sql: "create\ntable\r\ndb2.table_2 WITH\r\t\nPK=/email WITH\nru=100", expected: &StmtCreateCollection{dbName: "db2", collName: "table_2", pk: "/email", ru: 100}},
@@ -90,7 +91,6 @@ func TestStmtCreateCollection_parse_defaultDb(t *testing.T) {
 				t.Fatalf("%s failed: expected StmtCreateCollection but received %T", testName+"/"+testCase.name, s)
 			}
 			stmt.Stmt = nil
-			stmt.withOptsStr = ""
 			if !reflect.DeepEqual(stmt, testCase.expected) {
 				t.Fatalf("%s failed:\nexpected %#v\nreceived %#v", testName+"/"+testCase.name, testCase.expected, stmt)
 			}
@@ -112,6 +112,7 @@ func TestStmtAlterCollection_parse(t *testing.T) {
 		{name: "error_ru_and_maxru", sql: "alter TABLE db.coll WITH ru=400 WITH maxru=4000", mustError: true},
 		{name: "error_invalid_ru", sql: "alter TABLE db.coll WITH ru=-1", mustError: true},
 		{name: "error_invalid_maxru", sql: "alter TABLE db.coll WITH maxru=-1", mustError: true},
+		{name: "error_invalid_with", sql: "alter TABLE db.coll WITH ru=400, WITH a=1", mustError: true},
 
 		{name: "basic", sql: "ALTER collection db1.table1 WITH ru=400", expected: &StmtAlterCollection{dbName: "db1", collName: "table1", ru: 400}},
 		{name: "table", sql: "alter\nTABLE\rdb-2.table_2 WITH\tmaxru=40000", expected: &StmtAlterCollection{dbName: "db-2", collName: "table_2", maxru: 40000}},
@@ -133,7 +134,6 @@ func TestStmtAlterCollection_parse(t *testing.T) {
 				t.Fatalf("%s failed: expected StmtAlterCollection but received %T", testName+"/"+testCase.name, s)
 			}
 			stmt.Stmt = nil
-			stmt.withOptsStr = ""
 			if !reflect.DeepEqual(stmt, testCase.expected) {
 				t.Fatalf("%s failed:\nexpected %#v\nreceived %#v", testName+"/"+testCase.name, testCase.expected, stmt)
 			}
@@ -153,6 +153,7 @@ func TestStmtAlterCollection_parse_defaultDb(t *testing.T) {
 		{name: "error_invalid_query", db: "mydb", sql: "ALTER COLLECTION .mytable WITH ru=400", mustError: true},
 		{name: "error_notable", db: "mydb", sql: "ALTER COLLECTION mydb. WITH ru=400", mustError: true},
 		{name: "error_no_db_table", db: "mydb", sql: "ALTER COLLECTION     WITH ru=400", mustError: true},
+		{name: "error_invalid_with", db: "mydb", sql: "ALTER COLLECTION mytable WITH ru=400 WITH a", mustError: true},
 
 		{name: "basic", db: "mydb", sql: "ALTER collection table1 WITH ru=400", expected: &StmtAlterCollection{dbName: "mydb", collName: "table1", ru: 400}},
 		{name: "db_in_query", db: "mydb", sql: "alter\nTABLE\rdb-2.table_2 WITH\tmaxru=40000", expected: &StmtAlterCollection{dbName: "db-2", collName: "table_2", maxru: 40000}},
@@ -174,7 +175,6 @@ func TestStmtAlterCollection_parse_defaultDb(t *testing.T) {
 				t.Fatalf("%s failed: expected StmtAlterCollection but received %T", testName+"/"+testCase.name, s)
 			}
 			stmt.Stmt = nil
-			stmt.withOptsStr = ""
 			if !reflect.DeepEqual(stmt, testCase.expected) {
 				t.Fatalf("%s failed:\nexpected %#v\nreceived %#v", testName+"/"+testCase.name, testCase.expected, stmt)
 			}

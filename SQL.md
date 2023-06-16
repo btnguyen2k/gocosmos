@@ -300,7 +300,7 @@ Syntax:
 INSERT INTO [<db-name>.]<collection-name>
 (<field1>, <field2>,...<fieldN>)
 VALUES (<value1>, <value2>,...<valueN>)
-[WITH singlePK|SINGLE_PK]
+[WITH singlePK|SINGLE_PK[=true]]
 ```
 
 > `<db-name>` can be ommitted if `DefaultDb` is supplied in the Data Source Name (DSN).
@@ -346,7 +346,7 @@ Syntax & Usage: similar to [INSERT](#insert).
 UPSERT INTO [<db-name>.]<collection-name>
 (<field1>, <field2>,...<fieldN>)
 VALUES (<value1>, <value2>,...<valueN>)
-[WITH singlePK|SINGLE_PK]
+[WITH singlePK|SINGLE_PK[=true]]
 ```
 
 [Back to top](#top)
@@ -360,7 +360,7 @@ Syntax:
 ```sql
 DELETE FROM [<db-name>.]<collection-name>
 WHERE id=<id-value>
-[WITH singlePK|SINGLE_PK]
+[WITH singlePK|SINGLE_PK[=true]]
 ```
 
 > `<db-name>` can be ommitted if `DefaultDb` is supplied in the Data Source Name (DSN).
@@ -397,7 +397,7 @@ Syntax:
 UPDATE [<db-name>.]<collection-name>
 SET <fiel1>=<value1>[,<field2>=<value2>,...<fieldN>=<valueN>]
 WHERE id=<id-value>
-[WITH singlePK|SINGLE_PK]
+[WITH singlePK|SINGLE_PK[=true]]
 ```
 
 > `<db-name>` can be ommitted if `DefaultDb` is supplied in the Data Source Name (DSN).
@@ -435,7 +435,7 @@ Syntax:
 SELECT [CROSS PARTITION] ... FROM <collection-name> ...
 [WITH database=<db-name>]
 [[,] WITH collection=<collection-name>]
-[[,] WITH cross_partition=true]
+[[,] WITH cross_partition|CrossPartition[=true]]
 ```
 
 > `<db-name>` can be ommitted if `DefaultDb` is supplied in the Data Source Name (DSN).

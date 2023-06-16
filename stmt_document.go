@@ -104,9 +104,26 @@ func (s *StmtCRUD) parseWithOpts(withOptsStr string) error {
 	if err := s.Stmt.parseWithOpts(withOptsStr); err != nil {
 		return err
 	}
-	_, ok1 := s.withOpts["SINGLEPK"]
-	_, ok2 := s.withOpts["SINGLE_PK"]
-	s.isSinglePathPk = ok1 || ok2
+
+	if err := s.onlyOneWithOption("single PK path is specified more than once, only one of SINGLE_PK or SINGLEPK should be specified", "SINGLE_PK", "SINGLEPK"); err != nil {
+		return err
+	}
+
+	for k, v := range s.withOpts {
+		switch k {
+		case "SINGLE_PK", "SINGLEPK":
+			if v == "" {
+				s.isSinglePathPk = true
+			} else {
+				val, err := strconv.ParseBool(v)
+				if err != nil || !val {
+					return fmt.Errorf("invalid value at WITH %s (only value 'true' is accepted)", k)
+				}
+				s.isSinglePathPk = true
+			}
+		}
+	}
+
 	if s.isSinglePathPk {
 		s.numPkPaths = 1
 	}
@@ -118,7 +135,10 @@ func (s *StmtCRUD) parseWithOpts(withOptsStr string) error {
 //
 // Syntax:
 //
-//	INSERT|UPSERT INTO <db-name>.<collection-name> (<field-list>) VALUES (<value-list>) [WITH singlePK|SINGLE_PK]
+//	INSERT|UPSERT INTO <db-name>.<collection-name>
+//	(<field-list>)
+//	VALUES (<value-list>)
+//	[WITH singlePK|SINGLE_PK[=true]]
 //
 //	- values are comma separated.
 //	- a value is either:
@@ -150,6 +170,12 @@ func (s *StmtInsert) parse(withOptsStr string) error {
 		return err
 	}
 
+	for k := range s.withOpts {
+		if k != "SINGLE_PK" && k != "SINGLEPK" {
+			return fmt.Errorf("invalid query, parsing error at WITH %s", k)
+		}
+	}
+
 	s.fields = regexp.MustCompile(`[,\s]+`).Split(s.fieldsStr, -1)
 	s.values = make([]interface{}, 0)
 	for temp := strings.TrimSpace(s.valuesStr); temp != ""; temp = strings.TrimSpace(temp) {
@@ -170,7 +196,7 @@ func (s *StmtInsert) parse(withOptsStr string) error {
 
 func (s *StmtInsert) validate() error {
 	if len(s.fields) != len(s.values) {
-		return fmt.Errorf("number of field (%d) does not match number of input value (%d)", len(s.fields), len(s.values))
+		return fmt.Errorf("number of fields (%d) does not match number of input values (%d)", len(s.fields), len(s.values))
 	}
 	if s.dbName == "" || s.collName == "" {
 		return errors.New("database/collection is missing")
@@ -229,7 +255,9 @@ func (s *StmtInsert) Query(_ []driver.Value) (driver.Rows, error) {
 //
 // Syntax:
 //
-//	DELETE FROM <db-name>.<collection-name> WHERE id=<id-value> [WITH singlePK|SINGLE_PK]
+//	DELETE FROM <db-name>.<collection-name>
+//	WHERE id=<id-value>
+//	[WITH singlePK|SINGLE_PK[=true]]
 //
 // - Currently DELETE only removes one document specified by id.
 //
@@ -243,6 +271,12 @@ type StmtDelete struct {
 func (s *StmtDelete) parse(withOptsStr string) error {
 	if err := s.parseWithOpts(withOptsStr); err != nil {
 		return err
+	}
+
+	for k := range s.withOpts {
+		if k != "SINGLE_PK" && k != "SINGLEPK" {
+			return fmt.Errorf("invalid query, parsing error at WITH %s", k)
+		}
 	}
 
 	hasPrefix := strings.HasPrefix(s.idStr, `"`)
@@ -324,7 +358,7 @@ func (s *StmtDelete) Query(_ []driver.Value) (driver.Rows, error) {
 //	SELECT [CROSS PARTITION] ... FROM <collection/table-name> ...
 //	WITH database|db=<db-name>
 //	[WITH collection|table=<collection/table-name>]
-//	[WITH cross_partition=true]
+//	[WITH cross_partition|CrossPartition[=true]]
 //
 //	- (extension) If the collection is partitioned, specify "CROSS PARTITION" to allow execution across multiple partitions.
 //	  This clause is not required if query is to be executed on a single partition.
@@ -343,25 +377,39 @@ type StmtSelect struct {
 }
 
 func (s *StmtSelect) parse(withOptsStr string) error {
-	if err := s.Stmt.parseWithOpts(withOptsStr); err != nil {
+	if err := s.parseWithOpts(withOptsStr); err != nil {
 		return err
 	}
-	if v, ok := s.withOpts["DATABASE"]; ok {
-		s.dbName = strings.TrimSpace(v)
-	} else if v, ok := s.withOpts["DB"]; ok {
-		s.dbName = strings.TrimSpace(v)
+
+	if err := s.onlyOneWithOption("database is specified more than once, only one of DATABASE or DB should be specified", "DATABASE", "DB"); err != nil {
+		return err
 	}
-	if v, ok := s.withOpts["COLLECTION"]; ok {
-		s.collName = strings.TrimSpace(v)
-	} else if v, ok := s.withOpts["TABLE"]; ok {
-		s.collName = strings.TrimSpace(v)
-	}
-	if v, ok := s.withOpts["CROSS_PARTITION"]; ok && !s.isCrossPartition {
-		vbool, err := strconv.ParseBool(v)
-		if err != nil || !vbool {
-			return errors.New("cannot parse query (the only accepted value for cross_partition is true), invalid token at: " + v)
+
+	for k, v := range s.withOpts {
+		switch k {
+		case "DATABASE", "DB":
+			s.dbName = v
+		case "COLLECTION", "TABLE":
+			if s.collName != "" && s.collName != "c" && s.collName != "C" {
+				return errors.New("collection is specified more than once, only one of COLLECTION or TABLE should be specified")
+			}
+			s.collName = v
+		case "CROSS_PARTITION", "CROSSPARTITION":
+			if s.isCrossPartition {
+				return fmt.Errorf("cross-partition is specified more than once, only one of CROSS_PARTITION or CrossPartition should be specified")
+			}
+			if v == "" {
+				s.isCrossPartition = true
+			} else {
+				val, err := strconv.ParseBool(v)
+				if err != nil || !val {
+					return fmt.Errorf("invalid value at WITH %s (only value 'true' is accepted)", k)
+				}
+				s.isCrossPartition = true
+			}
+		default:
+			return fmt.Errorf("invalid query, parsing error at WITH %s", k)
 		}
-		s.isCrossPartition = true
 	}
 
 	matches := reValPlaceholder.FindAllStringSubmatch(s.selectQuery, -1)
@@ -427,7 +475,10 @@ func (s *StmtSelect) Exec(_ []driver.Value) (driver.Result, error) {
 //
 // Syntax:
 //
-//	UPDATE <db-name>.<collection-name> SET <field-name1>=<value1>[,<field-nameN>=<valueN>]* WHERE id=<id-value> [WITH singlePK|SINGLE_PK]
+//	UPDATE <db-name>.<collection-name>
+//	SET <field-name1>=<value1>[,<field-nameN>=<valueN>]*
+//	WHERE id=<id-value>
+//	[WITH singlePK|SINGLE_PK[=true]]
 //
 //	- <id-value> is treated as a string. `WHERE id=abc` has the same effect as `WHERE id="abc"`.
 //	- <value> is either:
@@ -513,6 +564,12 @@ func (s *StmtUpdate) _parseUpdateClause() error {
 func (s *StmtUpdate) parse(withOptsStr string) error {
 	if err := s.parseWithOpts(withOptsStr); err != nil {
 		return err
+	}
+
+	for k := range s.withOpts {
+		if k != "SINGLE_PK" && k != "SINGLEPK" {
+			return fmt.Errorf("invalid query, parsing error at WITH %s", k)
+		}
 	}
 
 	if err := s._parseId(); err != nil {
