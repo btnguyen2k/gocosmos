@@ -1,6 +1,6 @@
 # gocosmos - Release notes
 
-## 2003-06-0x - v0.3.0
+## 2023-06-16 - v0.3.0
 
 - Change default API version to `2020-07-15`.
 - Add [Hierarchical Partition Keys](https://learn.microsoft.com/en-us/azure/cosmos-db/hierarchical-partition-keys) (sub-partitions) support.

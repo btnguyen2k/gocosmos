@@ -25,6 +25,104 @@ func TestStmtSelect_Exec(t *testing.T) {
 
 /*----------------------------------------------------------------------*/
 
+func _testSelectPkValueSubPartitions(t *testing.T, testName string, db *sql.DB, collname string) {
+	low, high := 123, 987
+	lowStr, highStr := fmt.Sprintf("%05d", low), fmt.Sprintf("%05d", high)
+	countPerPartition := _countPerPartition(low, high, dataList)
+	distinctPerPartition := _distinctPerPartition(low, high, dataList, "category")
+	var testCases = []queryTestCase{
+		{name: "NoLimit_Bare", query: "SELECT * FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 WITH collection=%s WITH cross_partition=true"},
+		{name: "OffsetLimit_Bare", query: "SELECT * FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 OFFSET 3 LIMIT 5 WITH collection=%s WITH cross_partition=true", expectedNumItems: 5},
+		{name: "NoLimit_OrderAsc", query: "SELECT * FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 ORDER BY c.grade WITH collection=%s WITH cross_partition=true", orderType: reddo.TypeInt, orderField: "grade", orderDirection: "asc"},
+		{name: "OffsetLimit_OrderDesc", query: "SELECT * FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 ORDER BY c.category DESC OFFSET 3 LIMIT 5 WITH collection=%s WITH cross_partition=true", expectedNumItems: 5, orderType: reddo.TypeInt, orderField: "category", orderDirection: "desc"},
+
+		{name: "NoLimit_DistinctValue", query: "SELECT DISTINCT VALUE c.category FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 WITH collection=%s WITH cross_partition=true", distinctQuery: 1},
+		{name: "NoLimit_DistinctDoc", query: "SELECT DISTINCT c.category FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 WITH collection=%s WITH cross_partition=true", distinctQuery: -1},
+		{name: "OffsetLimit_DistinctValue", query: "SELECT DISTINCT VALUE c.category FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", distinctQuery: 1, expectedNumItems: 3},
+		{name: "OffsetLimit_DistinctDoc", query: "SELECT DISTINCT c.category FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", distinctQuery: -1, expectedNumItems: 3},
+
+		{name: "NoLimit_DistinctValue_OrderAsc", query: "SELECT DISTINCT VALUE c.category FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 ORDER BY c.category WITH collection=%s WITH cross_partition=true", distinctQuery: 1, orderType: reddo.TypeInt, orderField: "$1", orderDirection: "asc"},
+		{name: "NoLimit_DistinctDoc_OrderDesc", query: "SELECT DISTINCT c.category FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 ORDER BY c.category DESC WITH collection=%s WITH cross_partition=true", distinctQuery: -1, orderType: reddo.TypeInt, orderField: "category", orderDirection: "desc"},
+		{name: "OffsetLimit_DistinctValue_OrderAsc", query: "SELECT DISTINCT VALUE c.category FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 ORDER BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", distinctQuery: 1, orderType: reddo.TypeInt, orderField: "$1", orderDirection: "asc", expectedNumItems: 3},
+		{name: "OffsetLimit_DistinctDoc_OrderDesc", query: "SELECT DISTINCT c.category FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 ORDER BY c.category DESC OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", distinctQuery: -1, orderType: reddo.TypeInt, orderField: "category", orderDirection: "desc", expectedNumItems: 3},
+
+		/* GROUP BY with ORDER BY is not supported! */
+		{name: "NoLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByAggr: "count"},
+		{name: "OffsetLimit_GroupByCount", query: "SELECT c.category AS 'Category', count(1) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByAggr: "count"},
+		{name: "NoLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByAggr: "sum"},
+		{name: "OffsetLimit_GroupBySum", query: "SELECT c.category AS 'Category', sum(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByAggr: "sum"},
+		{name: "NoLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByAggr: "min"},
+		{name: "OffsetLimit_GroupByMin", query: "SELECT c.category AS 'Category', min(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByAggr: "min"},
+		{name: "NoLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByAggr: "max"},
+		{name: "OffsetLimit_GroupByMax", query: "SELECT c.category AS 'Category', max(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByAggr: "max"},
+		{name: "NoLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category WITH collection=%s WITH cross_partition=true", groupByAggr: "average"},
+		{name: "OffsetLimit_GroupByAvg", query: "SELECT c.category AS 'Category', avg(c.grade) AS 'Value' FROM c WHERE $1<=c.id AND c.id<@2 AND c.username=:3 GROUP BY c.category OFFSET 1 LIMIT 3 WITH collection=%s WITH cross_partition=true", expectedNumItems: 3, groupByAggr: "average"},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			savedExpectedNumItems := testCase.expectedNumItems
+			for i := 0; i < numLogicalPartitions; i++ {
+				testCase.expectedNumItems = savedExpectedNumItems
+				expectedNumItems := testCase.expectedNumItems
+				username := "user" + strconv.Itoa(i)
+				params := []interface{}{lowStr, highStr, username}
+				if expectedNumItems <= 0 && testCase.maxItemCount <= 0 {
+					expectedNumItems = countPerPartition[username]
+					if testCase.distinctQuery != 0 {
+						expectedNumItems = distinctPerPartition[username]
+					}
+					testCase.expectedNumItems = expectedNumItems
+				}
+				sql := fmt.Sprintf(testCase.query, collname)
+				dbRows, err := db.Query(sql, params...)
+				if err != nil {
+					t.Fatalf("%s failed: %s", testName+"/"+testCase.name, err)
+				}
+				rows, err := _fetchAllRows(dbRows)
+				if err != nil {
+					t.Fatalf("%s failed: %s", testName+"/"+testCase.name, err)
+				}
+				_verifyResult(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name+"/pk="+username, testCase, expectedNumItems, rows)
+				_verifyDistinct(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name+"/pk="+username, testCase, rows)
+				_verifyOrderBy(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name+"/pk="+username, testCase, rows)
+				_verifyGroupBy(func(msg string) { t.Fatal(msg) }, testName+"/"+testCase.name+"/pk="+username, testCase, username, lowStr, highStr, rows)
+			}
+		})
+	}
+}
+
+func TestStmtSelect_Query_PkValue_SubPartitions_SmallRU(t *testing.T) {
+	testName := "TestStmtSelect_Query_PkValue_SmallRU"
+	dbname := testDb
+	collname := testTable
+	client := _newRestClient(t, testName)
+	_initDataSubPartitionsSmallRU(t, testName, client, dbname, collname, 1000)
+	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
+		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
+	} else if result.Count != 1 {
+		t.Fatalf("%s failed: <num-partition> expected to be %#v but received %#v", testName+"/GetPkranges", 1, result.Count)
+	}
+	db := _openDefaultDb(t, testName, dbname)
+	_testSelectPkValueSubPartitions(t, testName, db, collname)
+}
+
+func TestStmtSelect_Query_PkValue_SubPartitions_LargeRU(t *testing.T) {
+	testName := "TestStmtSelect_Query_PkValue_LargeRU"
+	dbname := testDb
+	collname := testTable
+	client := _newRestClient(t, testName)
+	_initDataSubPartitionsLargeRU(t, testName, client, dbname, collname, 1000)
+	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
+		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
+	} else if result.Count < 2 {
+		t.Fatalf("%s failed: <num-partition> expected to be larger than %#v but received %#v", testName+"/GetPkranges", 1, result.Count)
+	}
+	db := _openDefaultDb(t, testName, dbname)
+	_testSelectPkValueSubPartitions(t, testName, db, collname)
+}
+
+/*----------------------------------------------------------------------*/
+
 func _testSelectPkValue(t *testing.T, testName string, db *sql.DB, collname string) {
 	low, high := 123, 987
 	lowStr, highStr := fmt.Sprintf("%05d", low), fmt.Sprintf("%05d", high)
