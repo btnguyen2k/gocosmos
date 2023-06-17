@@ -14,7 +14,7 @@ const (
 	field       = `([\w\-]+)`
 	ifNotExists = `(\s+IF\s+NOT\s+EXISTS)?`
 	ifExists    = `(\s+IF\s+EXISTS)?`
-	with        = `(\s+WITH\s+` + field + `\s*=\s*([\w/\.\*,;:'"-]+)((\s+|\s*,\s+|\s+,\s*)WITH\s+` + field + `\s*=\s*([\w/\.\*,;:'"-]+))*)?`
+	with        = `(\s+WITH\s+.*)?`
 )
 
 var (
@@ -28,10 +28,10 @@ var (
 	reDropColl   = regexp.MustCompile(`(?is)^DROP\s+(COLLECTION|TABLE)` + ifExists + `\s+(` + field + `\.)?` + field + `$`)
 	reListColls  = regexp.MustCompile(`(?is)^LIST\s+(COLLECTIONS?|TABLES?)(\s+FROM\s+` + field + `)?$`)
 
-	reInsert = regexp.MustCompile(`(?is)^(INSERT|UPSERT)\s+INTO\s+(` + field + `\.)?` + field + `\s*\(([^)]*?)\)\s*VALUES\s*\(([^)]*?)\)$`)
+	reInsert = regexp.MustCompile(`(?is)^(INSERT|UPSERT)\s+INTO\s+(` + field + `\.)?` + field + `\s*\(([^)]*?)\)\s*VALUES\s*\(([^)]*?)\)` + with + `$`)
 	reSelect = regexp.MustCompile(`(?is)^SELECT\s+(CROSS\s+PARTITION\s+)?.*?\s+FROM\s+` + field + `.*?` + with + `$`)
-	reUpdate = regexp.MustCompile(`(?is)^UPDATE\s+(` + field + `\.)?` + field + `\s+SET\s+(.*)\s+WHERE\s+id\s*=\s*(.*)$`)
-	reDelete = regexp.MustCompile(`(?is)^DELETE\s+FROM\s+(` + field + `\.)?` + field + `\s+WHERE\s+id\s*=\s*(.*)$`)
+	reUpdate = regexp.MustCompile(`(?is)^UPDATE\s+(` + field + `\.)?` + field + `\s+SET\s+(.*)\s+WHERE\s+id\s*=\s*(.*?)` + with + `$`)
+	reDelete = regexp.MustCompile(`(?is)^DELETE\s+FROM\s+(` + field + `\.)?` + field + `\s+WHERE\s+id\s*=\s*(.*?)` + with + `$`)
 )
 
 func parseQuery(c *Conn, query string) (driver.Stmt, error) {
@@ -46,9 +46,8 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 			Stmt:        &Stmt{query: query, conn: c, numInput: 0},
 			dbName:      strings.TrimSpace(groups[0][2]),
 			ifNotExists: strings.TrimSpace(groups[0][1]) != "",
-			withOptsStr: strings.TrimSpace(groups[0][3]),
 		}
-		if err := stmt.parse(); err != nil {
+		if err := stmt.parse(strings.TrimSpace(groups[0][3])); err != nil {
 			return nil, err
 		}
 		return stmt, stmt.validate()
@@ -56,11 +55,10 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 	if re := reAlterDb; re.MatchString(query) {
 		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtAlterDatabase{
-			Stmt:        &Stmt{query: query, conn: c, numInput: 0},
-			dbName:      strings.TrimSpace(groups[0][1]),
-			withOptsStr: strings.TrimSpace(groups[0][2]),
+			Stmt:   &Stmt{query: query, conn: c, numInput: 0},
+			dbName: strings.TrimSpace(groups[0][1]),
 		}
-		if err := stmt.parse(); err != nil {
+		if err := stmt.parse(strings.TrimSpace(groups[0][2])); err != nil {
 			return nil, err
 		}
 		return stmt, stmt.validate()
@@ -88,12 +86,11 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 			ifNotExists: strings.TrimSpace(groups[0][2]) != "",
 			dbName:      strings.TrimSpace(groups[0][4]),
 			collName:    strings.TrimSpace(groups[0][5]),
-			withOptsStr: strings.TrimSpace(groups[0][6]),
 		}
 		if stmt.dbName == "" {
 			stmt.dbName = defaultDb
 		}
-		if err := stmt.parse(); err != nil {
+		if err := stmt.parse(strings.TrimSpace(groups[0][6])); err != nil {
 			return nil, err
 		}
 		return stmt, stmt.validate()
@@ -101,15 +98,14 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 	if re := reAlterColl; re.MatchString(query) {
 		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtAlterCollection{
-			Stmt:        &Stmt{query: query, conn: c, numInput: 0},
-			dbName:      strings.TrimSpace(groups[0][3]),
-			collName:    strings.TrimSpace(groups[0][4]),
-			withOptsStr: strings.TrimSpace(groups[0][5]),
+			Stmt:     &Stmt{query: query, conn: c, numInput: 0},
+			dbName:   strings.TrimSpace(groups[0][3]),
+			collName: strings.TrimSpace(groups[0][4]),
 		}
 		if stmt.dbName == "" {
 			stmt.dbName = defaultDb
 		}
-		if err := stmt.parse(); err != nil {
+		if err := stmt.parse(strings.TrimSpace(groups[0][5])); err != nil {
 			return nil, err
 		}
 		return stmt, stmt.validate()
@@ -142,17 +138,19 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 	if re := reInsert; re.MatchString(query) {
 		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtInsert{
-			Stmt:      &Stmt{query: query, conn: c, numInput: 0},
+			StmtCRUD: &StmtCRUD{
+				Stmt:     &Stmt{query: query, conn: c, numInput: 0},
+				dbName:   strings.TrimSpace(groups[0][3]),
+				collName: strings.TrimSpace(groups[0][4]),
+			},
 			isUpsert:  strings.ToUpper(strings.TrimSpace(groups[0][1])) == "UPSERT",
-			dbName:    strings.TrimSpace(groups[0][3]),
-			collName:  strings.TrimSpace(groups[0][4]),
 			fieldsStr: strings.TrimSpace(groups[0][5]),
 			valuesStr: strings.TrimSpace(groups[0][6]),
 		}
 		if stmt.dbName == "" {
 			stmt.dbName = defaultDb
 		}
-		if err := stmt.parse(); err != nil {
+		if err := stmt.parse(groups[0][7]); err != nil {
 			return nil, err
 		}
 		return stmt, stmt.validate()
@@ -174,16 +172,18 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 	if re := reUpdate; re.MatchString(query) {
 		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtUpdate{
-			Stmt:      &Stmt{query: query, conn: c, numInput: 0},
-			dbName:    strings.TrimSpace(groups[0][2]),
-			collName:  strings.TrimSpace(groups[0][3]),
+			StmtCRUD: &StmtCRUD{
+				Stmt:     &Stmt{query: query, conn: c, numInput: 0},
+				dbName:   strings.TrimSpace(groups[0][2]),
+				collName: strings.TrimSpace(groups[0][3]),
+			},
 			updateStr: strings.TrimSpace(groups[0][4]),
 			idStr:     strings.TrimSpace(groups[0][5]),
 		}
 		if stmt.dbName == "" {
 			stmt.dbName = defaultDb
 		}
-		if err := stmt.parse(); err != nil {
+		if err := stmt.parse(groups[0][6]); err != nil {
 			return nil, err
 		}
 		return stmt, stmt.validate()
@@ -191,15 +191,17 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 	if re := reDelete; re.MatchString(query) {
 		groups := re.FindAllStringSubmatch(query, -1)
 		stmt := &StmtDelete{
-			Stmt:     &Stmt{query: query, conn: c, numInput: 0},
-			dbName:   strings.TrimSpace(groups[0][2]),
-			collName: strings.TrimSpace(groups[0][3]),
-			idStr:    strings.TrimSpace(groups[0][4]),
+			StmtCRUD: &StmtCRUD{
+				Stmt:     &Stmt{query: query, conn: c, numInput: 0},
+				dbName:   strings.TrimSpace(groups[0][2]),
+				collName: strings.TrimSpace(groups[0][3]),
+			},
+			idStr: strings.TrimSpace(groups[0][4]),
 		}
 		if stmt.dbName == "" {
 			stmt.dbName = defaultDb
 		}
-		if err := stmt.parse(); err != nil {
+		if err := stmt.parse(groups[0][5]); err != nil {
 			return nil, err
 		}
 		return stmt, stmt.validate()
@@ -212,11 +214,23 @@ func parseQueryWithDefaultDb(c *Conn, defaultDb, query string) (driver.Stmt, err
 type Stmt struct {
 	query    string // the SQL query
 	conn     *Conn  // the connection that this prepared statement is bound to
-	numInput int    // number of placeholder parameters
+	numInput int    // number of placeholder parameters, INCLUDING PK values!
 	withOpts map[string]string
 }
 
-var reWithOpts = regexp.MustCompile(`(?is)^(\s+|\s*,\s+|\s+,\s*)WITH\s+` + field + `\s*=\s*([\w/\.\*,;:'"-]+)`)
+func (s *Stmt) onlyOneWithOption(errmsg string, optKeys ...string) error {
+	ok := false
+	for _, k := range optKeys {
+		_, exist := s.withOpts[k]
+		if ok && exist {
+			return fmt.Errorf(errmsg)
+		}
+		ok = ok || exist
+	}
+	return nil
+}
+
+var reWithOpts = regexp.MustCompile(`(?is)^(\s+|\s*,\s+|\s+,\s*)WITH\s+` + field + `(\s*=\s*([\w/\.\*,;:'"-]+))?`)
 
 // parseWithOpts parses "WITH..." clause and store result in withOpts map.
 // This function returns no error. Sub-implementations may override this behavior.
@@ -229,7 +243,7 @@ func (s *Stmt) parseWithOpts(withOptsStr string) error {
 			break
 		}
 		k := strings.TrimSpace(strings.ToUpper(matches[2]))
-		s.withOpts[k] = strings.TrimSuffix(strings.TrimSpace(matches[3]), ",")
+		s.withOpts[k] = strings.TrimSuffix(strings.TrimSpace(matches[4]), ",")
 		withOptsStr = withOptsStr[len(matches[0]):]
 	}
 	return nil
@@ -242,7 +256,7 @@ func (s *Stmt) Close() error {
 
 // NumInput implements driver.Stmt/NumInput.
 func (s *Stmt) NumInput() int {
-	return s.numInput
+	return -1
 }
 
 /*----------------------------------------------------------------------*/

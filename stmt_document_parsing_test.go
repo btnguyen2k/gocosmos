@@ -22,6 +22,7 @@ func TestStmtInsert_parse(t *testing.T) {
 		{name: "error_num_values_not_matched", sql: `INSERT INTO db.table (a,b) VALUES (1,2,3)`, mustError: true},
 		{name: "error_invalid_number", sql: `INSERT INTO db.table (a,b) VALUES (0x1qa,2)`, mustError: true},
 		{name: "error_invalid_string", sql: `INSERT INTO db.table (a,b) VALUES ("cannot \\"unquote",2)`, mustError: true},
+		{name: "error_invalid_with", sql: `INSERT INTO db.table (a,b) VALUES (1,2) WITH a`, mustError: true},
 
 		{
 			name: "basic",
@@ -30,7 +31,7 @@ db1.table1 (a, b, c, d, e,
 f) VALUES
 	(null, 1.0, 
 true, "\"a string 'with' \\\"quote\\\"\"", "{\"key\":\"value\"}", "[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]")`,
-			expected: &StmtInsert{dbName: "db1", collName: "table1", fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`}}},
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db1", collName: "table1"}, fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`}}},
 		},
 		{
 			name: "with_placeholders",
@@ -38,7 +39,42 @@ true, "\"a string 'with' \\\"quote\\\"\"", "{\"key\":\"value\"}", "[2.0,null,fal
 INTO db-2.table_2 (
 a,b,c) VALUES (
 $1, :3, @2)`,
-			expected: &StmtInsert{dbName: "db-2", collName: "table_2", fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db-2", collName: "table_2"}, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+		{
+			name:     "singlepk",
+			sql:      `INSERT INTO db.table (a,b,c) VALUES (1,2,3) WITH singlePK`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, fields: []string{"a", "b", "c"}, values: []interface{}{1.0, 2.0, 3.0}},
+		},
+		{
+			name:     "single_pk",
+			sql:      `INSERT INTO db.table (a,b,c) VALUES (:1,$2,3) WITH SINGLE_PK`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{2}, 3.0}},
+		},
+		{
+			name:     "singlepk2",
+			sql:      `INSERT INTO db.table (a,b,c) VALUES (1,2,3) WITH singlePK=true`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, fields: []string{"a", "b", "c"}, values: []interface{}{1.0, 2.0, 3.0}},
+		},
+		{
+			name:     "single_pk2",
+			sql:      `INSERT INTO db.table (a,b,c) VALUES (:1,$2,3) WITH SINGLE_PK=true`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{2}, 3.0}},
+		},
+		{
+			name:      "error_singlepk_single_pk",
+			sql:       `INSERT INTO db.table (a,b,c) VALUES (1,2,@1) WITH singlePK, with SINGLE_PK`,
+			mustError: true,
+		},
+		{
+			name:      "error_invalid_singlepk",
+			sql:       `INSERT INTO db.table (a,b,c) VALUES (1,2,3) WITH singlePK=false`,
+			mustError: true,
+		},
+		{
+			name:      "error_invalid_single_pk",
+			sql:       `INSERT INTO db.table (a,b,c) VALUES (:1,$2,3) WITH SINGLE_PK=error`,
+			mustError: true,
 		},
 	}
 	for _, testCase := range testData {
@@ -61,7 +97,7 @@ $1, :3, @2)`,
 			stmt.fieldsStr = ""
 			stmt.valuesStr = ""
 			if !reflect.DeepEqual(stmt, testCase.expected) {
-				t.Fatalf("%s failed:\nexpected %#v\nreceived %#v", testName+"/"+testCase.name, testCase.expected, stmt)
+				t.Fatalf("%s failed:\nexpected %#v/%#v\nreceived %#v/%#v", testName+"/"+testCase.name, testCase.expected.StmtCRUD, testCase.expected, stmt.StmtCRUD, stmt)
 			}
 		})
 	}
@@ -78,25 +114,68 @@ func TestStmtInsert_parse_defaultDb(t *testing.T) {
 	}{
 		{name: "error_invalid_query", sql: `INSERT INTO .table (a,b) VALUES (1,2)`, mustError: true},
 		{name: "error_invalid_query2", sql: `INSERT INTO db. (a,b) VALUES (1,2)`, mustError: true},
+		{name: "error_invalid_with", db: "mydb", sql: `INSERT INTO table (a,b) VALUES (1,2) WITH a=1`, mustError: true},
 
 		{
 			name: "basic",
 			db:   "mydb",
 			sql: `INSERT INTO
-table1 (a, b, c, d, e, 
+table1 (a, b, c, d, e,
 f) VALUES
-	(null, 1.0, 
+	(null, 1.0,
 true, "\"a string 'with' \\\"quote\\\"\"", "{\"key\":\"value\"}", "[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]")`,
-			expected: &StmtInsert{dbName: "mydb", collName: "table1", fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`}}},
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table1"}, fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`}}},
 		},
 		{
 			name: "with_placeholders_table_in_query",
 			db:   "mydb",
-			sql: `INSERT 
+			sql: `INSERT
 INTO db-2.table_2 (
 a,b,c) VALUES (
 $1, :3, @2)`,
-			expected: &StmtInsert{dbName: "db-2", collName: "table_2", fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db-2", collName: "table_2"}, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+		{
+			name:     "singlepk",
+			db:       "mydb",
+			sql:      `INSERT INTO table (a,b,c) VALUES (1,2,3) WITH singlePK`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table", isSinglePathPk: true, numPkPaths: 1}, fields: []string{"a", "b", "c"}, values: []interface{}{1.0, 2.0, 3.0}},
+		},
+		{
+			name:     "singlepk2",
+			db:       "mydb",
+			sql:      `INSERT INTO table (a,b,c) VALUES (1,2,3) WITH singlePK=true`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table", isSinglePathPk: true, numPkPaths: 1}, fields: []string{"a", "b", "c"}, values: []interface{}{1.0, 2.0, 3.0}},
+		},
+		{
+			name:     "single_pk",
+			db:       "mydb",
+			sql:      `INSERT INTO db.table (a,b,c) VALUES (:1,$2,3) WITH SINGLE_PK`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{2}, 3.0}},
+		},
+		{
+			name:     "single_pk2",
+			db:       "mydb",
+			sql:      `INSERT INTO db.table (a,b,c) VALUES (:1,$2,3) WITH SINGLE_PK=true`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{2}, 3.0}},
+		},
+		{
+			name:      "error_singlepk_single_pk",
+			db:        "mydb",
+			sql:       `INSERT INTO table (a,b,c) VALUES (1,2,@1) WITH singlePK, with SINGLE_PK`,
+			mustError: true,
+		},
+		{
+			name:      "error_invalid_singlepk",
+			db:        "mydb",
+			sql:       `INSERT INTO table (a,b,c) VALUES (1,2,3) WITH singlePK=false`,
+			mustError: true,
+		},
+		{
+			name:      "error_invalid_single_pk",
+			db:        "mydb",
+			sql:       `INSERT INTO db.table (a,b,c) VALUES (:1,$2,3) WITH SINGLE_PK=error`,
+			mustError: true,
 		},
 	}
 	for _, testCase := range testData {
@@ -142,24 +221,60 @@ func TestStmtUpsert_parse(t *testing.T) {
 		{name: "error_num_values_not_matched", sql: `UPSERT INTO db.table (a,b) VALUES (1,2,3)`, mustError: true},
 		{name: "error_invalid_number", sql: `UPSERT INTO db.table (a,b) VALUES (0x1qa,2)`, mustError: true},
 		{name: "error_invalid_string", sql: `UPSERT INTO db.table (a,b) VALUES ("cannot \\"unquote",2)`, mustError: true},
+		{name: "error_invalid_with", sql: `UPSERT INTO db.table (a,b) VALUES (1,2) WITH a`, mustError: true},
 
 		{
 			name: "basic",
-			sql: `UPSERT INTO 
-db1.table1 (a, 
+			sql: `UPSERT INTO
+db1.table1 (a,
 b, c, d, e,
 f) VALUES
 	(null, 1.0, true,
   "\"a string 'with' \\\"quote\\\"\"", "{\"key\":\"value\"}", "[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]")`,
-			expected: &StmtInsert{dbName: "db1", collName: "table1", isUpsert: true, fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`}}},
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db1", collName: "table1"}, isUpsert: true, fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`}}},
 		},
 		{
 			name: "with_placeholders",
-			sql: `UPSERT 
+			sql: `UPSERT
 INTO db-2.table_2 (
 a,b,c) VALUES ($1,
 	:3, @2)`,
-			expected: &StmtInsert{dbName: "db-2", collName: "table_2", isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db-2", collName: "table_2"}, isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+		{
+			name:     "singlepk",
+			sql:      `UPSERT INTO db.table (a,b,c) VALUES (:1, :3, :2) WITH singlePK`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+		{
+			name:     "single_pk",
+			sql:      `UPSERT INTO db.table (a,b,c) VALUES (:1, :3, :2) WITH SINGLE_PK`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+		{
+			name:     "singlepk2",
+			sql:      `UPSERT INTO db.table (a,b,c) VALUES (:1, :3, :2) WITH singlePK=true`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+		{
+			name:     "single_pk2",
+			sql:      `UPSERT INTO db.table (a,b,c) VALUES (:1, :3, :2) WITH SINGLE_PK=true`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+		{
+			name:      "error_singlepk_single_pk",
+			sql:       `UPSERT INTO db.table (a,b,c) VALUES (:1, :3, :2) WITH SINGLE_PK, with singlePK`,
+			mustError: true,
+		},
+		{
+			name:      "error_invalid_single_pk",
+			sql:       `UPSERT INTO db.table (a,b,c) VALUES (:1, :3, :2) WITH SINGLE_PK=error`,
+			mustError: true,
+		},
+		{
+			name:      "error_invalid_singlepk",
+			sql:       `UPSERT INTO db.table (a,b,c) VALUES (:1, :3, :2) WITH singlePK=false`,
+			mustError: true,
 		},
 	}
 	for _, testCase := range testData {
@@ -199,26 +314,69 @@ func TestStmtUpsert_parse_defaultDb(t *testing.T) {
 	}{
 		{name: "error_invalid_query", sql: `UPSERT INTO .table (a,b) VALUES (1,2)`, mustError: true},
 		{name: "error_invalid_query2", sql: `UPSERT INTO db. (a,b) VALUES (1,2)`, mustError: true},
+		{name: "error_invalid_with", db: "mydb", sql: `UPSERT INTO table (a,b) VALUES (1,2) WITH a=1`, mustError: true},
 
 		{
 			name: "basic",
 			db:   "mydb",
-			sql: `UPSERT INTO 
-table1 (a, 
+			sql: `UPSERT INTO
+table1 (a,
 b, c, d, e,
 f) VALUES
 	(null, 1.0, true,
   "\"a string 'with' \\\"quote\\\"\"", "{\"key\":\"value\"}", "[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]")`,
-			expected: &StmtInsert{dbName: "mydb", collName: "table1", isUpsert: true, fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`}}},
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table1"}, isUpsert: true, fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`}}},
 		},
 		{
 			name: "with_placeholders_table_in_query",
 			db:   "mydb",
-			sql: `UPSERT 
+			sql: `UPSERT
 INTO db-2.table_2 (
 a,b,c) VALUES ($1,
 	:3, @2)`,
-			expected: &StmtInsert{dbName: "db-2", collName: "table_2", isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db-2", collName: "table_2"}, isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+		{
+			name:     "singlepk",
+			db:       "mydb",
+			sql:      `UPSERT INTO db.table (a,b,c) VALUES ($1, :3, @2) WITH SINGLEPK`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+		{
+			name:     "single_pk",
+			db:       "mydb",
+			sql:      `UPSERT INTO table (a,b,c) VALUES ($1, :3, @2) WITH single_pk`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table", isSinglePathPk: true, numPkPaths: 1}, isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+		{
+			name:     "singlepk2",
+			db:       "mydb",
+			sql:      `UPSERT INTO db.table (a,b,c) VALUES ($1, :3, @2) WITH SINGLEPK=true`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+		{
+			name:     "single_pk2",
+			db:       "mydb",
+			sql:      `UPSERT INTO table (a,b,c) VALUES ($1, :3, @2) WITH single_pk=true`,
+			expected: &StmtInsert{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table", isSinglePathPk: true, numPkPaths: 1}, isUpsert: true, fields: []string{"a", "b", "c"}, values: []interface{}{placeholder{1}, placeholder{3}, placeholder{2}}},
+		},
+		{
+			name:      "error_singlepk_single_pk",
+			db:        "mydb",
+			sql:       `UPSERT INTO db.table (a,b,c) VALUES ($1, :3, @2) WITH single_pk WITH singlePK`,
+			mustError: true,
+		},
+		{
+			name:      "error_invalid_singlepk",
+			db:        "mydb",
+			sql:       `UPSERT INTO db.table (a,b,c) VALUES ($1, :3, @2) WITH SINGLEPK=false`,
+			mustError: true,
+		},
+		{
+			name:      "error_invalid_single_pk",
+			db:        "mydb",
+			sql:       `UPSERT INTO table (a,b,c) VALUES ($1, :3, @2) WITH single_pk=error`,
+			mustError: true,
 		},
 	}
 	for _, testCase := range testData {
@@ -241,7 +399,7 @@ a,b,c) VALUES ($1,
 			stmt.fieldsStr = ""
 			stmt.valuesStr = ""
 			if !reflect.DeepEqual(stmt, testCase.expected) {
-				t.Fatalf("%s failed:\nexpected %#v\nreceived %#v", testName+"/"+testCase.name, testCase.expected, stmt)
+				t.Fatalf("%s failed:\nexpected %#v/%#v\nreceived %#v/%#v", testName+"/"+testCase.name, testCase.expected.StmtCRUD, testCase.expected, stmt.StmtCRUD, stmt)
 			}
 		})
 	}
@@ -263,13 +421,14 @@ func TestStmtDelete_parse(t *testing.T) {
 		{name: "error_invalid_where", sql: `DELETE FROM db.table WHERE id=@1 a`, mustError: true},
 		{name: "error_invalid_where2", sql: `DELETE FROM db.table WHERE id=b $2`, mustError: true},
 		{name: "error_invalid_where3", sql: `DELETE FROM db.table WHERE id=c :3 d`, mustError: true},
+		{name: "error_invalid_with", sql: `DELETE FROM db.table WHERE id=1 WITH a`, mustError: true},
 
 		{
 			name: "basic",
 			sql: `DELETE FROM 
 db1.table1 WHERE 
 	id=abc`,
-			expected: &StmtDelete{dbName: "db1", collName: "table1", idStr: "abc"},
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db1", collName: "table1"}, idStr: "abc"},
 		},
 		{
 			name: "basic2",
@@ -277,14 +436,49 @@ db1.table1 WHERE
 	DELETE 
 FROM db-2.table_2
 	WHERE     id="def"`,
-			expected: &StmtDelete{dbName: "db-2", collName: "table_2", idStr: "def"},
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db-2", collName: "table_2"}, idStr: "def"},
 		},
 		{
 			name: "basic3",
 			sql: `DELETE FROM 
 db_3-0.table-3_0 WHERE 
 	id=@2`,
-			expected: &StmtDelete{dbName: "db_3-0", collName: "table-3_0", idStr: "@2", id: placeholder{2}},
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db_3-0", collName: "table-3_0"}, idStr: "@2", id: placeholder{2}},
+		},
+		{
+			name:     "singlepk",
+			sql:      `DELETE FROM db.table WHERE id=@2 WITH singlePK`,
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, idStr: "@2", id: placeholder{2}},
+		},
+		{
+			name:     "single_pk",
+			sql:      `DELETE FROM db.table WHERE id=@2 with Single_PK`,
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, idStr: "@2", id: placeholder{2}},
+		},
+		{
+			name:     "singlepk2",
+			sql:      `DELETE FROM db.table WHERE id=@2 WITH singlePK=true`,
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, idStr: "@2", id: placeholder{2}},
+		},
+		{
+			name:     "single_pk",
+			sql:      `DELETE FROM db.table WHERE id=@2 with Single_PK=true`,
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, idStr: "@2", id: placeholder{2}},
+		},
+		{
+			name:      "error_singlepk_single_pk",
+			sql:       `DELETE FROM db.table WHERE id=@2 with SinglePK WITH SINGLE_PK`,
+			mustError: true,
+		},
+		{
+			name:      "error_invalid_singlepk",
+			sql:       `DELETE FROM db.table WHERE id=@2 WITH singlePK=false`,
+			mustError: true,
+		},
+		{
+			name:      "error_invalid_single_pk",
+			sql:       `DELETE FROM db.table WHERE id=@2 with Single_PK=error`,
+			mustError: true,
 		},
 	}
 	for _, testCase := range testData {
@@ -322,6 +516,7 @@ func TestStmtDelete_parse_defaultDb(t *testing.T) {
 	}{
 		{name: "error_invalid_query", sql: `DELETE FROM .table WHERE id=1`, mustError: true},
 		{name: "error_invalid_query2", sql: `DELETE FROM db. WHERE id=1`, mustError: true},
+		{name: "error_invalid_with", db: "mydb", sql: `DELETE FROM table WHERE id=1 WITH a=1`, mustError: true},
 
 		{
 			name: "basic",
@@ -329,7 +524,7 @@ func TestStmtDelete_parse_defaultDb(t *testing.T) {
 			sql: `DELETE FROM 
 table1 WHERE 
 	id=abc`,
-			expected: &StmtDelete{dbName: "mydb", collName: "table1", idStr: "abc"},
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table1"}, idStr: "abc"},
 		},
 		{
 			name: "db_in_query",
@@ -338,7 +533,7 @@ table1 WHERE
 	DELETE 
 FROM db-2.table_2
 	WHERE     id="def"`,
-			expected: &StmtDelete{dbName: "db-2", collName: "table_2", idStr: "def"},
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db-2", collName: "table_2"}, idStr: "def"},
 		},
 		{
 			name: "placeholder",
@@ -346,7 +541,49 @@ FROM db-2.table_2
 			sql: `DELETE FROM 
 db_3-0.table-3_0 WHERE 
 	id=@2`,
-			expected: &StmtDelete{dbName: "db_3-0", collName: "table-3_0", idStr: "@2", id: placeholder{2}},
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db_3-0", collName: "table-3_0"}, idStr: "@2", id: placeholder{2}},
+		},
+		{
+			name:     "singlepk",
+			db:       "mydb",
+			sql:      `DELETE FROM table WHERE id=@2 With singlePk`,
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table", isSinglePathPk: true, numPkPaths: 1}, idStr: "@2", id: placeholder{2}},
+		},
+		{
+			name:     "single_pk",
+			db:       "mydb",
+			sql:      `DELETE FROM db.table WHERE id=@2 With single_Pk`,
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, idStr: "@2", id: placeholder{2}},
+		},
+		{
+			name:     "singlepk2",
+			db:       "mydb",
+			sql:      `DELETE FROM table WHERE id=@2 With singlePk=true`,
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table", isSinglePathPk: true, numPkPaths: 1}, idStr: "@2", id: placeholder{2}},
+		},
+		{
+			name:     "single_pk2",
+			db:       "mydb",
+			sql:      `DELETE FROM db.table WHERE id=@2 With single_Pk=true`,
+			expected: &StmtDelete{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, idStr: "@2", id: placeholder{2}},
+		},
+		{
+			name:      "error_singlepk_single_pk",
+			db:        "mydb",
+			sql:       `DELETE FROM table WHERE id=@2 With single_Pk, With SinglePK`,
+			mustError: true,
+		},
+		{
+			name:      "error_invalid_singlepk",
+			db:        "mydb",
+			sql:       `DELETE FROM table WHERE id=@2 With singlePk=false`,
+			mustError: true,
+		},
+		{
+			name:      "error_invalid_single_pk",
+			db:        "mydb",
+			sql:       `DELETE FROM db.table WHERE id=@2 With single_Pk=error`,
+			mustError: true,
 		},
 	}
 	for _, testCase := range testData {
@@ -385,6 +622,11 @@ func TestStmtSelect_parse(t *testing.T) {
 		{name: "error_no_collection", sql: `SELECT * WITH db=dbname`, mustError: true},
 		{name: "error_no_db", sql: `SELECT * FROM c WITH collection=collname`, mustError: true},
 		{name: "error_cross_partition_must_be_true", sql: `SELECT * FROM c WITH db=dbname WITH collection=collname WITH cross_partition=false`, mustError: true},
+		{name: "error_cross_partition_must_be_true2", sql: `SELECT * FROM c WITH db=dbname WITH collection=collname WITH cross_partition=error`, mustError: true},
+		{name: "error_cross_partition_more_than_once", sql: `SELECT * FROM c WITH db=dbname WITH collection=collname WITH cross_partition WITH CrossPartition=true`, mustError: true},
+		{name: "error_cross_partition_more_than_once2", sql: `SELECT CROSS PARTITION * FROM c WITH db=dbname WITH collection=collname WITH CrossPartition`, mustError: true},
+		{name: "error_invalid_with", sql: `SELECT * FROM c WITH db=dbname WITH collection=collname WITH a`, mustError: true},
+		{name: "error_invalid_with2", sql: `SELECT * FROM c WITH db=dbname WITH collection=collname WITH a=1`, mustError: true},
 
 		{
 			name:     "basic",
@@ -403,8 +645,8 @@ func TestStmtSelect_parse(t *testing.T) {
 		},
 		{
 			name:     "collection_in_query",
-			sql:      `SELECT a,b,c FROM user u WHERE u.id="1" WITH db=dbtemp`,
-			expected: &StmtSelect{dbName: "dbtemp", collName: "user", selectQuery: `SELECT a,b,c FROM user u WHERE u.id="1"`, placeholders: map[int]string{}},
+			sql:      `SELECT a,b,c FROM user u WHERE u.id="1" WITH db=dbtemp WITH CrossPartition`,
+			expected: &StmtSelect{dbName: "dbtemp", collName: "user", isCrossPartition: true, selectQuery: `SELECT a,b,c FROM user u WHERE u.id="1"`, placeholders: map[int]string{}},
 		},
 	}
 	for _, testCase := range testData {
@@ -461,8 +703,8 @@ func TestStmtSelect_parse_defaultDb(t *testing.T) {
 		{
 			name:     "collection_in_query",
 			db:       "mydb",
-			sql:      `SELECT a,b,c FROM user u WHERE u.id="1"`,
-			expected: &StmtSelect{dbName: "mydb", collName: "user", selectQuery: `SELECT a,b,c FROM user u WHERE u.id="1"`, placeholders: map[int]string{}},
+			sql:      `SELECT a,b,c FROM user u WHERE u.id="1" with CrossPartition`,
+			expected: &StmtSelect{dbName: "mydb", collName: "user", isCrossPartition: true, selectQuery: `SELECT a,b,c FROM user u WHERE u.id="1"`, placeholders: map[int]string{}},
 		},
 	}
 	for _, testCase := range testData {
@@ -506,6 +748,7 @@ func TestStmtUpdate_parse(t *testing.T) {
 		{name: "error_invalid_query", sql: `UPDATE db.table SET =1 WHERE id=2`, mustError: true},
 		{name: "error_invalid_query2", sql: `UPDATE db.table SET a=1 WHERE id=   `, mustError: true},
 		{name: "error_invalid_query3", sql: `UPDATE db.table SET a=1,b=2,c=3 WHERE id="4`, mustError: true},
+		{name: "error_invalid_with", sql: `UPDATE db.table SET a=1,b=2,c=3 WHERE id=4 WITH a`, mustError: true},
 
 		{
 			name: "basic",
@@ -515,7 +758,7 @@ SET a=null, b=
   d="\"a string 'with' \\\"quote\\\"\"", e="{\"key\":\"value\"}"
 ,f="[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]" WHERE
 	id="abc"`,
-			expected: &StmtUpdate{dbName: "db1", collName: "table1", updateStr: `a=null, b=
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "db1", collName: "table1"}, updateStr: `a=null, b=
 	1.0, c=true, 
   d="\"a string 'with' \\\"quote\\\"\"", e="{\"key\":\"value\"}"
 ,f="[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]"`, fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`}}, idStr: "abc"},
@@ -526,8 +769,43 @@ SET a=null, b=
 SET a=$1, b=
 	$2, c=:3, d=0 WHERE
 	id=@4`,
-			expected: &StmtUpdate{dbName: "db-1", collName: "table_1", updateStr: `a=$1, b=
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "db-1", collName: "table_1"}, updateStr: `a=$1, b=
 	$2, c=:3, d=0`, fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0}, idStr: "@4", id: placeholder{4}},
+		},
+		{
+			name:     "singlepk",
+			sql:      `UPDATE db.table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 with SinglePk`,
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, updateStr: `a=$1, b=$2, c=:3, d=0`, fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0}, idStr: "@4", id: placeholder{4}},
+		},
+		{
+			name:     "single_pk",
+			sql:      `UPDATE db.table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 WITH SINGLE_PK`,
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, updateStr: `a=$1, b=$2, c=:3, d=0`, fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0}, idStr: "@4", id: placeholder{4}},
+		},
+		{
+			name:     "singlepk2",
+			sql:      `UPDATE db.table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 with SinglePk=true`,
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, updateStr: `a=$1, b=$2, c=:3, d=0`, fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0}, idStr: "@4", id: placeholder{4}},
+		},
+		{
+			name:     "single_pk2",
+			sql:      `UPDATE db.table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 WITH SINGLE_PK=true`,
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, updateStr: `a=$1, b=$2, c=:3, d=0`, fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0}, idStr: "@4", id: placeholder{4}},
+		},
+		{
+			name:      "error_singlepk_single_pk",
+			sql:       `UPDATE db.table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 with SINGLE_PK, With SinglePk`,
+			mustError: true,
+		},
+		{
+			name:      "error_invalid_singlepk",
+			sql:       `UPDATE db.table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 with SinglePk=false`,
+			mustError: true,
+		},
+		{
+			name:      "error_invalid_single_pk",
+			sql:       `UPDATE db.table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 WITH SINGLE_PK=error`,
+			mustError: true,
 		},
 	}
 	for _, testCase := range testData {
@@ -565,6 +843,7 @@ func TestStmtUpdate_parse_defaultDb(t *testing.T) {
 	}{
 		{name: "error_invalid_query", sql: `UPDATE .table SET a=1,b=2,c=3 WHERE id=4`, mustError: true},
 		{name: "error_invalid_query2", sql: `UPDATE db. SET a=1,b=2,c=3 WHERE id=4`, mustError: true},
+		{name: "error_invalid_with", db: "mydb", sql: `UPDATE table SET a=1,b=2,c=3 WHERE id=4 WITH a=1`, mustError: true},
 
 		{
 			name: "basic",
@@ -575,7 +854,7 @@ SET a=null, b=
   d="\"a string 'with' \\\"quote\\\"\"", e="{\"key\":\"value\"}"
 ,f="[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]" WHERE
 	id="abc"`,
-			expected: &StmtUpdate{dbName: "mydb", collName: "table1", updateStr: `a=null, b=
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table1"}, updateStr: `a=null, b=
 	1.0, c=true, 
   d="\"a string 'with' \\\"quote\\\"\"", e="{\"key\":\"value\"}"
 ,f="[2.0,null,false,\"a string 'with' \\\"quote\\\"\"]"`, fields: []string{"a", "b", "c", "d", "e", "f"}, values: []interface{}{nil, 1.0, true, `a string 'with' "quote"`, map[string]interface{}{"key": "value"}, []interface{}{2.0, nil, false, `a string 'with' "quote"`}}, idStr: "abc"}},
@@ -586,8 +865,50 @@ SET a=null, b=
 SET a=$1, b=
 	$2, c=:3, d=0 WHERE
 	id=@4`,
-			expected: &StmtUpdate{dbName: "db-1", collName: "table_1", updateStr: `a=$1, b=
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "db-1", collName: "table_1"}, updateStr: `a=$1, b=
 	$2, c=:3, d=0`, fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0}, idStr: "@4", id: placeholder{4}},
+		},
+		{
+			name:     "singlepk",
+			db:       "mydb",
+			sql:      `UPDATE table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 with SinglePk`,
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table", isSinglePathPk: true, numPkPaths: 1}, updateStr: `a=$1, b=$2, c=:3, d=0`, fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0}, idStr: "@4", id: placeholder{4}},
+		},
+		{
+			name:     "single_pk",
+			db:       "mydb",
+			sql:      `UPDATE db.table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 WITH SINGLE_PK`,
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, updateStr: `a=$1, b=$2, c=:3, d=0`, fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0}, idStr: "@4", id: placeholder{4}},
+		},
+		{
+			name:     "singlepk2",
+			db:       "mydb",
+			sql:      `UPDATE table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 with SinglePk=true`,
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "mydb", collName: "table", isSinglePathPk: true, numPkPaths: 1}, updateStr: `a=$1, b=$2, c=:3, d=0`, fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0}, idStr: "@4", id: placeholder{4}},
+		},
+		{
+			name:     "single_pk2",
+			db:       "mydb",
+			sql:      `UPDATE db.table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 WITH SINGLE_PK=true`,
+			expected: &StmtUpdate{StmtCRUD: &StmtCRUD{dbName: "db", collName: "table", isSinglePathPk: true, numPkPaths: 1}, updateStr: `a=$1, b=$2, c=:3, d=0`, fields: []string{"a", "b", "c", "d"}, values: []interface{}{placeholder{1}, placeholder{2}, placeholder{3}, 0.0}, idStr: "@4", id: placeholder{4}},
+		},
+		{
+			name:      "error_singlepk_single_pk",
+			db:        "mydb",
+			sql:       `UPDATE table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 with SINGLE_PK, With SinglePk`,
+			mustError: true,
+		},
+		{
+			name:      "error_invalid_singlepk",
+			db:        "mydb",
+			sql:       `UPDATE table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 with SinglePk=false`,
+			mustError: true,
+		},
+		{
+			name:      "error_invalid_single_pk",
+			db:        "mydb",
+			sql:       `UPDATE db.table SET a=$1, b=$2, c=:3, d=0 WHERE id=@4 WITH SINGLE_PK=error`,
+			mustError: true,
 		},
 	}
 	for _, testCase := range testData {

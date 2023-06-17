@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // StmtCreateCollection implements "CREATE COLLECTION" statement.
@@ -13,15 +14,15 @@ import (
 // Syntax:
 //
 //	CREATE COLLECTION|TABLE [IF NOT EXISTS] [<db-name>.]<collection-name>
-//	<WITH [LARGE]PK=partitionKey>
+//	<WITH PK=partitionKey>
 //	[[,] WITH RU|MAXRU=ru]
 //	[[,] WITH UK=/path1:/path2,/path3;/path4]
 //
 // - ru: an integer specifying CosmosDB's collection throughput expressed in RU/s. Supply either RU or MAXRU, not both!
 //
-// - If "IF NOT EXISTS" is specified, Exec will silently swallow the error "409 Conflict".
+// - partitionKey is either single (single value of /path) or hierarchical, up to 3 path levels, levels are separated by commas, for example: /path1,/path2,/path3.
 //
-// - Use LARGEPK if partitionKey is larger than 100 bytes.
+// - If "IF NOT EXISTS" is specified, Exec will silently swallow the error "409 Conflict".
 //
 // - Use UK to define unique keys. Each unique key consists a list of paths separated by comma (,). Unique keys are separated by colons (:) or semi-colons (;).
 type StmtCreateCollection struct {
@@ -29,57 +30,43 @@ type StmtCreateCollection struct {
 	dbName      string
 	collName    string // collection name
 	ifNotExists bool
-	isLargePk   bool
 	ru, maxru   int
 	pk          string     // partition key
 	uk          [][]string // unique keys
-	withOptsStr string
 }
 
-func (s *StmtCreateCollection) parse() error {
-	if err := s.Stmt.parseWithOpts(s.withOptsStr); err != nil {
+func (s *StmtCreateCollection) parse(withOptsStr string) error {
+	if err := s.Stmt.parseWithOpts(withOptsStr); err != nil {
 		return err
 	}
 
-	// partition key
-	pk, okPk := s.withOpts["PK"]
-	largePk, okLargePk := s.withOpts["LARGEPK"]
-	if pk != "" && largePk != "" {
-		return fmt.Errorf("only one of PK or LARGEPK must be specified")
-	}
-	if !okPk && !okLargePk && pk == "" && largePk == "" {
-		return fmt.Errorf("invalid or missting PartitionKey value: %s%s", s.withOpts["PK"], s.withOpts["LARGEPK"])
-	}
-	if okPk && pk != "" {
-		s.pk = pk
-	}
-	if okLargePk && largePk != "" {
-		s.pk = largePk
-		s.isLargePk = true
-	}
-
-	// request unit
-	if _, ok := s.withOpts["RU"]; ok {
-		ru, err := strconv.ParseInt(s.withOpts["RU"], 10, 64)
-		if err != nil || ru < 0 {
-			return fmt.Errorf("invalid RU value: %s", s.withOpts["RU"])
-		}
-		s.ru = int(ru)
-	}
-	if _, ok := s.withOpts["MAXRU"]; ok {
-		maxru, err := strconv.ParseInt(s.withOpts["MAXRU"], 10, 64)
-		if err != nil || maxru < 0 {
-			return fmt.Errorf("invalid MAXRU value: %s", s.withOpts["MAXRU"])
-		}
-		s.maxru = int(maxru)
-	}
-
-	// unique key
-	if ukOpts, ok := s.withOpts["UK"]; ok && ukOpts != "" {
-		tokens := regexp.MustCompile(`[;:]+`).Split(ukOpts, -1)
-		for _, token := range tokens {
-			paths := regexp.MustCompile(`[,\s]+`).Split(token, -1)
-			s.uk = append(s.uk, paths)
+	for k, v := range s.withOpts {
+		switch k {
+		case "PK", "LARGEPK":
+			if s.pk != "" {
+				return fmt.Errorf("only one of PK or LARGEPK must be specified")
+			}
+			s.pk = v
+		case "RU":
+			ru, err := strconv.ParseInt(v, 10, 64)
+			if err != nil || ru < 0 {
+				return fmt.Errorf("invalid RU value: %s", v)
+			}
+			s.ru = int(ru)
+		case "MAXRU":
+			maxru, err := strconv.ParseInt(v, 10, 64)
+			if err != nil || maxru < 0 {
+				return fmt.Errorf("invalid MAXRU value: %s", v)
+			}
+			s.maxru = int(maxru)
+		case "UK":
+			tokens := regexp.MustCompile(`[;:]+`).Split(v, -1)
+			for _, token := range tokens {
+				paths := regexp.MustCompile(`[,\s]+`).Split(token, -1)
+				s.uk = append(s.uk, paths)
+			}
+		default:
+			return fmt.Errorf("invalid query, parsing error at WITH %s=%s", k, v)
 		}
 	}
 
@@ -87,8 +74,11 @@ func (s *StmtCreateCollection) parse() error {
 }
 
 func (s *StmtCreateCollection) validate() error {
+	if s.pk == "" {
+		return fmt.Errorf("missing PartitionKey value")
+	}
 	if s.ru > 0 && s.maxru > 0 {
-		return errors.New("only one of RU or MAXRU must be specified")
+		return errors.New("only one of RU or MAXRU should be specified")
 	}
 	if s.dbName == "" || s.collName == "" {
 		return errors.New("database/collection is missing")
@@ -104,13 +94,17 @@ func (s *StmtCreateCollection) Query(_ []driver.Value) (driver.Rows, error) {
 
 // Exec implements driver.Stmt/Exec.
 func (s *StmtCreateCollection) Exec(_ []driver.Value) (driver.Result, error) {
+	pkPaths := strings.Split(s.pk, ",")
+	pkType := "Hash"
+	if len(pkPaths) > 1 {
+		pkType = "MultiHash"
+	}
 	spec := CollectionSpec{DbName: s.dbName, CollName: s.collName, Ru: s.ru, MaxRu: s.maxru,
 		PartitionKeyInfo: map[string]interface{}{
-			"paths": []string{s.pk},
-			"kind":  "Hash",
-		}}
-	if s.isLargePk {
-		spec.PartitionKeyInfo["Version"] = 2
+			"paths":   pkPaths,
+			"kind":    pkType,
+			"version": 2,
+		},
 	}
 	if len(s.uk) > 0 {
 		uniqueKeys := make([]interface{}, 0)
@@ -142,30 +136,33 @@ func (s *StmtCreateCollection) Exec(_ []driver.Value) (driver.Result, error) {
 // Available since v0.1.1
 type StmtAlterCollection struct {
 	*Stmt
-	dbName      string
-	collName    string // collection name
-	ru, maxru   int
-	withOptsStr string
+	dbName    string
+	collName  string // collection name
+	ru, maxru int
 }
 
-func (s *StmtAlterCollection) parse() error {
-	if err := s.Stmt.parseWithOpts(s.withOptsStr); err != nil {
+func (s *StmtAlterCollection) parse(withOptsStr string) error {
+	if err := s.Stmt.parseWithOpts(withOptsStr); err != nil {
 		return err
 	}
 
-	if _, ok := s.withOpts["RU"]; ok {
-		ru, err := strconv.ParseInt(s.withOpts["RU"], 10, 64)
-		if err != nil || ru < 0 {
-			return fmt.Errorf("invalid RU value: %s", s.withOpts["RU"])
+	for k, v := range s.withOpts {
+		switch k {
+		case "RU":
+			ru, err := strconv.ParseInt(v, 10, 64)
+			if err != nil || ru < 0 {
+				return fmt.Errorf("invalid RU value: %s", v)
+			}
+			s.ru = int(ru)
+		case "MAXRU":
+			maxru, err := strconv.ParseInt(v, 10, 64)
+			if err != nil || maxru < 0 {
+				return fmt.Errorf("invalid MAXRU value: %s", v)
+			}
+			s.maxru = int(maxru)
+		default:
+			return fmt.Errorf("invalid query, parsing error at WITH %s=%s", k, v)
 		}
-		s.ru = int(ru)
-	}
-	if _, ok := s.withOpts["MAXRU"]; ok {
-		maxru, err := strconv.ParseInt(s.withOpts["MAXRU"], 10, 64)
-		if err != nil || maxru < 0 {
-			return fmt.Errorf("invalid MAXRU value: %s", s.withOpts["MAXRU"])
-		}
-		s.maxru = int(maxru)
 	}
 
 	return nil
@@ -173,7 +170,7 @@ func (s *StmtAlterCollection) parse() error {
 
 func (s *StmtAlterCollection) validate() error {
 	if (s.ru <= 0 && s.maxru <= 0) || (s.ru > 0 && s.maxru > 0) {
-		return errors.New("only one of RU or MAXRU must be specified")
+		return errors.New("only one of RU or MAXRU should be specified")
 	}
 	if s.dbName == "" || s.collName == "" {
 		return errors.New("database/collection is missing")

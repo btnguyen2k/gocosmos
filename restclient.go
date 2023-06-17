@@ -31,7 +31,13 @@ const (
 	settingVersion            = "VERSION"
 	settingAutoId             = "AUTOID"
 	settingInsecureSkipVerify = "INSECURESKIPVERIFY"
-	defaultApiVersion         = "2018-12-31"
+
+	// DefaultApiVersion holds the default REST API version if not specified in the connection string.
+	//
+	// See: https://learn.microsoft.com/en-us/rest/api/cosmos-db/#supported-rest-api-versions
+	//
+	// @Available since v0.3.0
+	DefaultApiVersion = "2020-07-15"
 )
 
 // NewRestClient constructs a new RestClient instance from the supplied connection string.
@@ -41,7 +47,7 @@ const (
 //
 //	AccountEndpoint=<cosmosdb-restapi-endpoint>;AccountKey=<account-key>[;TimeoutMs=<timeout-in-ms>][;Version=<cosmosdb-api-version>][;AutoId=<true/false>][;InsecureSkipVerify=<true/false>]
 //
-// If not supplied, default value for TimeoutMs is 10 seconds, Version is defaultApiVersion (which is "2018-12-31"), AutoId is true, and InsecureSkipVerify is false
+// If not supplied, default value for TimeoutMs is 10 seconds, Version is DefaultApiVersion (which is "2020-07-15"), AutoId is true, and InsecureSkipVerify is false
 //
 // - AutoId is added since v0.1.2
 // - InsecureSkipVerify is added since v0.1.4
@@ -75,7 +81,7 @@ func NewRestClient(httpClient *http.Client, connStr string) (*RestClient, error)
 	}
 	apiVersion := params[settingVersion]
 	if apiVersion == "" {
-		apiVersion = defaultApiVersion
+		apiVersion = DefaultApiVersion
 	}
 	autoId, err := strconv.ParseBool(params[settingAutoId])
 	if err != nil {
@@ -1194,6 +1200,35 @@ type RespListDb struct {
 	Databases   []DbInfo `json:"Databases"`
 }
 
+// PkInfo holds partitioning configuration settings for a collection.
+//
+// @Available since v0.3.0
+type PkInfo map[string]interface{}
+
+func (pk PkInfo) Kind() string {
+	kind, err := reddo.ToString(pk["kind"])
+	if err == nil {
+		return kind
+	}
+	return ""
+}
+
+func (pk PkInfo) Version() int {
+	version, err := reddo.ToInt(pk["version"])
+	if err == nil {
+		return int(version)
+	}
+	return 0
+}
+
+func (pk PkInfo) Paths() []string {
+	paths, err := reddo.ToSlice(pk["paths"], reddo.TypeString)
+	if err == nil {
+		return paths.([]string)
+	}
+	return nil
+}
+
 // CollInfo captures info of a Cosmos DB collection.
 type CollInfo struct {
 	Id                       string                 `json:"id"`                       // user-generated unique name for the collection
@@ -1207,7 +1242,7 @@ type CollInfo struct {
 	Udfs                     string                 `json:"_udfs"`                    // (system-generated property) _udfs attribute of the collection
 	Conflicts                string                 `json:"_conflicts"`               // (system-generated property) _conflicts attribute of the collection
 	IndexingPolicy           map[string]interface{} `json:"indexingPolicy"`           // indexing policy settings for collection
-	PartitionKey             map[string]interface{} `json:"partitionKey"`             // partitioning configuration settings for collection
+	PartitionKey             PkInfo                 `json:"partitionKey"`             // partitioning configuration settings for collection
 	ConflictResolutionPolicy map[string]interface{} `json:"conflictResolutionPolicy"` // conflict resolution policy settings for collection
 	GeospatialConfig         map[string]interface{} `json:"geospatialConfig"`         // Geo-spatial configuration settings for collection
 }

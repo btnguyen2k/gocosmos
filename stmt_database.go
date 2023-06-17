@@ -21,33 +21,38 @@ type StmtCreateDatabase struct {
 	dbName      string
 	ifNotExists bool
 	ru, maxru   int
-	withOptsStr string
 }
 
-func (s *StmtCreateDatabase) parse() error {
-	if err := s.Stmt.parseWithOpts(s.withOptsStr); err != nil {
+func (s *StmtCreateDatabase) parse(withOptsStr string) error {
+	if err := s.Stmt.parseWithOpts(withOptsStr); err != nil {
 		return err
 	}
-	if _, ok := s.withOpts["RU"]; ok {
-		ru, err := strconv.ParseInt(s.withOpts["RU"], 10, 64)
-		if err != nil || ru < 0 {
-			return fmt.Errorf("invalid RU value: %s", s.withOpts["RU"])
+
+	for k, v := range s.withOpts {
+		switch k {
+		case "RU":
+			ru, err := strconv.ParseInt(v, 10, 64)
+			if err != nil || ru < 0 {
+				return fmt.Errorf("invalid RU value: %s", v)
+			}
+			s.ru = int(ru)
+		case "MAXRU":
+			maxru, err := strconv.ParseInt(v, 10, 64)
+			if err != nil || maxru < 0 {
+				return fmt.Errorf("invalid RU value: %s", v)
+			}
+			s.maxru = int(maxru)
+		default:
+			return fmt.Errorf("invalid query, parsing error at WITH %s=%s", k, v)
 		}
-		s.ru = int(ru)
 	}
-	if _, ok := s.withOpts["MAXRU"]; ok {
-		maxru, err := strconv.ParseInt(s.withOpts["MAXRU"], 10, 64)
-		if err != nil || maxru < 0 {
-			return fmt.Errorf("invalid MAXRU value: %s", s.withOpts["MAXRU"])
-		}
-		s.maxru = int(maxru)
-	}
+
 	return nil
 }
 
 func (s *StmtCreateDatabase) validate() error {
 	if s.ru > 0 && s.maxru > 0 {
-		return errors.New("only one of RU or MAXRU must be specified")
+		return errors.New("only one of RU or MAXRU should be specified")
 	}
 	return nil
 }
@@ -82,29 +87,34 @@ func (s *StmtCreateDatabase) Exec(_ []driver.Value) (driver.Result, error) {
 // Available since v0.1.1
 type StmtAlterDatabase struct {
 	*Stmt
-	dbName      string
-	ru, maxru   int
-	withOptsStr string
+	dbName    string
+	ru, maxru int
 }
 
-func (s *StmtAlterDatabase) parse() error {
-	if err := s.Stmt.parseWithOpts(s.withOptsStr); err != nil {
+func (s *StmtAlterDatabase) parse(withOptsStr string) error {
+	if err := s.Stmt.parseWithOpts(withOptsStr); err != nil {
 		return err
 	}
-	if _, ok := s.withOpts["RU"]; ok {
-		ru, err := strconv.ParseInt(s.withOpts["RU"], 10, 64)
-		if err != nil || ru < 0 {
-			return fmt.Errorf("invalid RU value: %s", s.withOpts["RU"])
+
+	for k, v := range s.withOpts {
+		switch k {
+		case "RU":
+			ru, err := strconv.ParseInt(v, 10, 64)
+			if err != nil || ru < 0 {
+				return fmt.Errorf("invalid RU value: %s", v)
+			}
+			s.ru = int(ru)
+		case "MAXRU":
+			maxru, err := strconv.ParseInt(v, 10, 64)
+			if err != nil || maxru < 0 {
+				return fmt.Errorf("invalid RU value: %s", v)
+			}
+			s.maxru = int(maxru)
+		default:
+			return fmt.Errorf("invalid query, parsing error at WITH %s=%s", k, v)
 		}
-		s.ru = int(ru)
 	}
-	if _, ok := s.withOpts["MAXRU"]; ok {
-		maxru, err := strconv.ParseInt(s.withOpts["MAXRU"], 10, 64)
-		if err != nil || maxru < 0 {
-			return fmt.Errorf("invalid MAXRU value: %s", s.withOpts["MAXRU"])
-		}
-		s.maxru = int(maxru)
-	}
+
 	return nil
 }
 

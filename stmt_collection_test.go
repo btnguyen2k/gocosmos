@@ -26,6 +26,7 @@ func TestStmtCreateCollection_Exec(t *testing.T) {
 		sql          string
 		mustConflict bool
 		mustNotFound bool
+		mustError    bool
 		affectedRows int64
 	}{
 		{
@@ -54,6 +55,24 @@ func TestStmtCreateCollection_Exec(t *testing.T) {
 			sql:          "CREATE COLLECTION db_not_exists.table WITH pk=/a",
 			mustNotFound: true,
 		},
+		{
+			name:         "create_subpartitions",
+			initSqls:     []string{fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname), fmt.Sprintf("CREATE DATABASE %s", dbname)},
+			sql:          fmt.Sprintf("CREATE COLLECTION %s.tbltemp WITH pk=/TenantId,/UserId", dbname),
+			affectedRows: 1,
+		},
+		{
+			name:         "create_subpartitions2",
+			initSqls:     []string{fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname), fmt.Sprintf("CREATE DATABASE %s", dbname)},
+			sql:          fmt.Sprintf("CREATE TABLE %s.tbltemp WITH pk=/TenantId,/UserId,/SessionId", dbname),
+			affectedRows: 1,
+		},
+		{
+			name:      "error_subpartitions",
+			initSqls:  []string{fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname), fmt.Sprintf("CREATE DATABASE %s", dbname)},
+			sql:       fmt.Sprintf("CREATE COLLECTION %s.tbltemp WITH pk=/TenantId,/UserId,/SessionId,/Level4NotSupported", dbname),
+			mustError: true,
+		},
 	}
 	for _, testCase := range testData {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -70,7 +89,10 @@ func TestStmtCreateCollection_Exec(t *testing.T) {
 			if testCase.mustNotFound && err != ErrNotFound {
 				t.Fatalf("%s failed: expect ErrNotFound but received %#v", testName+"/"+testCase.name+"/exec", err)
 			}
-			if testCase.mustConflict || testCase.mustNotFound {
+			if testCase.mustError && err == nil {
+				t.Fatalf("%s failed: expect error", testName+"/"+testCase.name+"/exec")
+			}
+			if testCase.mustConflict || testCase.mustNotFound || testCase.mustError {
 				return
 			}
 			if err != nil {
@@ -110,6 +132,7 @@ func TestStmtCreateCollection_Exec_DefaultDb(t *testing.T) {
 		sql          string
 		mustConflict bool
 		mustNotFound bool
+		mustError    bool
 		affectedRows int64
 	}{
 		{
@@ -139,6 +162,24 @@ func TestStmtCreateCollection_Exec_DefaultDb(t *testing.T) {
 			sql:          "CREATE COLLECTION table WITH pk=/a",
 			mustNotFound: true,
 		},
+		{
+			name:         "create_subpartitions",
+			initSqls:     []string{fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname), fmt.Sprintf("CREATE DATABASE %s", dbname)},
+			sql:          "CREATE COLLECTION tbltemp WITH pk=/TenantId,/UserId",
+			affectedRows: 1,
+		},
+		{
+			name:         "create_subpartitions2",
+			initSqls:     []string{fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname), fmt.Sprintf("CREATE DATABASE %s", dbname)},
+			sql:          "CREATE TABLE tbltemp WITH pk=/TenantId,/UserId,/SessionId",
+			affectedRows: 1,
+		},
+		{
+			name:      "error_subpartitions",
+			initSqls:  []string{fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname), fmt.Sprintf("CREATE DATABASE %s", dbname)},
+			sql:       "CREATE COLLECTION tbltemp WITH pk=/TenantId,/UserId,/SessionId,/Level4NotSupported",
+			mustError: true,
+		},
 	}
 	for _, testCase := range testData {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -155,7 +196,10 @@ func TestStmtCreateCollection_Exec_DefaultDb(t *testing.T) {
 			if testCase.mustNotFound && err != ErrNotFound {
 				t.Fatalf("%s failed: expect ErrNotFound but received %#v", testName+"/"+testCase.name+"/exec", err)
 			}
-			if testCase.mustConflict || testCase.mustNotFound {
+			if testCase.mustError && err == nil {
+				t.Fatalf("%s failed: expect error", testName+"/"+testCase.name+"/exec")
+			}
+			if testCase.mustConflict || testCase.mustNotFound || testCase.mustError {
 				return
 			}
 			if err != nil {

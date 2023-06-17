@@ -14,10 +14,71 @@ import (
 
 /*======================================================================*/
 
+const numApps = 4
 const numLogicalPartitions = 16
 const numCategories = 19
 
 var dataList []DocInfo
+
+func _initDataSubPartitions(t *testing.T, testName string, client *RestClient, db, container string, numItem int) {
+	totalRu := 0.0
+	randList := make([]int, numItem)
+	for i := 0; i < numItem; i++ {
+		randList[i] = i*2 + 1
+	}
+	rand.Shuffle(numItem, func(i, j int) {
+		randList[i], randList[j] = randList[j], randList[i]
+	})
+	dataList = make([]DocInfo, numItem)
+	for i := 0; i < numItem; i++ {
+		category := randList[i] % numCategories
+		app := "app" + strconv.Itoa(i%numApps)
+		username := "user" + strconv.Itoa(i%numLogicalPartitions)
+		docInfo := DocInfo{
+			"id":       fmt.Sprintf("%05d", i),
+			"app":      app,
+			"username": username,
+			"email":    "user" + strconv.Itoa(i) + "@domain.com",
+			"grade":    float64(randList[i]),
+			"category": float64(category),
+			"active":   i%10 == 0,
+			"big":      fmt.Sprintf("%05d", i) + "/" + strings.Repeat("this is a very long string/", 256),
+		}
+		dataList[i] = docInfo
+		if result := client.CreateDocument(DocumentSpec{DbName: db, CollName: container, PartitionKeyValues: []interface{}{app, username}, DocumentData: docInfo}); result.Error() != nil {
+			t.Fatalf("%s failed: %s", testName, result.Error())
+		} else {
+			totalRu += result.RequestCharge
+		}
+	}
+	// fmt.Printf("\t%s - total RU charged: %0.3f\n", testName+"/Insert", totalRu)
+}
+
+func _initDataSubPartitionsSmallRU(t *testing.T, testName string, client *RestClient, db, container string, numItem int) {
+	client.DeleteDatabase(db)
+	client.CreateDatabase(DatabaseSpec{Id: db, Ru: 400})
+	client.CreateCollection(CollectionSpec{
+		DbName:           db,
+		CollName:         container,
+		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/app", "/username"}, "kind": "MultiHash", "version": 2},
+		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
+		Ru:               400,
+	})
+	_initDataSubPartitions(t, testName, client, db, container, numItem)
+}
+
+func _initDataSubPartitionsLargeRU(t *testing.T, testName string, client *RestClient, db, container string, numItem int) {
+	client.DeleteDatabase(db)
+	client.CreateDatabase(DatabaseSpec{Id: db, Ru: 20000})
+	client.CreateCollection(CollectionSpec{
+		DbName:           db,
+		CollName:         container,
+		PartitionKeyInfo: map[string]interface{}{"paths": []string{"/app", "/username"}, "kind": "MultiHash", "version": 2},
+		UniqueKeyPolicy:  map[string]interface{}{"uniqueKeys": []map[string]interface{}{{"paths": []string{"/email"}}}},
+		Ru:               20000,
+	})
+	_initDataSubPartitions(t, testName, client, db, container, numItem)
+}
 
 func _initData(t *testing.T, testName string, client *RestClient, db, container string, numItem int) {
 	totalRu := 0.0

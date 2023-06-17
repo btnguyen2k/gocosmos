@@ -65,11 +65,80 @@ func _parseValue(input string, separator rune) (value interface{}, leftOver stri
 	return nil, input, errors.New("cannot parse query, invalid token at: " + input)
 }
 
+// StmtCRUD is abstract implementation of "INSERT|UPSERT|UPDATE|DELETE|SELECT" operations.
+//
+// @Available since v0.3.0
+type StmtCRUD struct {
+	*Stmt
+	dbName         string
+	collName       string
+	numPkPaths     int // number of PK paths
+	isSinglePathPk bool
+}
+
+func (s *StmtCRUD) extractPkValuesFromArgs(args ...driver.Value) []interface{} {
+	n := len(args)
+	result := make([]interface{}, s.numPkPaths)
+	for i := n - s.numPkPaths; i < n; i++ {
+		result[i-n+s.numPkPaths] = args[i]
+	}
+	return result
+}
+
+func (s *StmtCRUD) fetchPkInfo() error {
+	if s.numPkPaths > 0 || s.conn == nil || s.isSinglePathPk {
+		if s.isSinglePathPk {
+			s.numPkPaths = 1
+		}
+		return nil
+	}
+
+	getCollResult := s.conn.restClient.GetCollection(s.dbName, s.collName)
+	if getCollResult.Error() == nil {
+		s.numPkPaths = len(getCollResult.CollInfo.PartitionKey.Paths())
+	}
+	return normalizeError(getCollResult.StatusCode, 0, getCollResult.Error())
+}
+
+func (s *StmtCRUD) parseWithOpts(withOptsStr string) error {
+	if err := s.Stmt.parseWithOpts(withOptsStr); err != nil {
+		return err
+	}
+
+	if err := s.onlyOneWithOption("single PK path is specified more than once, only one of SINGLE_PK or SINGLEPK should be specified", "SINGLE_PK", "SINGLEPK"); err != nil {
+		return err
+	}
+
+	for k, v := range s.withOpts {
+		switch k {
+		case "SINGLE_PK", "SINGLEPK":
+			if v == "" {
+				s.isSinglePathPk = true
+			} else {
+				val, err := strconv.ParseBool(v)
+				if err != nil || !val {
+					return fmt.Errorf("invalid value at WITH %s (only value 'true' is accepted)", k)
+				}
+				s.isSinglePathPk = true
+			}
+		}
+	}
+
+	if s.isSinglePathPk {
+		s.numPkPaths = 1
+	}
+	s.numInput = 0
+	return nil
+}
+
 // StmtInsert implements "INSERT" operation.
 //
 // Syntax:
 //
-//	INSERT|UPSERT INTO <db-name>.<collection-name> (<field-list>) VALUES (<value-list>)
+//	INSERT|UPSERT INTO <db-name>.<collection-name>
+//	(<field-list>)
+//	VALUES (<value-list>)
+//	[WITH singlePK|SINGLE_PK[=true]]
 //
 //	- values are comma separated.
 //	- a value is either:
@@ -88,9 +157,7 @@ func _parseValue(input string, separator rune) (value interface{}, leftOver stri
 // CosmosDB automatically creates a few extra fields for the insert document.
 // See https://docs.microsoft.com/en-us/azure/cosmos-db/account-databases-containers-items#properties-of-an-item.
 type StmtInsert struct {
-	*Stmt
-	dbName    string
-	collName  string
+	*StmtCRUD
 	isUpsert  bool
 	fieldsStr string
 	valuesStr string
@@ -98,10 +165,19 @@ type StmtInsert struct {
 	values    []interface{}
 }
 
-func (s *StmtInsert) parse() error {
+func (s *StmtInsert) parse(withOptsStr string) error {
+	if err := s.parseWithOpts(withOptsStr); err != nil {
+		return err
+	}
+
+	for k := range s.withOpts {
+		if k != "SINGLE_PK" && k != "SINGLEPK" {
+			return fmt.Errorf("invalid query, parsing error at WITH %s", k)
+		}
+	}
+
 	s.fields = regexp.MustCompile(`[,\s]+`).Split(s.fieldsStr, -1)
 	s.values = make([]interface{}, 0)
-	s.numInput = 1
 	for temp := strings.TrimSpace(s.valuesStr); temp != ""; temp = strings.TrimSpace(temp) {
 		value, leftOver, err := _parseValue(temp, ',')
 		if err == nil {
@@ -120,7 +196,7 @@ func (s *StmtInsert) parse() error {
 
 func (s *StmtInsert) validate() error {
 	if len(s.fields) != len(s.values) {
-		return fmt.Errorf("number of field (%d) does not match number of input value (%d)", len(s.fields), len(s.values))
+		return fmt.Errorf("number of fields (%d) does not match number of input values (%d)", len(s.fields), len(s.values))
 	}
 	if s.dbName == "" || s.collName == "" {
 		return errors.New("database/collection is missing")
@@ -130,13 +206,20 @@ func (s *StmtInsert) validate() error {
 
 // Exec implements driver.Stmt/Exec.
 //
-// Note: this function expects the _last_ argument is _partition_ key value.
+// Note: this function expects the _partition key values are placed at the end_ of the argument list.
 func (s *StmtInsert) Exec(args []driver.Value) (driver.Result, error) {
+	if err := s.fetchPkInfo(); err != nil {
+		return nil, err
+	}
+	if len(args) != s.numInput+s.numPkPaths {
+		return nil, fmt.Errorf("expected %d arguments, got %d", s.numInput+s.numPkPaths, len(args))
+	}
+
 	spec := DocumentSpec{
 		DbName:             s.dbName,
 		CollName:           s.collName,
 		IsUpsert:           s.isUpsert,
-		PartitionKeyValues: []interface{}{args[s.numInput-1]}, // expect the last argument is partition key value
+		PartitionKeyValues: s.extractPkValuesFromArgs(args...),
 		DocumentData:       make(map[string]interface{}),
 	}
 	for i := 0; i < len(s.fields); i++ {
@@ -172,21 +255,30 @@ func (s *StmtInsert) Query(_ []driver.Value) (driver.Rows, error) {
 //
 // Syntax:
 //
-//	DELETE FROM <db-name>.<collection-name> WHERE id=<id-value>
+//	DELETE FROM <db-name>.<collection-name>
+//	WHERE id=<id-value>
+//	[WITH singlePK|SINGLE_PK[=true]]
 //
 // - Currently DELETE only removes one document specified by id.
 //
 // - <id-value> is treated as string. `WHERE id=abc` has the same effect as `WHERE id="abc"`.
 type StmtDelete struct {
-	*Stmt
-	dbName   string
-	collName string
-	idStr    string
-	id       interface{}
+	*StmtCRUD
+	idStr string
+	id    interface{}
 }
 
-func (s *StmtDelete) parse() error {
-	s.numInput = 1
+func (s *StmtDelete) parse(withOptsStr string) error {
+	if err := s.parseWithOpts(withOptsStr); err != nil {
+		return err
+	}
+
+	for k := range s.withOpts {
+		if k != "SINGLE_PK" && k != "SINGLEPK" {
+			return fmt.Errorf("invalid query, parsing error at WITH %s", k)
+		}
+	}
+
 	hasPrefix := strings.HasPrefix(s.idStr, `"`)
 	hasSuffix := strings.HasSuffix(s.idStr, `"`)
 	if hasPrefix != hasSuffix {
@@ -218,8 +310,15 @@ func (s *StmtDelete) validate() error {
 
 // Exec implements driver.Stmt/Exec.
 //
-// Note: this function expects the _last_ argument is _partition_ key value.
+// Note: this function expects the _partition key values are placed at the end_ of the argument list.
 func (s *StmtDelete) Exec(args []driver.Value) (driver.Result, error) {
+	if err := s.fetchPkInfo(); err != nil {
+		return nil, err
+	}
+	if len(args) != s.numInput+s.numPkPaths {
+		return nil, fmt.Errorf("expected %d arguments, got %d", s.numInput+s.numPkPaths, len(args))
+	}
+
 	id := s.idStr
 	if s.id != nil {
 		ph := s.id.(placeholder)
@@ -229,7 +328,7 @@ func (s *StmtDelete) Exec(args []driver.Value) (driver.Result, error) {
 		id = fmt.Sprintf("%s", args[ph.index-1])
 	}
 	restResult := s.conn.restClient.DeleteDocument(DocReq{DbName: s.dbName, CollName: s.collName, DocId: id,
-		PartitionKeyValues: []interface{}{args[s.numInput-1]}, // expect the last argument is partition key value
+		PartitionKeyValues: s.extractPkValuesFromArgs(args...),
 	})
 	result := buildResultNoResultSet(&restResult.RestReponse, false, "", 0)
 	switch restResult.StatusCode {
@@ -259,7 +358,7 @@ func (s *StmtDelete) Query(_ []driver.Value) (driver.Rows, error) {
 //	SELECT [CROSS PARTITION] ... FROM <collection/table-name> ...
 //	WITH database|db=<db-name>
 //	[WITH collection|table=<collection/table-name>]
-//	[WITH cross_partition=true]
+//	[WITH cross_partition|CrossPartition[=true]]
 //
 //	- (extension) If the collection is partitioned, specify "CROSS PARTITION" to allow execution across multiple partitions.
 //	  This clause is not required if query is to be executed on a single partition.
@@ -278,25 +377,39 @@ type StmtSelect struct {
 }
 
 func (s *StmtSelect) parse(withOptsStr string) error {
-	if err := s.Stmt.parseWithOpts(withOptsStr); err != nil {
+	if err := s.parseWithOpts(withOptsStr); err != nil {
 		return err
 	}
-	if v, ok := s.withOpts["DATABASE"]; ok {
-		s.dbName = strings.TrimSpace(v)
-	} else if v, ok := s.withOpts["DB"]; ok {
-		s.dbName = strings.TrimSpace(v)
+
+	if err := s.onlyOneWithOption("database is specified more than once, only one of DATABASE or DB should be specified", "DATABASE", "DB"); err != nil {
+		return err
 	}
-	if v, ok := s.withOpts["COLLECTION"]; ok {
-		s.collName = strings.TrimSpace(v)
-	} else if v, ok := s.withOpts["TABLE"]; ok {
-		s.collName = strings.TrimSpace(v)
+	if err := s.onlyOneWithOption("collection is specified more than once, only one of COLLECTION or TABLE should be specified", "COLLECTION", "TABLE"); err != nil {
+		return err
 	}
-	if v, ok := s.withOpts["CROSS_PARTITION"]; ok && !s.isCrossPartition {
-		vbool, err := strconv.ParseBool(v)
-		if err != nil || !vbool {
-			return errors.New("cannot parse query (the only accepted value for cross_partition is true), invalid token at: " + v)
+
+	for k, v := range s.withOpts {
+		switch k {
+		case "DATABASE", "DB":
+			s.dbName = v
+		case "COLLECTION", "TABLE":
+			s.collName = v
+		case "CROSS_PARTITION", "CROSSPARTITION":
+			if s.isCrossPartition {
+				return fmt.Errorf("cross-partition is specified more than once, only one of CROSS_PARTITION or CrossPartition should be specified")
+			}
+			if v == "" {
+				s.isCrossPartition = true
+			} else {
+				val, err := strconv.ParseBool(v)
+				if err != nil || !val {
+					return fmt.Errorf("invalid value at WITH %s (only value 'true' is accepted)", k)
+				}
+				s.isCrossPartition = true
+			}
+		default:
+			return fmt.Errorf("invalid query, parsing error at WITH %s", k)
 		}
-		s.isCrossPartition = true
 	}
 
 	matches := reValPlaceholder.FindAllStringSubmatch(s.selectQuery, -1)
@@ -362,7 +475,10 @@ func (s *StmtSelect) Exec(_ []driver.Value) (driver.Result, error) {
 //
 // Syntax:
 //
-//	UPDATE <db-name>.<collection-name> SET <field-name>=<value>[,<field-name>=<value>]*, WHERE id=<id-value>
+//	UPDATE <db-name>.<collection-name>
+//	SET <field-name1>=<value1>[,<field-nameN>=<valueN>]*
+//	WHERE id=<id-value>
+//	[WITH singlePK|SINGLE_PK[=true]]
 //
 //	- <id-value> is treated as a string. `WHERE id=abc` has the same effect as `WHERE id="abc"`.
 //	- <value> is either:
@@ -380,9 +496,7 @@ func (s *StmtSelect) Exec(_ []driver.Value) (driver.Result, error) {
 //
 // Currently UPDATE only updates one document specified by id.
 type StmtUpdate struct {
-	*Stmt
-	dbName    string
-	collName  string
+	*StmtCRUD
 	updateStr string
 	idStr     string
 	id        interface{}
@@ -447,8 +561,16 @@ func (s *StmtUpdate) _parseUpdateClause() error {
 	return nil
 }
 
-func (s *StmtUpdate) parse() error {
-	s.numInput = 1
+func (s *StmtUpdate) parse(withOptsStr string) error {
+	if err := s.parseWithOpts(withOptsStr); err != nil {
+		return err
+	}
+
+	for k := range s.withOpts {
+		if k != "SINGLE_PK" && k != "SINGLEPK" {
+			return fmt.Errorf("invalid query, parsing error at WITH %s", k)
+		}
+	}
 
 	if err := s._parseId(); err != nil {
 		return err
@@ -476,8 +598,15 @@ func (s *StmtUpdate) validate() error {
 
 // Exec implements driver.Stmt/Exec.
 //
-// Note: this function expects the _last_ argument is _partition_ key value.
+// Note: this function expects the _partition key values are placed at the end_ of the argument list.
 func (s *StmtUpdate) Exec(args []driver.Value) (driver.Result, error) {
+	if err := s.fetchPkInfo(); err != nil {
+		return nil, err
+	}
+	if len(args) != s.numInput+s.numPkPaths {
+		return nil, fmt.Errorf("expected %d arguments, got %d", s.numInput+s.numPkPaths, len(args))
+	}
+
 	// firstly, fetch the document
 	id := s.idStr
 	if s.id != nil {
@@ -487,7 +616,7 @@ func (s *StmtUpdate) Exec(args []driver.Value) (driver.Result, error) {
 		}
 		id = fmt.Sprintf("%s", args[ph.index-1])
 	}
-	docReq := DocReq{DbName: s.dbName, CollName: s.collName, DocId: id, PartitionKeyValues: []interface{}{args[len(args)-1]}}
+	docReq := DocReq{DbName: s.dbName, CollName: s.collName, DocId: id, PartitionKeyValues: s.extractPkValuesFromArgs(args...)}
 	getDocResult := s.conn.restClient.GetDocument(docReq)
 	if err := getDocResult.Error(); err != nil {
 		result := buildResultNoResultSet(&getDocResult.RestReponse, false, "", 0)
@@ -500,8 +629,10 @@ func (s *StmtUpdate) Exec(args []driver.Value) (driver.Result, error) {
 		}
 		return result, result.err
 	}
+
+	// secondly, update the fetched document
 	etag := getDocResult.DocInfo.Etag()
-	spec := DocumentSpec{DbName: s.dbName, CollName: s.collName, PartitionKeyValues: []interface{}{args[len(args)-1]}, DocumentData: getDocResult.DocInfo.RemoveSystemAttrs()}
+	spec := DocumentSpec{DbName: s.dbName, CollName: s.collName, PartitionKeyValues: s.extractPkValuesFromArgs(args...), DocumentData: getDocResult.DocInfo.RemoveSystemAttrs()}
 	for i := 0; i < len(s.fields); i++ {
 		switch s.values[i].(type) {
 		case placeholder:
