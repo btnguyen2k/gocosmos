@@ -175,6 +175,30 @@ func (c *RestClient) buildRestResponse(resp *gjrc.GjrcResponse) RestResponse {
 	return result
 }
 
+// GetApiVersion returns the Azure Cosmos DB APi version string, either from connection string or default value.
+//
+// @Available since <<VERSION>>
+func (c *RestClient) GetApiVersion() string {
+	return c.apiVersion
+}
+
+// GetAutoId returns the auto-id flag.
+//
+// @Available since <<VERSION>>
+func (c *RestClient) GetAutoId() bool {
+	return c.autoId
+}
+
+// SetAutoId sets value for the auto-id flag.
+//
+// @Available since <<VERSION>>
+func (c *RestClient) SetAutoId(value bool) *RestClient {
+	c.autoId = value
+	return c
+}
+
+/*----------------------------------------------------------------------*/
+
 // DatabaseSpec specifies a Cosmos DB database specifications for creation.
 type DatabaseSpec struct {
 	Id        string
