@@ -1,12 +1,12 @@
 # gocosmos - Supported SQL statements
-    
+
 - Database: [CREATE DATABASE](#create-database), [ALTER DATABASE](#alter-database), [DROP DATABASE](#drop-database), [LIST DATABASES](#list-databases).
 - Collection: [CREATE COLLECTION](#create-collection), [ALTER COLLECTION](#alter-collection), [DROP COLLECTION](#drop-collection), [LIST COLLECTIONS](#list-collections).
 - Document: [INSERT](#insert), [UPSERT](#upsert), [UPDATE](#update), [DELETE](#delete), [SELECT](#select).
 
 ## Database
 
-Suported statements: `CREATE DATABASE`, `ALTER DATABASE`, `DROP DATABASE`, `LIST DATABASES`.
+Supported statements: `CREATE DATABASE`, `ALTER DATABASE`, `DROP DATABASE`, `LIST DATABASES`.
 
 #### CREATE DATABASE
 
@@ -39,7 +39,7 @@ fmt.Println(dbresult.RowsAffected())
 
 #### ALTER DATABASE
 
-Description: change database's throughput (since [v0.1.1](RELEASE-NOTES.md)).
+Description: change database's throughput.
 
 Syntax:
 
@@ -94,7 +94,7 @@ fmt.Println(dbresult.RowsAffected())
 
 Description: list all existing databases.
 
-Syntax: 
+Syntax:
 
 ```sql
 LIST DATABASES
@@ -136,7 +136,7 @@ for dbRows.Next() {
 
 ## Collection
 
-Suported statements: `CREATE COLLECTION`, `ALTER COLLECTION`, `DROP COLLECTION`, `LIST COLLECTIONS`.
+Supported statements: `CREATE COLLECTION`, `ALTER COLLECTION`, `DROP COLLECTION`, `LIST COLLECTIONS`.
 
 #### CREATE COLLECTION
 
@@ -144,16 +144,16 @@ Description: create a new collection.
 
 Alias: `CREATE TABLE`.
 
-Syntax: 
+Syntax:
 
 ```sql
 CREATE COLLECTION [IF NOT EXISTS] [<db-name>.]<collection-name>
-<WITH [LARGE]PK=partitionKey>
+<WITH PK=partitionKey>
 [[,] WITH RU|MAXRU=ru]
 [[,] WITH UK=/path1:/path2,/path3;/path4]
 ```
 
-> `<db-name>` can be ommitted if `DefaultDb` is supplied in the Data Source Name (DSN).
+> `<db-name>` can be omitted if `DefaultDb` is supplied in the Data Source Name (DSN).
 
 Example:
 ```go
@@ -169,8 +169,7 @@ fmt.Println(dbresult.RowsAffected())
 - Upon successful execution, `RowsAffected()` returns `(1, nil)`.
 - This statement returns error `ErrConflict` if the specified collection already existed. If `IF NOT EXISTS` is specified, `RowsAffected()` returns `(0, nil)`.
 - Partition key must be specified using `WITH pk=<partition-key>`.
-  - Since [v0.3.0](RELEASE-NOTES.md), large pk is always enabled, `WITH largepk` is for backward compatibility only.
-  - Since [v0.3.0](RELEASE-NOTES.md), Hierarchical Partition Key is supported, using `WITH pk=/path1,/path2...` (up to 3 path levels).
+  - Hierarchical Partition Key is supported, using `WITH pk=/path1,/path2...` (up to 3 path levels).
 - Provisioned capacity can be optionally specified via `WITH RU=<ru>` or `WITH MAXRU=<ru>`.
   - Only one of `RU` and `MAXRU` options should be specified, _not both_; error is returned if both optiosn are specified.
 - Unique keys are optionally specified via `WITH uk=/uk1_path:/uk2_path1,/uk2_path2:/uk3_path`. Each unique key is a comma-separated list of paths (e.g. `/uk_path1,/uk_path2`); unique keys are separated by colons (e.g. `/uk1:/uk2:/uk3`).
@@ -179,7 +178,7 @@ fmt.Println(dbresult.RowsAffected())
 
 #### ALTER COLLECTION
 
-Description: change collection's throughput (since [v0.1.1](RELEASE-NOTES.md)).
+Description: change collection's throughput.
 
 Alias: `ALTER TABLE`.
 
@@ -189,7 +188,7 @@ Syntax:
 ALTER COLLECTION [<db-name>.]<collection-name> WITH RU|MAXRU=<ru>
 ```
 
-> `<db-name>` can be ommitted if `DefaultDb` is supplied in the Data Source Name (DSN).
+> `<db-name>` can be omitted if `DefaultDb` is supplied in the Data Source Name (DSN).
 
 Example:
 ```go
@@ -220,7 +219,7 @@ Syntax:
 DROP COLLECTION [IF EXISTS] [<db-name>.]<collection-name>
 ```
 
-> `<db-name>` can be ommitted if `DefaultDb` is supplied in the Data Source Name (DSN).
+> `<db-name>` can be omitted if `DefaultDb` is supplied in the Data Source Name (DSN).
 
 Example:
 ```go
@@ -250,7 +249,7 @@ Syntax:
 LIST COLLECTIONS [FROM <db-name>]
 ```
 
-> `FROM <db-name>` can be ommitted if `DefaultDb` is supplied in the Data Source Name (DSN).
+> `FROM <db-name>` can be omitted if `DefaultDb` is supplied in the Data Source Name (DSN).
 
 Example:
 ```go
@@ -288,7 +287,7 @@ for dbRows.Next() {
 
 ## Document
 
-Suported statements: `INSERT`, `UPSERT`, `UPDATE`, `DELETE`, `SELECT`.
+Supported statements: `INSERT`, `UPSERT`, `UPDATE`, `DELETE`, `SELECT`.
 
 #### INSERT
 
@@ -303,7 +302,7 @@ VALUES (<value1>, <value2>,...<valueN>)
 [WITH singlePK|SINGLE_PK[=true]]
 ```
 
-> `<db-name>` can be ommitted if `DefaultDb` is supplied in the Data Source Name (DSN).
+> `<db-name>` can be omitted if `DefaultDb` is supplied in the Data Source Name (DSN).
 
 Since [v0.3.0](RELEASE-NOTES.md), `gocosmos` supports [Hierarchical Partition Keys](https://learn.microsoft.com/en-us/azure/cosmos-db/hierarchical-partition-keys) (or sub-partitions). If the collection is known not to have sub-partitions, supplying `WITH singlePK` (or `WITH SINGLE_PK`) can save one roundtrip to Cosmos DB server.
 
@@ -363,9 +362,9 @@ WHERE id=<id-value>
 [WITH singlePK|SINGLE_PK[=true]]
 ```
 
-> `<db-name>` can be ommitted if `DefaultDb` is supplied in the Data Source Name (DSN).
+> `<db-name>` can be omitted if `DefaultDb` is supplied in the Data Source Name (DSN).
 
-Since [v0.3.0](RELEASE-NOTES.md), `gocosmos` supports [Hierarchical Partition Keys](https://learn.microsoft.com/en-us/azure/cosmos-db/hierarchical-partition-keys) (or sub-partitions). If the collection is known not to have sub-partitions, supplying `WITH singlePK` (or `WITH SINGLE_PK`) can save one roundtrip to Cosmos DB server.
+`gocosmos` supports [Hierarchical Partition Keys](https://learn.microsoft.com/en-us/azure/cosmos-db/hierarchical-partition-keys) (or sub-partitions). If the collection is known not to have sub-partitions, supplying `WITH singlePK` (or `WITH SINGLE_PK`) can save one roundtrip to Cosmos DB server.
 
 Example:
 ```go
@@ -400,9 +399,9 @@ WHERE id=<id-value>
 [WITH singlePK|SINGLE_PK[=true]]
 ```
 
-> `<db-name>` can be ommitted if `DefaultDb` is supplied in the Data Source Name (DSN).
+> `<db-name>` can be omitted if `DefaultDb` is supplied in the Data Source Name (DSN).
 
-Since [v0.3.0](RELEASE-NOTES.md), `gocosmos` supports [Hierarchical Partition Keys](https://learn.microsoft.com/en-us/azure/cosmos-db/hierarchical-partition-keys) (or sub-partitions). If the collection is known not to have sub-partitions, supplying `WITH singlePK` (or `WITH SINGLE_PK`) can save one roundtrip to Cosmos DB server.
+`gocosmos` supports [Hierarchical Partition Keys](https://learn.microsoft.com/en-us/azure/cosmos-db/hierarchical-partition-keys) (or sub-partitions). If the collection is known not to have sub-partitions, supplying `WITH singlePK` (or `WITH SINGLE_PK`) can save one roundtrip to Cosmos DB server.
 
 Example:
 ```go
@@ -438,7 +437,7 @@ SELECT [CROSS PARTITION] ... FROM <collection-name> ...
 [[,] WITH cross_partition|CrossPartition[=true]]
 ```
 
-> `<db-name>` can be ommitted if `DefaultDb` is supplied in the Data Source Name (DSN).
+> `<db-name>` can be omitted if `DefaultDb` is supplied in the Data Source Name (DSN).
 
 Example: single partition, collection name is extracted from the `FROM...` clause
 ```go
@@ -484,7 +483,7 @@ if err != nil {
 
 The `SELECT` query follows [Azure Cosmos DB's SQL grammar](https://docs.microsoft.com/en-us/azure/cosmos-db/sql-query-select) with a few extensions:
 - If the collection is partitioned, specify `CROSS PARTITION` to allow execution across multiple partitions. This clause is not required if query is to be executed on a single partition. Cross-partition execution can also be enabled using `WITH cross_partition=true`.
-- The database on which the query is execute _must_ be specified via `WITH database=<db-name>` or `WITH db=<db-name>` or with default database option via DSN.
+- The database on which the query is executed _must_ be specified via `WITH database=<db-name>` or `WITH db=<db-name>` or with default database option via DSN.
 - The collection to query from can be optionally specified via `WITH collection=<coll-name>` or `WITH table=<coll-name>`. If not specified, the collection name is extracted from the `FROM <collection-name>` clause.
 - See [here](#value) for more details on values and placeholders.
 

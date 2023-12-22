@@ -291,7 +291,7 @@ func normalizeError(statusCode, ignoreErrorCode int, err error) error {
 	return err
 }
 
-func buildResultNoResultSet(restResponse *RestReponse, supportLastInsertId bool, rid string, ignoreErrorCode int) *ResultNoResultSet {
+func buildResultNoResultSet(restResponse *RestResponse, supportLastInsertId bool, rid string, ignoreErrorCode int) *ResultNoResultSet {
 	result := &ResultNoResultSet{
 		err:                 restResponse.Error(),
 		lastInsertId:        rid,

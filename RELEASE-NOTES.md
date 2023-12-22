@@ -1,5 +1,26 @@
 # gocosmos - Release notes
 
+## 2023-12-22 - v1.0.0
+
+### Changed
+
+- BREAKING: typo fixed, change struct RestReponse to RestResponse
+- BREAKING: bump GO version to v1.18
+
+### Added/Refactoring
+
+- Refactor: remove internal sync.Mutex from OfferInfo
+- Add methods GetApiVersion/GetAutoId/SetAutoId to RestClient struct
+- Refactor: follow go-module-template
+- Refactor: move tests to separated subpackage
+
+### Fixed/Improvement
+
+- Fix CodeQL alerts
+- Dependency: bump github.com/btnguyen2k/consu/checksum to v1.1.0
+- Fix: server may return no content with http status 204 or 304
+- Fix: golang-lint
+
 ## 2023-06-16 - v0.3.0
 
 - Change default API version to `2020-07-15`.
