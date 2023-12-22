@@ -239,7 +239,7 @@ func (s *StmtInsert) Exec(args []driver.Value) (driver.Result, error) {
 	if restResult.DocInfo != nil {
 		rid, _ = restResult.DocInfo["_rid"].(string)
 	}
-	result := buildResultNoResultSet(&restResult.RestReponse, true, rid, 0)
+	result := buildResultNoResultSet(&restResult.RestResponse, true, rid, 0)
 	return result, result.err
 }
 
@@ -330,7 +330,7 @@ func (s *StmtDelete) Exec(args []driver.Value) (driver.Result, error) {
 	restResult := s.conn.restClient.DeleteDocument(DocReq{DbName: s.dbName, CollName: s.collName, DocId: id,
 		PartitionKeyValues: s.extractPkValuesFromArgs(args...),
 	})
-	result := buildResultNoResultSet(&restResult.RestReponse, false, "", 0)
+	result := buildResultNoResultSet(&restResult.RestResponse, false, "", 0)
 	switch restResult.StatusCode {
 	case 404:
 		// consider "document not found" as successful operation
@@ -619,7 +619,7 @@ func (s *StmtUpdate) Exec(args []driver.Value) (driver.Result, error) {
 	docReq := DocReq{DbName: s.dbName, CollName: s.collName, DocId: id, PartitionKeyValues: s.extractPkValuesFromArgs(args...)}
 	getDocResult := s.conn.restClient.GetDocument(docReq)
 	if err := getDocResult.Error(); err != nil {
-		result := buildResultNoResultSet(&getDocResult.RestReponse, false, "", 0)
+		result := buildResultNoResultSet(&getDocResult.RestResponse, false, "", 0)
 		if getDocResult.StatusCode == 404 {
 			// consider "document not found" as successful operation
 			// but database/collection not found is not!
@@ -646,7 +646,7 @@ func (s *StmtUpdate) Exec(args []driver.Value) (driver.Result, error) {
 		}
 	}
 	replaceDocResult := s.conn.restClient.ReplaceDocument(etag, spec)
-	result := buildResultNoResultSet(&replaceDocResult.RestReponse, false, "", 412)
+	result := buildResultNoResultSet(&replaceDocResult.RestResponse, false, "", 412)
 	switch replaceDocResult.StatusCode {
 	case 404: // rare case, but possible!
 		// consider "document not found" as successful operation

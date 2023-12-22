@@ -119,7 +119,7 @@ func (s *StmtCreateCollection) Exec(_ []driver.Value) (driver.Result, error) {
 	if s.ifNotExists {
 		ignoreErrorCode = 409
 	}
-	result := buildResultNoResultSet(&restResult.RestReponse, true, restResult.Rid, ignoreErrorCode)
+	result := buildResultNoResultSet(&restResult.RestResponse, true, restResult.Rid, ignoreErrorCode)
 	return result, result.err
 }
 
@@ -197,7 +197,7 @@ func (s *StmtAlterCollection) Exec(_ []driver.Value) (driver.Result, error) {
 		return nil, err
 	}
 	restResult := s.conn.restClient.ReplaceOfferForResource(getResult.Rid, s.ru, s.maxru)
-	result := buildResultNoResultSet(&restResult.RestReponse, true, restResult.Rid, 0)
+	result := buildResultNoResultSet(&restResult.RestResponse, true, restResult.Rid, 0)
 	return result, result.err
 }
 
@@ -237,7 +237,7 @@ func (s *StmtDropCollection) Exec(_ []driver.Value) (driver.Result, error) {
 	if s.ifExists {
 		ignoreErrorCode = 404
 	}
-	result := buildResultNoResultSet(&restResult.RestReponse, false, "", ignoreErrorCode)
+	result := buildResultNoResultSet(&restResult.RestResponse, false, "", ignoreErrorCode)
 	return result, result.err
 }
 
