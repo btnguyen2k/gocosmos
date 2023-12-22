@@ -1,5 +1,3 @@
-github.com/btnguyen2k/consu/checksum v0.1.2 h1:lmwNWztbfi11CNAxqdi8NcHZdKq0gZiVRqCPfobXj94=
-github.com/btnguyen2k/consu/checksum v0.1.2/go.mod h1:/zZ8EXdphDYEkBFua51hK9y3rODCPIkiZYnCDlHT670=
 github.com/btnguyen2k/consu/checksum v1.1.0 h1:1Sqa48s9WJsejwmVUfmSsSBG0z7sPfgSQa8atKCiMqY=
 github.com/btnguyen2k/consu/checksum v1.1.0/go.mod h1:/zZ8EXdphDYEkBFua51hK9y3rODCPIkiZYnCDlHT670=
 github.com/btnguyen2k/consu/gjrc v0.2.1 h1:RUgbgs1NDpuUDfY7PSyva8AShyui+ds1MOzmi2k0SfM=
