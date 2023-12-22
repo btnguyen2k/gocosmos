@@ -1498,11 +1498,11 @@ func (docs QueriedDocs) Flatten(queryPlan *RespQueryPlan) QueriedDocs {
 	for i, item := range docs {
 		doc := item
 		if queryPlan != nil && (queryPlan.IsOrderByQuery() || queryPlan.IsGroupByQuery()) {
-			switch item.(type) {
+			switch v := item.(type) {
 			case map[string]interface{}:
-				doc = item.(map[string]interface{})["payload"]
+				doc = v["payload"]
 			case DocInfo:
-				doc = item.(DocInfo)["payload"]
+				doc = v["payload"]
 			}
 			if queryPlan.IsGroupByQuery() {
 				payload, ok := doc.(map[string]interface{})

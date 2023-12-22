@@ -335,7 +335,7 @@ func (s *StmtDelete) Exec(args []driver.Value) (driver.Result, error) {
 	case 404:
 		// consider "document not found" as successful operation
 		// but database/collection not found is not!
-		if strings.Index(fmt.Sprintf("%s", restResult.Error()), "ResourceType: Document") >= 0 {
+		if strings.Contains(fmt.Sprintf("%s", restResult.Error()), "ResourceType: Document") {
 			result.err = nil
 		}
 	}
@@ -443,7 +443,7 @@ func (s *StmtSelect) Query(args []driver.Value) (driver.Rows, error) {
 		if !ok {
 			return nil, fmt.Errorf("there is no placeholder #%d", i+1)
 		}
-		params = append(params, map[string]interface{}{"name": fmt.Sprintf("%s", v), "value": arg})
+		params = append(params, map[string]interface{}{"name": v, "value": arg})
 	}
 	query := QueryReq{
 		DbName:                s.dbName,
@@ -623,7 +623,7 @@ func (s *StmtUpdate) Exec(args []driver.Value) (driver.Result, error) {
 		if getDocResult.StatusCode == 404 {
 			// consider "document not found" as successful operation
 			// but database/collection not found is not!
-			if strings.Index(fmt.Sprintf("%s", err), "ResourceType: Document") >= 0 {
+			if strings.Contains(fmt.Sprintf("%s", err), "ResourceType: Document") {
 				result.err = nil
 			}
 		}
@@ -651,7 +651,7 @@ func (s *StmtUpdate) Exec(args []driver.Value) (driver.Result, error) {
 	case 404: // rare case, but possible!
 		// consider "document not found" as successful operation
 		// but database/collection not found is not!
-		if strings.Index(fmt.Sprintf("%s", replaceDocResult.Error()), "ResourceType: Document") >= 0 {
+		if strings.Contains(fmt.Sprintf("%s", replaceDocResult.Error()), "ResourceType: Document") {
 			result.err = nil
 		}
 	}
