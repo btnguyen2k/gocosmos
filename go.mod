@@ -1,6 +1,6 @@
 module github.com/btnguyen2k/gocosmos
 
-go 1.13
+go 1.18
 
 require (
 	github.com/btnguyen2k/consu/checksum v1.1.0
