@@ -31,13 +31,13 @@ func (s *StmtCreateDatabase) parse(withOptsStr string) error {
 	for k, v := range s.withOpts {
 		switch k {
 		case "RU":
-			ru, err := strconv.ParseInt(v, 10, 64)
+			ru, err := strconv.ParseInt(v, 10, 32)
 			if err != nil || ru < 0 {
 				return fmt.Errorf("invalid RU value: %s", v)
 			}
 			s.ru = int(ru)
 		case "MAXRU":
-			maxru, err := strconv.ParseInt(v, 10, 64)
+			maxru, err := strconv.ParseInt(v, 10, 32)
 			if err != nil || maxru < 0 {
 				return fmt.Errorf("invalid RU value: %s", v)
 			}
@@ -99,13 +99,13 @@ func (s *StmtAlterDatabase) parse(withOptsStr string) error {
 	for k, v := range s.withOpts {
 		switch k {
 		case "RU":
-			ru, err := strconv.ParseInt(v, 10, 64)
+			ru, err := strconv.ParseInt(v, 10, 32)
 			if err != nil || ru < 0 {
 				return fmt.Errorf("invalid RU value: %s", v)
 			}
 			s.ru = int(ru)
 		case "MAXRU":
-			maxru, err := strconv.ParseInt(v, 10, 64)
+			maxru, err := strconv.ParseInt(v, 10, 32)
 			if err != nil || maxru < 0 {
 				return fmt.Errorf("invalid RU value: %s", v)
 			}
