@@ -15,7 +15,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/btnguyen2k/consu/checksum"
@@ -1826,14 +1825,14 @@ type OfferInfo struct {
 	Ts              int64                  `json:"_ts"`             // It is a system-generated property. It specifies the last updated timestamp of the resource. The value is a timestamp.
 	Self            string                 `json:"_self"`           // It is a system-generated property. It is the unique addressable URI for the resource.
 	Etag            string                 `json:"_etag"`           // It is a system-generated property that specifies the resource etag required for optimistic concurrency control.
-	_lock           sync.Mutex
-	_s              *semita.Semita
+	//_lock           sync.Mutex
+	_s *semita.Semita
 }
 
 // OfferThroughput returns value of field 'offerThroughput'
 func (o OfferInfo) OfferThroughput() int {
-	o._lock.Lock()
-	defer o._lock.Unlock()
+	//o._lock.Lock()
+	//defer o._lock.Unlock()
 	if o._s == nil {
 		o._s = semita.NewSemita(o.Content)
 	}
@@ -1846,8 +1845,8 @@ func (o OfferInfo) OfferThroughput() int {
 
 // MaxThroughputEverProvisioned returns value of field 'maxThroughputEverProvisioned'
 func (o OfferInfo) MaxThroughputEverProvisioned() int {
-	o._lock.Lock()
-	defer o._lock.Unlock()
+	//o._lock.Lock()
+	//defer o._lock.Unlock()
 	if o._s == nil {
 		o._s = semita.NewSemita(o.Content)
 	}
