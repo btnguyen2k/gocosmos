@@ -1,9 +1,9 @@
-# Automatically merge PR from dependabot
+# Automatically merge PRs from dependabot
 
-name: "automerge"
+name: "automerge-dependabot"
 on:
   workflow_run:
-    workflows: [ "gocosmos" ]
+    workflows: [ "ci" ]
     types: [ "completed" ]
 
 permissions:
@@ -18,7 +18,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success' &&
       github.ref == 'refs/heads/main'
     steps:
-      - name: 'Merge PR'
+      - name: Merge PR
         uses: actions/github-script@v7
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}

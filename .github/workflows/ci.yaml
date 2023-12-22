@@ -1,0 +1,322 @@
+name: 'ci'
+
+on:
+  push:
+    branches: [ '*' ]
+  pull_request:
+    types: [ opened, edited, reopened, synchronize, review_requested ]
+    branches: [ '*' ]
+  workflow_call:
+
+env:
+  COVER_PKG: github.com/btnguyen2k/gocosmos
+
+jobs:
+  GoFmt:
+    runs-on: ubuntu-latest
+    name: Check format with go fmt
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Set up Go env
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+      - name: Run go fmt
+        run: |
+          go version
+          go fmt ./...
+
+  GoLint:
+    name: GoLint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Set up Go env
+        uses: actions/setup-go@v5
+        with:
+          go-version: 'stable'
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v3
+        with:
+          version: latest
+          only-new-issues: true
+
+  ReleaseDryRun:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    needs: [ GoFmt, GoLint ]
+    outputs:
+      RESULT: ${{ steps.release_dry_run.outputs.result }}
+      VERSION: ${{ steps.release_dry_run.outputs.releaseVersion }}
+      RELEASE_NOTES: ${{ steps.release_dry_run.outputs.releaseNotes }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Install Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'lts/*'
+      - name: Release (dry-run)
+        id: release_dry_run
+        uses: btnguyen2k/action-semrelease@v3
+        with:
+          dry-run: true
+          auto-mode: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          tag-major-release: false
+          tag-minor-release: false
+          branches: ${{ github.ref_name }}
+          tag-prefix: ${{ env.TAG_PREFIX }}
+          tag-only: true
+
+  TestModule:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: [ '1.18', 'oldstable', 'stable' ]
+    name: Run module tests with Go ${{ matrix.go }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Set up Go env
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Run tests
+        run: |
+          go version
+          go test -v -timeout 9999s -count 1 -p 1 -cover -coverprofile coverage.txt ./
+      - name: Codecov
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          flags: module
+          name: module
+
+  TestOther:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go: [ '1.18', 'oldstable', 'stable' ]
+    name: Run other tests with Go ${{ matrix.go }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Set up Go env
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Run tests
+        run: |
+          export COSMOSDB_URL="AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;TimeoutMs=30000"
+          cd module_test && \
+            go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_other.txt" -run "TestNew|TestDriver_" ./ && \
+            cd ..
+      - name: Codecov
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          flags: other
+          name: other
+
+  TestRestClientNonQuery:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        go: [ '1.18', 'oldstable', 'stable' ]
+    name: Run RestClient non-query tests with Go ${{ matrix.go }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Set up Go env
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Run tests
+        run: |
+          try { & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /ShutDown } catch {}
+          choco upgrade azure-cosmosdb-emulator --no-progress
+          & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
+          Start-Sleep -s 75
+          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
+          netstat -nt
+          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;TimeoutMs=30000'
+          cd module_test
+          go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_restclient_nonquery.txt" -run "TestRestClient_[^Q]" ./
+          cd ..
+      - name: Codecov
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          flags: restclient_nonquery
+          name: restclient_nonquery
+
+  TestRestClientQuery:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        go: [ '1.18', 'oldstable', 'stable' ]
+    name: Run RestClient query tests with Go ${{ matrix.go }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Set up Go env
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Run tests
+        run: |
+          try { & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /ShutDown } catch {}
+          choco upgrade azure-cosmosdb-emulator --no-progress
+          & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
+          Start-Sleep -s 75
+          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
+          netstat -nt
+          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;TimeoutMs=30000'
+          cd module_test
+          go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_restclient_query.txt" -run "TestRestClient_QueryDocuments" ./
+          cd ..
+      - name: Codecov
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          flags: restclient_query
+          name: restclient_query
+
+  TestDriverStmtDatabase:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        go: [ '1.18', 'oldstable', 'stable' ]
+    name: Run StmtDatabase query tests with Go ${{ matrix.go }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Set up Go env
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Run tests
+        run: |
+          try { & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /ShutDown } catch {}
+          choco upgrade azure-cosmosdb-emulator --no-progress
+          & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
+          Start-Sleep -s 75
+          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
+          netstat -nt
+          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;TimeoutMs=30000'
+          cd module_test
+          go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_driver_database.txt" -run "TestStmt.*Databases?_(Exec|Query)" ./
+          cd ..
+      - name: Codecov
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          flags: driver_database
+          name: driver_database
+
+  TestDriverStmtCollection:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        go: [ '1.18', 'oldstable', 'stable' ]
+    name: Run StmtCollection query tests with Go ${{ matrix.go }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Set up Go env
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Run tests
+        run: |
+          try { & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /ShutDown } catch {}
+          choco upgrade azure-cosmosdb-emulator --no-progress
+          & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
+          Start-Sleep -s 75
+          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
+          netstat -nt
+          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;TimeoutMs=30000'
+          cd module_test
+          go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_driver_collection.txt" -run "TestStmt.*Collections?_(Exec|Query)" ./
+          cd ..
+      - name: Codecov
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          flags: driver_collection
+          name: driver_collection
+
+  TestDriverStmtDocumentNonQuery:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        go: [ '1.18', 'oldstable', 'stable' ]
+    name: Run StmtDocumentNonQuery query tests with Go ${{ matrix.go }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Set up Go env
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Run tests
+        run: |
+          try { & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /ShutDown } catch {}
+          choco upgrade azure-cosmosdb-emulator --no-progress
+          & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
+          Start-Sleep -s 75
+          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
+          netstat -nt
+          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;TimeoutMs=30000'
+          cd module_test
+          go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_driver_document_non_query.txt" -run "TestStmt(Insert|Upsert|Update|Delete)_(Exec|Query)" ./
+          cd ..
+      - name: Codecov
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          flags: driver_document_non_query
+          name: driver_document_non_query
+
+  TestDriverStmtDocumentQuery:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        go: [ '1.18', 'oldstable', 'stable' ]
+    name: Run StmtDocumentQuery query tests with Go ${{ matrix.go }}
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Set up Go env
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go }}
+      - name: Run tests
+        run: |
+          try { & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /ShutDown } catch {}
+          choco upgrade azure-cosmosdb-emulator --no-progress
+          & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
+          Start-Sleep -s 75
+          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
+          netstat -nt
+          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;TimeoutMs=30000'
+          cd module_test
+          go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_driver_document_query.txt" -run "TestStmtSelect_(Exec|Query)" ./
+          cd ..
+      - name: Codecov
+        uses: codecov/codecov-action@v3
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+        with:
+          flags: driver_document_query
+          name: driver_document_query
