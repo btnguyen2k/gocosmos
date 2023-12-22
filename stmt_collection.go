@@ -48,13 +48,13 @@ func (s *StmtCreateCollection) parse(withOptsStr string) error {
 			}
 			s.pk = v
 		case "RU":
-			ru, err := strconv.ParseInt(v, 10, 64)
+			ru, err := strconv.ParseInt(v, 10, 32)
 			if err != nil || ru < 0 {
 				return fmt.Errorf("invalid RU value: %s", v)
 			}
 			s.ru = int(ru)
 		case "MAXRU":
-			maxru, err := strconv.ParseInt(v, 10, 64)
+			maxru, err := strconv.ParseInt(v, 10, 32)
 			if err != nil || maxru < 0 {
 				return fmt.Errorf("invalid MAXRU value: %s", v)
 			}
@@ -119,7 +119,7 @@ func (s *StmtCreateCollection) Exec(_ []driver.Value) (driver.Result, error) {
 	if s.ifNotExists {
 		ignoreErrorCode = 409
 	}
-	result := buildResultNoResultSet(&restResult.RestReponse, true, restResult.Rid, ignoreErrorCode)
+	result := buildResultNoResultSet(&restResult.RestResponse, true, restResult.Rid, ignoreErrorCode)
 	return result, result.err
 }
 
@@ -149,13 +149,13 @@ func (s *StmtAlterCollection) parse(withOptsStr string) error {
 	for k, v := range s.withOpts {
 		switch k {
 		case "RU":
-			ru, err := strconv.ParseInt(v, 10, 64)
+			ru, err := strconv.ParseInt(v, 10, 32)
 			if err != nil || ru < 0 {
 				return fmt.Errorf("invalid RU value: %s", v)
 			}
 			s.ru = int(ru)
 		case "MAXRU":
-			maxru, err := strconv.ParseInt(v, 10, 64)
+			maxru, err := strconv.ParseInt(v, 10, 32)
 			if err != nil || maxru < 0 {
 				return fmt.Errorf("invalid MAXRU value: %s", v)
 			}
@@ -197,7 +197,7 @@ func (s *StmtAlterCollection) Exec(_ []driver.Value) (driver.Result, error) {
 		return nil, err
 	}
 	restResult := s.conn.restClient.ReplaceOfferForResource(getResult.Rid, s.ru, s.maxru)
-	result := buildResultNoResultSet(&restResult.RestReponse, true, restResult.Rid, 0)
+	result := buildResultNoResultSet(&restResult.RestResponse, true, restResult.Rid, 0)
 	return result, result.err
 }
 
@@ -237,7 +237,7 @@ func (s *StmtDropCollection) Exec(_ []driver.Value) (driver.Result, error) {
 	if s.ifExists {
 		ignoreErrorCode = 404
 	}
-	result := buildResultNoResultSet(&restResult.RestReponse, false, "", ignoreErrorCode)
+	result := buildResultNoResultSet(&restResult.RestResponse, false, "", ignoreErrorCode)
 	return result, result.err
 }
 
