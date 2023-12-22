@@ -1,5 +1,7 @@
 package gocosmos
 
+import "reflect"
+
 const (
 	httpHeaderContentType   = "Content-Type"
 	httpHeaderAccept        = "Accept"
@@ -43,3 +45,23 @@ const (
 
 	docFieldId = "id"
 )
+
+func goTypeToCosmosDbType(typ reflect.Type) string {
+	if typ == nil {
+		return ""
+	}
+	switch typ.Kind() {
+	case reflect.Bool:
+		return "BOOLEAN"
+	case reflect.String:
+		return "STRING"
+	case reflect.Float32, reflect.Float64:
+		return "NUMBER"
+	case reflect.Array, reflect.Slice:
+		return "ARRAY"
+	case reflect.Map:
+		return "MAP"
+	default:
+		return ""
+	}
+}

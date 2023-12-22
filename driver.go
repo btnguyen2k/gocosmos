@@ -110,7 +110,7 @@ func (d *Driver) Open(connStr string) (driver.Conn, error) {
 	}
 	defaultDb, ok := restClient.params["DEFAULTDB"]
 	if !ok {
-		defaultDb, _ = restClient.params["DB"]
+		defaultDb = restClient.params["DB"]
 	}
 	return &Conn{restClient: restClient, defaultDb: defaultDb}, nil
 }
