@@ -152,6 +152,25 @@ func (c *RestClient) addAuthHeader(req *http.Request, method, resType, resId str
 
 func (c *RestClient) buildRestResponse(resp *gjrc.GjrcResponse) RestResponse {
 	result := RestResponse{CallErr: resp.Error()}
+	if result.CallErr != nil {
+		httpResp := resp.HttpResponse()
+		if httpResp != nil {
+			result.StatusCode = resp.StatusCode()
+			if result.StatusCode == 204 || result.StatusCode == 304 {
+				//Ref: https://learn.microsoft.com/en-us/rest/api/cosmos-db/http-status-codes-for-cosmosdb
+				//The DELETE operation is successful, no content is returned.
+
+				//Server may return status "304 Not Modified", no content is returned.
+
+				result.CallErr = nil
+			} else {
+				result.RespBody, _ = resp.Body()
+			}
+		}
+		if result.CallErr != nil {
+			result.CallErr = fmt.Errorf("status-code: %d / error: %s / response-body: %s", result.StatusCode, result.CallErr, result.RespBody)
+		}
+	}
 	if result.CallErr == nil {
 		result.StatusCode = resp.StatusCode()
 		result.RespBody, _ = resp.Body()
