@@ -1859,8 +1859,8 @@ func (o OfferInfo) MaxThroughputEverProvisioned() int {
 
 // IsAutopilot returns true if autopilot is enabled, false otherwise.
 func (o OfferInfo) IsAutopilot() bool {
-	o._lock.Lock()
-	defer o._lock.Unlock()
+	//o._lock.Lock()
+	//defer o._lock.Unlock()
 	if o._s == nil {
 		o._s = semita.NewSemita(o.Content)
 	}
