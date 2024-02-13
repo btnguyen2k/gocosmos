@@ -14,7 +14,8 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday"
-#    open-pull-requests-limit: 10
-#    ignore:
-#      - dependency-name: "*"
-#        update-types: ["version-update:semver-major"] # do not update to major version as it may contain breaking changes
+  - package-ecosystem: "gomod"
+    directory: "/module_test"
+    schedule:
+      interval: "weekly"
+      day: "saturday"
