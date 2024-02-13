@@ -10,43 +10,24 @@ import (
 func TestDriver_invalidConnectionString(t *testing.T) {
 	testName := "TestDriver_invalidConnectionString"
 	driver := "gocosmos"
-	{
-		db, _ := sql.Open(driver, "AccountEndpoint;AccountKey=demo")
-		if err := db.Ping(); err == nil {
-			t.Fatalf("%s failed: should have error", testName)
-		}
+	testCases := []struct {
+		name string
+		dsn  string
+	}{
+		{"empty", ""},
+		{"invalid_endpoint", "AccountEndpoint;AccountKey=demo"},
+		{"invalid_key", "AccountEndpoint=demo;AccountKey"},
+		{"invalid_key_2", "AccountEndpoint=demo;AccountKey=demo/invalid_key"},
+		{"missing_endpoint", "AccountKey=demo"},
+		{"missing_key", "AccountEndpoint=demo"},
 	}
-	{
-		db, _ := sql.Open(driver, "AccountEndpoint=demo;AccountKey")
-		if err := db.Ping(); err == nil {
-			t.Fatalf("%s failed: should have error", testName)
-		}
-	}
-	{
-		db, _ := sql.Open(driver, "AccountEndpoint=demo;AccountKey=demo/invalid_key")
-		if err := db.Ping(); err == nil {
-			t.Fatalf("%s failed: should have error", testName)
-		}
-	}
-}
 
-func TestDriver_missingEndpoint(t *testing.T) {
-	testName := "TestDriver_missingEndpoint"
-	driver := "gocosmos"
-	dsn := "AccountKey=demo"
-	db, _ := sql.Open(driver, dsn)
-	if err := db.Ping(); err == nil {
-		t.Fatalf("%s failed: should have error", testName)
-	}
-}
-
-func TestDriver_missingAccountKey(t *testing.T) {
-	testName := "TestDriver_missingAccountKey"
-	driver := "gocosmos"
-	dsn := "AccountEndpoint=demo"
-	db, _ := sql.Open(driver, dsn)
-	if err := db.Ping(); err == nil {
-		t.Fatalf("%s failed: should have error", testName)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := sql.Open(driver, tc.dsn); err == nil {
+				t.Fatalf("%s failed: should have error", testName+"/"+tc.name)
+			}
+		})
 	}
 }
 

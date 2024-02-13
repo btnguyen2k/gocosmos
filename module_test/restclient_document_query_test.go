@@ -1134,7 +1134,7 @@ func _testRestClientQueryDocumentsCustomDataset(t *testing.T, testName string, t
 				t.Fatalf("%s failed: %s", testName+"/"+testCase.name, result.Error())
 			}
 			var expectedResult []interface{}
-			json.Unmarshal([]byte(testCase.expectedResultJson), &expectedResult)
+			_ = json.Unmarshal([]byte(testCase.expectedResultJson), &expectedResult)
 			if result.Count != len(expectedResult) || len(result.Documents) != len(expectedResult) {
 				t.Fatalf("%s failed: <num-documents> expected to be %#v but received (count: %#v / len: %#v)", testName+"/"+testCase.name, len(expectedResult), result.Count, len(result.Documents))
 			}
@@ -1209,7 +1209,7 @@ func TestRestClient_QueryDocuments_DatasetFamilies_SmallRU(t *testing.T) {
 	client := _newRestClient(t, testName)
 	dbname := testDb
 	collname := testTable
-	_initDataFamliesSmallRU(t, testName, client, dbname, collname)
+	_initDataFamiliesSmallRU(t, testName, client, dbname, collname)
 	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
 		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
 	} else if result.Count != 1 {
@@ -1223,7 +1223,7 @@ func TestRestClient_QueryDocuments_DatasetFamilies_LargeRU(t *testing.T) {
 	client := _newRestClient(t, testName)
 	dbname := testDb
 	collname := testTable
-	_initDataFamliesLargeRU(t, testName, client, dbname, collname)
+	_initDataFamiliesLargeRU(t, testName, client, dbname, collname)
 	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
 		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
 	} else if result.Count < 2 {

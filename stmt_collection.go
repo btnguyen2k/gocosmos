@@ -1,6 +1,7 @@
 package gocosmos
 
 import (
+	"context"
 	"database/sql/driver"
 	"errors"
 	"fmt"
@@ -33,6 +34,14 @@ type StmtCreateCollection struct {
 	ru, maxru   int
 	pk          string     // partition key
 	uk          [][]string // unique keys
+}
+
+// String implements fmt.Stringer/String.
+//
+// @Available since v1.1.0
+func (s *StmtCreateCollection) String() string {
+	return fmt.Sprintf(`StmtCreateCollection{Stmt: %s, db: %q, collection: %q, if_not_exists: %t, ru: %d, maxru: %d, pk: %q, uk: %v}`,
+		s.Stmt, s.dbName, s.collName, s.ifNotExists, s.ru, s.maxru, s.pk, s.uk)
 }
 
 func (s *StmtCreateCollection) parse(withOptsStr string) error {
@@ -93,7 +102,18 @@ func (s *StmtCreateCollection) Query(_ []driver.Value) (driver.Rows, error) {
 }
 
 // Exec implements driver.Stmt/Exec.
-func (s *StmtCreateCollection) Exec(_ []driver.Value) (driver.Result, error) {
+func (s *StmtCreateCollection) Exec(args []driver.Value) (driver.Result, error) {
+	return s.ExecContext(context.Background(), _valuesToNamedValues(args))
+}
+
+// ExecContext implements driver.StmtExecContext/ExecContext.
+//
+// @Available since v1.1.0
+func (s *StmtCreateCollection) ExecContext(_ context.Context, args []driver.NamedValue) (driver.Result, error) {
+	if len(args) != 0 {
+		return nil, fmt.Errorf("expected 0 input value, got %d", len(args))
+	}
+
 	pkPaths := strings.Split(s.pk, ",")
 	pkType := "Hash"
 	if len(pkPaths) > 1 {
@@ -114,6 +134,7 @@ func (s *StmtCreateCollection) Exec(_ []driver.Value) (driver.Result, error) {
 		spec.UniqueKeyPolicy = map[string]interface{}{"uniqueKeys": uniqueKeys}
 	}
 
+	// TODO: pass ctx to REST API client
 	restResult := s.conn.restClient.CreateCollection(spec)
 	ignoreErrorCode := 0
 	if s.ifNotExists {
@@ -139,6 +160,14 @@ type StmtAlterCollection struct {
 	dbName    string
 	collName  string // collection name
 	ru, maxru int
+}
+
+// String implements fmt.Stringer/String.
+//
+// @Available since v1.1.0
+func (s *StmtAlterCollection) String() string {
+	return fmt.Sprintf(`StmtAlterCollection{Stmt: %s, db: %q, collection: %q, ru: %d, maxru: %d}`,
+		s.Stmt, s.dbName, s.collName, s.ru, s.maxru)
 }
 
 func (s *StmtAlterCollection) parse(withOptsStr string) error {
@@ -185,7 +214,18 @@ func (s *StmtAlterCollection) Query(_ []driver.Value) (driver.Rows, error) {
 }
 
 // Exec implements driver.Stmt/Exec.
-func (s *StmtAlterCollection) Exec(_ []driver.Value) (driver.Result, error) {
+func (s *StmtAlterCollection) Exec(args []driver.Value) (driver.Result, error) {
+	return s.ExecContext(context.Background(), _valuesToNamedValues(args))
+}
+
+// ExecContext implements driver.StmtExecContext/ExecContext.
+//
+// @Available since v1.1.0
+func (s *StmtAlterCollection) ExecContext(_ context.Context, args []driver.NamedValue) (driver.Result, error) {
+	if len(args) != 0 {
+		return nil, fmt.Errorf("expected 0 input value, got %d", len(args))
+	}
+
 	getResult := s.conn.restClient.GetCollection(s.dbName, s.collName)
 	if err := getResult.Error(); err != nil {
 		switch getResult.StatusCode {
@@ -196,6 +236,8 @@ func (s *StmtAlterCollection) Exec(_ []driver.Value) (driver.Result, error) {
 		}
 		return nil, err
 	}
+
+	// TODO: pass ctx to REST API client
 	restResult := s.conn.restClient.ReplaceOfferForResource(getResult.Rid, s.ru, s.maxru)
 	result := buildResultNoResultSet(&restResult.RestResponse, true, restResult.Rid, 0)
 	return result, result.err
@@ -217,6 +259,14 @@ type StmtDropCollection struct {
 	ifExists bool
 }
 
+// String implements fmt.Stringer/String.
+//
+// @Available since v1.1.0
+func (s *StmtDropCollection) String() string {
+	return fmt.Sprintf(`StmtDropCollection{Stmt: %s, db: %q, collection: %q, if_exists: %t}`,
+		s.Stmt, s.dbName, s.collName, s.ifExists)
+}
+
 func (s *StmtDropCollection) validate() error {
 	if s.dbName == "" || s.collName == "" {
 		return errors.New("database/collection is missing")
@@ -231,7 +281,19 @@ func (s *StmtDropCollection) Query(_ []driver.Value) (driver.Rows, error) {
 }
 
 // Exec implements driver.Stmt/Exec.
-func (s *StmtDropCollection) Exec(_ []driver.Value) (driver.Result, error) {
+func (s *StmtDropCollection) Exec(args []driver.Value) (driver.Result, error) {
+	return s.ExecContext(context.Background(), _valuesToNamedValues(args))
+}
+
+// ExecContext implements driver.StmtExecContext/ExecContext.
+//
+// @Available since v1.1.0
+func (s *StmtDropCollection) ExecContext(_ context.Context, args []driver.NamedValue) (driver.Result, error) {
+	if len(args) != 0 {
+		return nil, fmt.Errorf("expected 0 input value, got %d", len(args))
+	}
+
+	// TODO: pass ctx to REST API client
 	restResult := s.conn.restClient.DeleteCollection(s.dbName, s.collName)
 	ignoreErrorCode := 0
 	if s.ifExists {
@@ -253,6 +315,13 @@ type StmtListCollections struct {
 	dbName string
 }
 
+// String implements fmt.Stringer/String.
+//
+// @Available since v1.1.0
+func (s *StmtListCollections) String() string {
+	return fmt.Sprintf(`StmtListCollections{Stmt: %s, db: %q}`, s.Stmt, s.dbName)
+}
+
 func (s *StmtListCollections) validate() error {
 	if s.dbName == "" {
 		return errors.New("database is missing")
@@ -267,7 +336,19 @@ func (s *StmtListCollections) Exec(_ []driver.Value) (driver.Result, error) {
 }
 
 // Query implements driver.Stmt/Query.
-func (s *StmtListCollections) Query(_ []driver.Value) (driver.Rows, error) {
+func (s *StmtListCollections) Query(args []driver.Value) (driver.Rows, error) {
+	return s.QueryContext(context.Background(), _valuesToNamedValues(args))
+}
+
+// QueryContext implements driver.StmtQueryContext/QueryContext.
+//
+// @Available since v1.1.0
+func (s *StmtListCollections) QueryContext(_ context.Context, args []driver.NamedValue) (driver.Rows, error) {
+	if len(args) != 0 {
+		return nil, fmt.Errorf("expected 0 input value, got %d", len(args))
+	}
+
+	// TODO: pass ctx to REST API client
 	restResult := s.conn.restClient.ListCollections(s.dbName)
 	result := &ResultResultSet{
 		err:        restResult.Error(),

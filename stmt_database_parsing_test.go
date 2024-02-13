@@ -31,7 +31,7 @@ func TestStmtCreateDatabase_parse(t *testing.T) {
 	}
 	for _, testCase := range testData {
 		t.Run(testCase.name, func(t *testing.T) {
-			s, err := parseQuery(nil, testCase.sql)
+			s, err := parseQueryWithDefaultDb(nil, "", testCase.sql)
 			if testCase.mustError && err == nil {
 				t.Fatalf("%s failed: parsing must fail", testName+"/"+testCase.name)
 			}
@@ -71,7 +71,7 @@ func TestStmtAlterDatabase_parse(t *testing.T) {
 	}
 	for _, testCase := range testData {
 		t.Run(testCase.name, func(t *testing.T) {
-			s, err := parseQuery(nil, testCase.sql)
+			s, err := parseQueryWithDefaultDb(nil, "", testCase.sql)
 			if testCase.mustError && err == nil {
 				t.Fatalf("%s failed: parsing must fail", testName+"/"+testCase.name)
 			}
@@ -111,7 +111,7 @@ func TestStmtDropDatabase_parse(t *testing.T) {
 	}
 	for _, testCase := range testData {
 		t.Run(testCase.name, func(t *testing.T) {
-			s, err := parseQuery(nil, testCase.sql)
+			s, err := parseQueryWithDefaultDb(nil, "", testCase.sql)
 			if testCase.mustError && err == nil {
 				t.Fatalf("%s failed: parsing must fail", testName+"/"+testCase.name)
 			}
@@ -146,7 +146,7 @@ func TestStmtListDatabases_parse(t *testing.T) {
 	}
 	for _, testCase := range testData {
 		t.Run(testCase.name, func(t *testing.T) {
-			s, err := parseQuery(nil, testCase.sql)
+			s, err := parseQueryWithDefaultDb(nil, "", testCase.sql)
 			if testCase.mustError && err == nil {
 				t.Fatalf("%s failed: parsing must fail", testName+"/"+testCase.name)
 			}

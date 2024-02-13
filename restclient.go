@@ -116,7 +116,7 @@ type RestClient struct {
 	params     map[string]string // parsed parameters
 }
 
-func (c *RestClient) buildJsonRequest(method, url string, params interface{}) *http.Request {
+func (c *RestClient) buildJsonRequest(method, url string, params interface{}) (*http.Request, error) {
 	var r *bytes.Reader
 	if params != nil {
 		js, _ := json.Marshal(params)
@@ -124,11 +124,14 @@ func (c *RestClient) buildJsonRequest(method, url string, params interface{}) *h
 	} else {
 		r = bytes.NewReader([]byte{})
 	}
-	req, _ := http.NewRequest(method, url, r)
+	req, err := http.NewRequest(method, url, r)
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Set(httpHeaderContentType, "application/json")
 	req.Header.Set(httpHeaderAccept, "application/json")
 	req.Header.Set(restApiHeaderVersion, c.apiVersion)
-	return req
+	return req, nil
 }
 
 func (c *RestClient) addAuthHeader(req *http.Request, method, resType, resId string) *http.Request {
@@ -229,9 +232,11 @@ type DatabaseSpec struct {
 //
 // Note: ru and maxru must not be supplied together!
 func (c *RestClient) CreateDatabase(spec DatabaseSpec) *RespCreateDb {
-	method := "POST"
-	urlEndpoint := c.endpoint + "/dbs"
-	req := c.buildJsonRequest(method, urlEndpoint, map[string]interface{}{"id": spec.Id})
+	method, urlEndpoint := "POST", c.endpoint+"/dbs"
+	req, err := c.buildJsonRequest(method, urlEndpoint, map[string]interface{}{"id": spec.Id})
+	if err != nil {
+		return &RespCreateDb{RestResponse: RestResponse{CallErr: err}, DbInfo: DbInfo{Id: spec.Id}}
+	}
 	req = c.addAuthHeader(req, method, "dbs", "")
 	if spec.Ru > 0 {
 		req.Header.Set(restApiHeaderOfferThroughput, strconv.Itoa(spec.Ru))
@@ -252,9 +257,11 @@ func (c *RestClient) CreateDatabase(spec DatabaseSpec) *RespCreateDb {
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/get-a-database.
 func (c *RestClient) GetDatabase(dbName string) *RespGetDb {
-	method := "GET"
-	urlEndpoint := c.endpoint + "/dbs/" + dbName
-	req := c.buildJsonRequest(method, urlEndpoint, nil)
+	method, urlEndpoint := "GET", c.endpoint+"/dbs/"+dbName
+	req, err := c.buildJsonRequest(method, urlEndpoint, nil)
+	if err != nil {
+		return &RespGetDb{RestResponse: RestResponse{CallErr: err}}
+	}
 	req = c.addAuthHeader(req, method, "dbs", "dbs/"+dbName)
 
 	resp := c.client.Do(req)
@@ -269,9 +276,11 @@ func (c *RestClient) GetDatabase(dbName string) *RespGetDb {
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/delete-a-database.
 func (c *RestClient) DeleteDatabase(dbName string) *RespDeleteDb {
-	method := "DELETE"
-	urlEndpoint := c.endpoint + "/dbs/" + dbName
-	req := c.buildJsonRequest(method, urlEndpoint, nil)
+	method, urlEndpoint := "DELETE", c.endpoint+"/dbs/"+dbName
+	req, err := c.buildJsonRequest(method, urlEndpoint, nil)
+	if err != nil {
+		return &RespDeleteDb{RestResponse: RestResponse{CallErr: err}}
+	}
 	req = c.addAuthHeader(req, method, "dbs", "dbs/"+dbName)
 
 	resp := c.client.Do(req)
@@ -283,9 +292,11 @@ func (c *RestClient) DeleteDatabase(dbName string) *RespDeleteDb {
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/list-databases.
 func (c *RestClient) ListDatabases() *RespListDb {
-	method := "GET"
-	urlEndpoint := c.endpoint + "/dbs"
-	req := c.buildJsonRequest(method, urlEndpoint, nil)
+	method, urlEndpoint := "GET", c.endpoint+"/dbs"
+	req, err := c.buildJsonRequest(method, urlEndpoint, nil)
+	if err != nil {
+		return &RespListDb{RestResponse: RestResponse{CallErr: err}}
+	}
 	req = c.addAuthHeader(req, method, "dbs", "")
 
 	resp := c.client.Do(req)
@@ -322,8 +333,7 @@ type CollectionSpec struct {
 //
 // Note: ru and maxru must not be supplied together!
 func (c *RestClient) CreateCollection(spec CollectionSpec) *RespCreateColl {
-	method := "POST"
-	urlEndpoint := c.endpoint + "/dbs/" + spec.DbName + "/colls"
+	method, urlEndpoint := "POST", c.endpoint+"/dbs/"+spec.DbName+"/colls"
 	params := map[string]interface{}{"id": spec.CollName, "partitionKey": spec.PartitionKeyInfo}
 	if spec.IndexingPolicy != nil {
 		params[restApiParamIndexingPolicy] = spec.IndexingPolicy
@@ -331,7 +341,10 @@ func (c *RestClient) CreateCollection(spec CollectionSpec) *RespCreateColl {
 	if spec.UniqueKeyPolicy != nil {
 		params[restApiParamUniqueKeyPolicy] = spec.UniqueKeyPolicy
 	}
-	req := c.buildJsonRequest(method, urlEndpoint, params)
+	req, err := c.buildJsonRequest(method, urlEndpoint, params)
+	if err != nil {
+		return &RespCreateColl{RestResponse: RestResponse{CallErr: err}, CollInfo: CollInfo{Id: spec.CollName}}
+	}
 	req = c.addAuthHeader(req, method, "colls", "dbs/"+spec.DbName)
 	if spec.Ru > 0 {
 		req.Header.Set(restApiHeaderOfferThroughput, strconv.Itoa(spec.Ru))
@@ -354,8 +367,7 @@ func (c *RestClient) CreateCollection(spec CollectionSpec) *RespCreateColl {
 //
 // Note: ru and maxru must not be supplied together!
 func (c *RestClient) ReplaceCollection(spec CollectionSpec) *RespReplaceColl {
-	method := "PUT"
-	urlEndpoint := c.endpoint + "/dbs/" + spec.DbName + "/colls/" + spec.CollName
+	method, urlEndpoint := "PUT", c.endpoint+"/dbs/"+spec.DbName+"/colls/"+spec.CollName
 	params := map[string]interface{}{"id": spec.CollName}
 	if spec.PartitionKeyInfo != nil {
 		params[restApiParamPartitionKey] = spec.PartitionKeyInfo
@@ -367,7 +379,10 @@ func (c *RestClient) ReplaceCollection(spec CollectionSpec) *RespReplaceColl {
 	// if spec.UniqueKeyPolicy != nil {
 	// 	params[restApiParamUniqueKeyPolicy] = spec.UniqueKeyPolicy
 	// }
-	req := c.buildJsonRequest(method, urlEndpoint, params)
+	req, err := c.buildJsonRequest(method, urlEndpoint, params)
+	if err != nil {
+		return &RespReplaceColl{RestResponse: RestResponse{CallErr: err}, CollInfo: CollInfo{Id: spec.CollName}}
+	}
 	req = c.addAuthHeader(req, method, "colls", "dbs/"+spec.DbName+"/colls/"+spec.CollName)
 	if spec.Ru > 0 {
 		req.Header.Set(restApiHeaderOfferThroughput, strconv.Itoa(spec.Ru))
@@ -388,9 +403,11 @@ func (c *RestClient) ReplaceCollection(spec CollectionSpec) *RespReplaceColl {
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/get-a-collection
 func (c *RestClient) GetCollection(dbName, collName string) *RespGetColl {
-	method := "GET"
-	urlEndpoint := c.endpoint + "/dbs/" + dbName + "/colls/" + collName
-	req := c.buildJsonRequest(method, urlEndpoint, nil)
+	method, urlEndpoint := "GET", c.endpoint+"/dbs/"+dbName+"/colls/"+collName
+	req, err := c.buildJsonRequest(method, urlEndpoint, nil)
+	if err != nil {
+		return &RespGetColl{RestResponse: RestResponse{CallErr: err}}
+	}
 	req = c.addAuthHeader(req, method, "colls", "dbs/"+dbName+"/colls/"+collName)
 
 	resp := c.client.Do(req)
@@ -405,9 +422,11 @@ func (c *RestClient) GetCollection(dbName, collName string) *RespGetColl {
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/delete-a-collection.
 func (c *RestClient) DeleteCollection(dbName, collName string) *RespDeleteColl {
-	method := "DELETE"
-	urlEndpoint := c.endpoint + "/dbs/" + dbName + "/colls/" + collName
-	req := c.buildJsonRequest(method, urlEndpoint, nil)
+	method, urlEndpoint := "DELETE", c.endpoint+"/dbs/"+dbName+"/colls/"+collName
+	req, err := c.buildJsonRequest(method, urlEndpoint, nil)
+	if err != nil {
+		return &RespDeleteColl{RestResponse: RestResponse{CallErr: err}}
+	}
 	req = c.addAuthHeader(req, method, "colls", "dbs/"+dbName+"/colls/"+collName)
 
 	resp := c.client.Do(req)
@@ -419,9 +438,11 @@ func (c *RestClient) DeleteCollection(dbName, collName string) *RespDeleteColl {
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/list-collections.
 func (c *RestClient) ListCollections(dbName string) *RespListColl {
-	method := "GET"
-	urlEndpoint := c.endpoint + "/dbs/" + dbName + "/colls"
-	req := c.buildJsonRequest(method, urlEndpoint, nil)
+	method, urlEndpoint := "GET", c.endpoint+"/dbs/"+dbName+"/colls"
+	req, err := c.buildJsonRequest(method, urlEndpoint, nil)
+	if err != nil {
+		return &RespListColl{RestResponse: RestResponse{CallErr: err}}
+	}
 	req = c.addAuthHeader(req, method, "colls", "dbs/"+dbName)
 
 	resp := c.client.Do(req)
@@ -444,9 +465,11 @@ func (c *RestClient) ListCollections(dbName string) *RespListColl {
 //
 // Available since v0.1.3
 func (c *RestClient) GetPkranges(dbName, collName string) *RespGetPkranges {
-	method := "GET"
-	urlEndpoint := c.endpoint + "/dbs/" + dbName + "/colls/" + collName + "/pkranges"
-	req := c.buildJsonRequest(method, urlEndpoint, nil)
+	method, urlEndpoint := "GET", c.endpoint+"/dbs/"+dbName+"/colls/"+collName+"/pkranges"
+	req, err := c.buildJsonRequest(method, urlEndpoint, nil)
+	if err != nil {
+		return &RespGetPkranges{RestResponse: RestResponse{CallErr: err}}
+	}
 	req = c.addAuthHeader(req, method, "pkranges", "dbs/"+dbName+"/colls/"+collName)
 
 	resp := c.client.Do(req)
@@ -472,14 +495,16 @@ type DocumentSpec struct {
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/create-a-document.
 func (c *RestClient) CreateDocument(spec DocumentSpec) *RespCreateDoc {
-	method := "POST"
-	urlEndpoint := c.endpoint + "/dbs/" + spec.DbName + "/colls/" + spec.CollName + "/docs"
+	method, urlEndpoint := "POST", c.endpoint+"/dbs/"+spec.DbName+"/colls/"+spec.CollName+"/docs"
 	if c.autoId {
 		if id, ok := spec.DocumentData[docFieldId].(string); !ok || strings.TrimSpace(id) == "" {
 			spec.DocumentData[docFieldId] = strings.ToLower(idGen.Id128Hex())
 		}
 	}
-	req := c.buildJsonRequest(method, urlEndpoint, spec.DocumentData)
+	req, err := c.buildJsonRequest(method, urlEndpoint, spec.DocumentData)
+	if err != nil {
+		return &RespCreateDoc{RestResponse: RestResponse{CallErr: err}}
+	}
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+spec.DbName+"/colls/"+spec.CollName)
 	if spec.IsUpsert {
 		req.Header.Set(restApiHeaderIsUpsert, "true")
@@ -503,9 +528,11 @@ func (c *RestClient) CreateDocument(spec DocumentSpec) *RespCreateDoc {
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/replace-a-document.
 func (c *RestClient) ReplaceDocument(matchEtag string, spec DocumentSpec) *RespReplaceDoc {
 	id, _ := spec.DocumentData[docFieldId].(string)
-	method := "PUT"
-	urlEndpoint := c.endpoint + "/dbs/" + spec.DbName + "/colls/" + spec.CollName + "/docs/" + id
-	req := c.buildJsonRequest(method, urlEndpoint, spec.DocumentData)
+	method, urlEndpoint := "PUT", c.endpoint+"/dbs/"+spec.DbName+"/colls/"+spec.CollName+"/docs/"+id
+	req, err := c.buildJsonRequest(method, urlEndpoint, spec.DocumentData)
+	if err != nil {
+		return &RespReplaceDoc{RestResponse: RestResponse{CallErr: err}}
+	}
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+spec.DbName+"/colls/"+spec.CollName+"/docs/"+id)
 	if matchEtag != "" {
 		req.Header.Set(httpHeaderIfMatch, matchEtag)
@@ -535,9 +562,11 @@ type DocReq struct {
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/get-a-document.
 func (c *RestClient) GetDocument(r DocReq) *RespGetDoc {
-	method := "GET"
-	urlEndpoint := c.endpoint + "/dbs/" + r.DbName + "/colls/" + r.CollName + "/docs/" + r.DocId
-	req := c.buildJsonRequest(method, urlEndpoint, nil)
+	method, urlEndpoint := "GET", c.endpoint+"/dbs/"+r.DbName+"/colls/"+r.CollName+"/docs/"+r.DocId
+	req, err := c.buildJsonRequest(method, urlEndpoint, nil)
+	if err != nil {
+		return &RespGetDoc{RestResponse: RestResponse{CallErr: err}}
+	}
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+r.DbName+"/colls/"+r.CollName+"/docs/"+r.DocId)
 	jsPkValues, _ := json.Marshal(r.PartitionKeyValues)
 	req.Header.Set(restApiHeaderPartitionKey, string(jsPkValues))
@@ -563,9 +592,11 @@ func (c *RestClient) GetDocument(r DocReq) *RespGetDoc {
 //
 // See: https://docs.microsoft.com/en-us/rest/api/cosmos-db/delete-a-document.
 func (c *RestClient) DeleteDocument(r DocReq) *RespDeleteDoc {
-	method := "DELETE"
-	urlEndpoint := c.endpoint + "/dbs/" + r.DbName + "/colls/" + r.CollName + "/docs/" + r.DocId
-	req := c.buildJsonRequest(method, urlEndpoint, nil)
+	method, urlEndpoint := "DELETE", c.endpoint+"/dbs/"+r.DbName+"/colls/"+r.CollName+"/docs/"+r.DocId
+	req, err := c.buildJsonRequest(method, urlEndpoint, nil)
+	if err != nil {
+		return &RespDeleteDoc{RestResponse: RestResponse{CallErr: err}}
+	}
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+r.DbName+"/colls/"+r.CollName+"/docs/"+r.DocId)
 	jsPkValues, _ := json.Marshal(r.PartitionKeyValues)
 	req.Header.Set(restApiHeaderPartitionKey, string(jsPkValues))
@@ -592,7 +623,7 @@ type QueryReq struct {
 	SessionToken          string // string token used with session level consistency
 }
 
-func (c *RestClient) buildQueryRequest(query QueryReq) *http.Request {
+func (c *RestClient) buildQueryRequest(query QueryReq) (*http.Request, error) {
 	method, urlEndpoint := "POST", c.endpoint+"/dbs/"+query.DbName+"/colls/"+query.CollName+"/docs"
 	requestBody := make(map[string]interface{}, 0)
 	requestBody[restApiParamQuery] = query.Query
@@ -600,7 +631,10 @@ func (c *RestClient) buildQueryRequest(query QueryReq) *http.Request {
 		// M.A.I. 2022-02-16: server will complain if parameter set to nil
 		requestBody[restApiParamParameters] = query.Params
 	}
-	req := c.buildJsonRequest(method, urlEndpoint, requestBody)
+	req, err := c.buildJsonRequest(method, urlEndpoint, requestBody)
+	if err != nil {
+		return nil, err
+	}
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+query.DbName+"/colls/"+query.CollName)
 	req.Header.Set(httpHeaderContentType, "application/query+json")
 	req.Header.Set(restApiHeaderIsQuery, "true")
@@ -625,7 +659,7 @@ func (c *RestClient) buildQueryRequest(query QueryReq) *http.Request {
 	if query.CrossPartitionEnabled {
 		req.Header.Set(restApiHeaderEnableCrossPartitionQuery, "true")
 	}
-	return req
+	return req, nil
 }
 
 func (c *RestClient) mergeQueryResults(existingResp, newResp *RespQueryDocs, queryPlan *RespQueryPlan) *RespQueryDocs {
@@ -779,7 +813,10 @@ func (c *RestClient) finalPrepareResult(result *RespQueryDocs, queryPlan *RespQu
 //
 // Note: query is executed as-is, not rewritten!
 func (c *RestClient) queryDocumentsSimple(query QueryReq, queryPlan *RespQueryPlan) *RespQueryDocs {
-	req := c.buildQueryRequest(query)
+	req, err := c.buildQueryRequest(query)
+	if err != nil {
+		return &RespQueryDocs{RestResponse: RestResponse{CallErr: err}}
+	}
 	var result *RespQueryDocs
 	if query.MaxItemCount <= 0 {
 		// request chunk by chunk as it would have negative impact if we fetch a large number of documents in one go
@@ -811,7 +848,10 @@ func (c *RestClient) queryDocumentsSimple(query QueryReq, queryPlan *RespQueryPl
 //
 // Note: the query is executed as-is!
 func (c *RestClient) queryDocumentsCall(query QueryReq) *RespQueryDocs {
-	req := c.buildQueryRequest(query)
+	req, err := c.buildQueryRequest(query)
+	if err != nil {
+		return &RespQueryDocs{RestResponse: RestResponse{CallErr: err}}
+	}
 	resp := c.client.Do(req)
 	result := &RespQueryDocs{RestResponse: c.buildRestResponse(resp)}
 	if result.CallErr == nil {
@@ -905,7 +945,10 @@ func (c *RestClient) QueryPlan(query QueryReq) *RespQueryPlan {
 	if query.Params != nil {
 		requestBody[restApiParamParameters] = query.Params
 	}
-	req := c.buildJsonRequest(method, urlEndpoint, requestBody)
+	req, err := c.buildJsonRequest(method, urlEndpoint, requestBody)
+	if err != nil {
+		return &RespQueryPlan{RestResponse: RestResponse{CallErr: err}}
+	}
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+query.DbName+"/colls/"+query.CollName)
 	req.Header.Set(httpHeaderContentType, "application/query+json")
 	if query.MaxItemCount > 0 {
@@ -987,7 +1030,10 @@ func (c *RestClient) getChangeFeed(r ListDocsReq, req *http.Request) *RespListDo
 // resubmit the request with proper value of etag (ListDocsReq.NotMatchEtag)
 func (c *RestClient) ListDocuments(r ListDocsReq) *RespListDocs {
 	method, urlEndpoint := "GET", c.endpoint+"/dbs/"+r.DbName+"/colls/"+r.CollName+"/docs"
-	req := c.buildJsonRequest(method, urlEndpoint, nil)
+	req, err := c.buildJsonRequest(method, urlEndpoint, nil)
+	if err != nil {
+		return &RespListDocs{RestResponse: RestResponse{CallErr: err}}
+	}
 	req = c.addAuthHeader(req, method, "docs", "dbs/"+r.DbName+"/colls/"+r.CollName)
 	req.Header.Set(restApiHeaderEnableCrossPartitionQuery, "true")
 	if r.MaxItemCount > 0 {
@@ -1067,9 +1113,11 @@ func (c *RestClient) GetOfferForResource(rid string) *RespGetOffer {
 //
 // Available since v0.1.1
 func (c *RestClient) QueryOffers(query string) *RespQueryOffers {
-	method := "POST"
-	urlEndpoint := c.endpoint + "/offers"
-	req := c.buildJsonRequest(method, urlEndpoint, map[string]interface{}{"query": query})
+	method, urlEndpoint := "POST", c.endpoint+"/offers"
+	req, err := c.buildJsonRequest(method, urlEndpoint, map[string]interface{}{"query": query})
+	if err != nil {
+		return &RespQueryOffers{RestResponse: RestResponse{CallErr: err}}
+	}
 	req = c.addAuthHeader(req, method, "offers", "")
 	req.Header.Set(httpHeaderContentType, "application/query+json")
 	req.Header.Set(restApiHeaderIsQuery, "true")
@@ -1133,8 +1181,7 @@ func (c *RestClient) ReplaceOfferForResource(rid string, ru, maxru int) *RespRep
 
 	getResult := c.GetOfferForResource(rid)
 	if getResult.Error() == nil {
-		method := "PUT"
-		urlEndpoint := c.endpoint + "/offers/" + getResult.OfferInfo.Rid
+		method, urlEndpoint := "PUT", c.endpoint+"/offers/"+getResult.OfferInfo.Rid
 		params := map[string]interface{}{
 			"offerVersion": "V2", "offerType": "Invalid",
 			"resource":        getResult.OfferInfo.Resource,
@@ -1147,7 +1194,10 @@ func (c *RestClient) ReplaceOfferForResource(rid string, ru, maxru int) *RespRep
 			return &RespReplaceOffer{RestResponse: getResult.RestResponse, OfferInfo: getResult.OfferInfo}
 		}
 		params[restApiParamContent] = content
-		req := c.buildJsonRequest(method, urlEndpoint, params)
+		req, err := c.buildJsonRequest(method, urlEndpoint, params)
+		if err != nil {
+			return &RespReplaceOffer{RestResponse: RestResponse{CallErr: err}}
+		}
 		/*
 		 * [btnguyen2k] 2022-02-16
 		 * OfferInfo.Rid is returned from the server, but it _must_ be lower-cased when we send back to the server for
