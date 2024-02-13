@@ -360,7 +360,7 @@ INSERT INTO mydb.mytable (
 ) WITH PK=/id
 ```
 
-**Since <<VERSION>>**:
+**Since v1.1.0**:
 
 - `WITH SINGLE_PK` is deprecated and will be _removed_ in future version! Instead, use `WITH PK=/pkey` (or `WITH PK=/pkey1,/pkey2` if [Hierarchical Partition Keys](https://learn.microsoft.com/en-us/azure/cosmos-db/hierarchical-partition-keys) - also known as sub-partitions - is used on the collection).
 - Supplying values for partition key at the end of parameter list is no longer required, but still supported for backward compatibility. This behaviour will be _removed_ in future version!
@@ -420,7 +420,7 @@ fmt.Println(dbresult.RowsAffected()) // output 1
 > `gocosmos` automatically discovers PK of the collection by fetching metadata from server.
 > Supplying pk-fields and pk-values is highly recommended to save one round-trip to server to fetch the collection's partition key info.
 
-**Since <<VERSION>>**:
+**Since v1.1.0**:
 
 - `WITH SINGLE_PK` is deprecated and will be _removed_ in future version! Instead, use `AND pkfield=value` (or `AND pkfield1=value1 AND pkfield2=value2...` if [Hierarchical Partition Keys](https://learn.microsoft.com/en-us/azure/cosmos-db/hierarchical-partition-keys) - also known as sub-partitions - is used on the collection).
 - Supplying values for partition key at the end of parameter list is no longer required, but still supported for backward compatibility. This behaviour will be _removed_ in future version!
@@ -463,7 +463,7 @@ fmt.Println(dbresult.RowsAffected())
 > `gocosmos` automatically discovers PK of the collection by fetching metadata from server.
 > Supplying pk-fields and pk-values is highly recommended to save one round-trip to server to fetch the collection's partition key info.
 
-**Since <<VERSION>>**:
+**Since v1.1.0**:
 
 - `WITH SINGLE_PK` is deprecated and will be _removed_ in future version! Instead, use `AND pkfield=value` (or `AND pkfield1=value1 AND pkfield2=value2...` if [Hierarchical Partition Keys](https://learn.microsoft.com/en-us/azure/cosmos-db/hierarchical-partition-keys) - also known as sub-partitions - is used on the collection).
 - Supplying values for partition key at the end of parameter list is no longer required, but still supported for backward compatibility. This behaviour will be _removed_ in future version!

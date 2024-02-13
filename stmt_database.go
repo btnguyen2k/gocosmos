@@ -26,7 +26,7 @@ type StmtCreateDatabase struct {
 
 // String implements fmt.Stringer/String.
 //
-// @Available since <<VERSION>>
+// @Available since v1.1.0
 func (s *StmtCreateDatabase) String() string {
 	return fmt.Sprintf(`StmtCreateDatabase{Stmt: %s, db: %q,  if_not_exists: %t, ru: %d, maxru: %d}`,
 		s.Stmt, s.dbName, s.ifNotExists, s.ru, s.maxru)
@@ -79,7 +79,7 @@ func (s *StmtCreateDatabase) Exec(args []driver.Value) (driver.Result, error) {
 
 // ExecContext implements driver.StmtExecContext/ExecContext.
 //
-// @Available since <<VERSION>>
+// @Available since v1.1.0
 func (s *StmtCreateDatabase) ExecContext(_ context.Context, args []driver.NamedValue) (driver.Result, error) {
 	if len(args) != 0 {
 		return nil, fmt.Errorf("expected 0 input value, got %d", len(args))
@@ -114,7 +114,7 @@ type StmtAlterDatabase struct {
 
 // String implements fmt.Stringer/String.
 //
-// @Available since <<VERSION>>
+// @Available since v1.1.0
 func (s *StmtAlterDatabase) String() string {
 	return fmt.Sprintf(`StmtAlterDatabase{Stmt: %s, db: %q, ru: %d, maxru: %d}`,
 		s.Stmt, s.dbName, s.ru, s.maxru)
@@ -206,7 +206,7 @@ type StmtDropDatabase struct {
 
 // String implements fmt.Stringer/String.
 //
-// @Available since <<VERSION>>
+// @Available since v1.1.0
 func (s *StmtDropDatabase) String() string {
 	return fmt.Sprintf(`StmtDropDatabase{Stmt: %s, db: %q, if_exists: %t}`,
 		s.Stmt, s.dbName, s.ifExists)
@@ -229,7 +229,7 @@ func (s *StmtDropDatabase) Exec(args []driver.Value) (driver.Result, error) {
 
 // ExecContext implements driver.StmtExecContext/ExecContext.
 //
-// @Available since <<VERSION>>
+// @Available since v1.1.0
 func (s *StmtDropDatabase) ExecContext(_ context.Context, args []driver.NamedValue) (driver.Result, error) {
 	if len(args) != 0 {
 		return nil, fmt.Errorf("expected 0 input value, got %d", len(args))
@@ -258,7 +258,7 @@ type StmtListDatabases struct {
 
 // String implements fmt.Stringer/String.
 //
-// @Available since <<VERSION>>
+// @Available since v1.1.0
 func (s *StmtListDatabases) String() string {
 	return fmt.Sprintf(`StmtListDatabases{Stmt: %s}`, s.Stmt)
 }
@@ -280,7 +280,7 @@ func (s *StmtListDatabases) Query(args []driver.Value) (driver.Rows, error) {
 
 // QueryContext implements driver.StmtQueryContext/QueryContext.
 //
-// @Available since <<VERSION>>
+// @Available since v1.1.0
 func (s *StmtListDatabases) QueryContext(_ context.Context, args []driver.NamedValue) (driver.Rows, error) {
 	if len(args) != 0 {
 		return nil, fmt.Errorf("expected 0 input value, got %d", len(args))

@@ -1,5 +1,29 @@
 # gocosmos - Release notes
 
+## 2024-02-13 - v1.1.0
+
+### Added/Refactoring
+
+- Refactored DELETE statement: appending PK values at the end of parameter list is no longer needed.
+- Refactored UPDATE statement: appending PK values at the end of parameter list is no longer needed.
+- Feature: INSERT/UPSERT statement accepts WITH PK clause. Appending PK values at the end of parameter list is no longer needed.
+
+### Deprecated
+
+- Deprecated: WITH singlePK/SINGLE_PK is now deprecated for INSERT/UPSERT, DELETE and UPDATE statements.
+
+### Fixed/Improvement
+
+- Improvement: implement fmt.Stringer
+- Improvement: Conn implements interface driver.Pinger
+- Improvement: Driver implements interface driver.DriverContext
+- Improvement: StmtCreateCollection/StmtAlterCollection/StmtDropCollection implements interface driver.StmtExecContext
+- Improvement: StmtListCollections implements interface driver.StmtQueryContext
+- Improvement: StmtCreateDatabase/StmtAlterDatabase/StmtDropDatabase implements interface driver.StmtExecContext
+- Improvement: StmtListDatabases implements interface driver.StmtQueryContext
+- Improvement: StmtInsert/StmtDelete/StmtUpdate implements interface driver.StmtExecContext
+- Improvement: StmtSelect implements interface driver.StmtQueryContext
+
 ## 2023-12-22 - v1.0.0
 
 ### Changed

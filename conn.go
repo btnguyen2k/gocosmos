@@ -20,7 +20,7 @@ type Conn struct {
 
 // String implements fmt.Stringer/String.
 //
-// @Available since <<VERSION>>
+// @Available since v1.1.0
 func (c *Conn) String() string {
 	return fmt.Sprintf(`Conn{default_db: %q}`, c.defaultDb)
 }
@@ -62,7 +62,7 @@ func (c *Conn) CheckNamedValue(_ *driver.NamedValue) error {
 
 // Ping implements driver.Pinger/Ping.
 //
-// @Available since <<VERSION>>
+// @Available since v1.1.0
 func (c *Conn) Ping(_ context.Context) error {
 	// since connection to Cosmos DB server is stateless, Ping always returns nil
 	return nil

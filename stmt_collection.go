@@ -38,7 +38,7 @@ type StmtCreateCollection struct {
 
 // String implements fmt.Stringer/String.
 //
-// @Available since <<VERSION>>
+// @Available since v1.1.0
 func (s *StmtCreateCollection) String() string {
 	return fmt.Sprintf(`StmtCreateCollection{Stmt: %s, db: %q, collection: %q, if_not_exists: %t, ru: %d, maxru: %d, pk: %q, uk: %v}`,
 		s.Stmt, s.dbName, s.collName, s.ifNotExists, s.ru, s.maxru, s.pk, s.uk)
@@ -108,7 +108,7 @@ func (s *StmtCreateCollection) Exec(args []driver.Value) (driver.Result, error) 
 
 // ExecContext implements driver.StmtExecContext/ExecContext.
 //
-// @Available since <<VERSION>>
+// @Available since v1.1.0
 func (s *StmtCreateCollection) ExecContext(_ context.Context, args []driver.NamedValue) (driver.Result, error) {
 	if len(args) != 0 {
 		return nil, fmt.Errorf("expected 0 input value, got %d", len(args))
@@ -164,7 +164,7 @@ type StmtAlterCollection struct {
 
 // String implements fmt.Stringer/String.
 //
-// @Available since <<VERSION>>
+// @Available since v1.1.0
 func (s *StmtAlterCollection) String() string {
 	return fmt.Sprintf(`StmtAlterCollection{Stmt: %s, db: %q, collection: %q, ru: %d, maxru: %d}`,
 		s.Stmt, s.dbName, s.collName, s.ru, s.maxru)
@@ -220,7 +220,7 @@ func (s *StmtAlterCollection) Exec(args []driver.Value) (driver.Result, error) {
 
 // ExecContext implements driver.StmtExecContext/ExecContext.
 //
-// @Available since <<VERSION>>
+// @Available since v1.1.0
 func (s *StmtAlterCollection) ExecContext(_ context.Context, args []driver.NamedValue) (driver.Result, error) {
 	if len(args) != 0 {
 		return nil, fmt.Errorf("expected 0 input value, got %d", len(args))
@@ -261,7 +261,7 @@ type StmtDropCollection struct {
 
 // String implements fmt.Stringer/String.
 //
-// @Available since <<VERSION>>
+// @Available since v1.1.0
 func (s *StmtDropCollection) String() string {
 	return fmt.Sprintf(`StmtDropCollection{Stmt: %s, db: %q, collection: %q, if_exists: %t}`,
 		s.Stmt, s.dbName, s.collName, s.ifExists)
@@ -287,7 +287,7 @@ func (s *StmtDropCollection) Exec(args []driver.Value) (driver.Result, error) {
 
 // ExecContext implements driver.StmtExecContext/ExecContext.
 //
-// @Available since <<VERSION>>
+// @Available since v1.1.0
 func (s *StmtDropCollection) ExecContext(_ context.Context, args []driver.NamedValue) (driver.Result, error) {
 	if len(args) != 0 {
 		return nil, fmt.Errorf("expected 0 input value, got %d", len(args))
@@ -317,7 +317,7 @@ type StmtListCollections struct {
 
 // String implements fmt.Stringer/String.
 //
-// @Available since <<VERSION>>
+// @Available since v1.1.0
 func (s *StmtListCollections) String() string {
 	return fmt.Sprintf(`StmtListCollections{Stmt: %s, db: %q}`, s.Stmt, s.dbName)
 }
@@ -342,7 +342,7 @@ func (s *StmtListCollections) Query(args []driver.Value) (driver.Rows, error) {
 
 // QueryContext implements driver.StmtQueryContext/QueryContext.
 //
-// @Available since <<VERSION>>
+// @Available since v1.1.0
 func (s *StmtListCollections) QueryContext(_ context.Context, args []driver.NamedValue) (driver.Rows, error) {
 	if len(args) != 0 {
 		return nil, fmt.Errorf("expected 0 input value, got %d", len(args))

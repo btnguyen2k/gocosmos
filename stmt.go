@@ -219,7 +219,7 @@ type Stmt struct {
 
 // String implements interface fmt.Stringer/String.
 //
-// @Available since <<VERSION>>
+// @Available since v1.1.0
 func (s *Stmt) String() string {
 	return fmt.Sprintf(`Stmt{query: %q, num_inputs: %d, with_opts: %v}`, s.query, s.numInputs, s.withOpts)
 }
