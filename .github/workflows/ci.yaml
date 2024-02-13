@@ -6,10 +6,15 @@ on:
   pull_request:
     types: [ opened, edited, reopened, synchronize, review_requested ]
     branches: [ '*' ]
+  schedule:
+    # run once every month (at 00:00 UTC) to make sure the driver works with latest version of Go and CosmosDB emulator
+    - cron: '0 0 1 * *'
   workflow_call:
 
 env:
-  COVER_PKG: github.com/btnguyen2k/gocosmos
+  COVER_PKG: 'github.com/btnguyen2k/gocosmos'
+  COSMOSDB_URL: 'AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;TimeoutMs=30000'
+  TAG_PREFIX: 'v'
 
 jobs:
   GoFmt:
@@ -38,7 +43,7 @@ jobs:
         with:
           go-version: 'stable'
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v3
+        uses: golangci/golangci-lint-action@v4
         with:
           version: latest
           only-new-issues: true
@@ -46,7 +51,6 @@ jobs:
   ReleaseDryRun:
     if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    needs: [ GoFmt, GoLint ]
     outputs:
       RESULT: ${{ steps.release_dry_run.outputs.result }}
       VERSION: ${{ steps.release_dry_run.outputs.releaseVersion }}
@@ -89,7 +93,7 @@ jobs:
           go version
           go test -v -timeout 9999s -count 1 -p 1 -cover -coverprofile coverage.txt ./
       - name: Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -111,12 +115,11 @@ jobs:
           go-version: ${{ matrix.go }}
       - name: Run tests
         run: |
-          export COSMOSDB_URL="AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;TimeoutMs=30000"
           cd module_test && \
-            go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_other.txt" -run "TestNew|TestDriver_" ./ && \
+            go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="${COVER_PKG}" -coverprofile="../coverage_other.txt" -run "TestNew|TestDriver_" ./ && \
             cd ..
       - name: Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -138,18 +141,22 @@ jobs:
           go-version: ${{ matrix.go }}
       - name: Run tests
         run: |
-          try { & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /ShutDown } catch {}
-          choco upgrade azure-cosmosdb-emulator --no-progress
           & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
-          Start-Sleep -s 75
-          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
-          netstat -nt
-          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;TimeoutMs=30000'
+          while($true) {
+            try { 
+              Invoke-RestMethod -Method GET https://127.0.0.1:8081/_explorer/index.html
+              ps Microsoft.Azure.Cosmos.Emulator
+              break
+            } catch { 
+              echo "CosmosDB Emulator not ready, retry in 10 seconds..."
+              Start-Sleep -s 10
+            }
+          }
           cd module_test
           go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_restclient_nonquery.txt" -run "TestRestClient_[^Q]" ./
           cd ..
       - name: Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -171,18 +178,22 @@ jobs:
           go-version: ${{ matrix.go }}
       - name: Run tests
         run: |
-          try { & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /ShutDown } catch {}
-          choco upgrade azure-cosmosdb-emulator --no-progress
           & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
-          Start-Sleep -s 75
-          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
-          netstat -nt
-          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;TimeoutMs=30000'
+          while($true) {
+            try { 
+              Invoke-RestMethod -Method GET https://127.0.0.1:8081/_explorer/index.html
+              ps Microsoft.Azure.Cosmos.Emulator
+              break
+            } catch { 
+              echo "CosmosDB Emulator not ready, retry in 10 seconds..."
+              Start-Sleep -s 10
+            }
+          }
           cd module_test
           go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_restclient_query.txt" -run "TestRestClient_QueryDocuments" ./
           cd ..
       - name: Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -204,18 +215,22 @@ jobs:
           go-version: ${{ matrix.go }}
       - name: Run tests
         run: |
-          try { & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /ShutDown } catch {}
-          choco upgrade azure-cosmosdb-emulator --no-progress
           & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
-          Start-Sleep -s 75
-          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
-          netstat -nt
-          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;TimeoutMs=30000'
+          while($true) {
+            try { 
+              Invoke-RestMethod -Method GET https://127.0.0.1:8081/_explorer/index.html
+              ps Microsoft.Azure.Cosmos.Emulator
+              break
+            } catch { 
+              echo "CosmosDB Emulator not ready, retry in 10 seconds..."
+              Start-Sleep -s 10
+            }
+          }
           cd module_test
           go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_driver_database.txt" -run "TestStmt.*Databases?_(Exec|Query)" ./
           cd ..
       - name: Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -237,18 +252,22 @@ jobs:
           go-version: ${{ matrix.go }}
       - name: Run tests
         run: |
-          try { & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /ShutDown } catch {}
-          choco upgrade azure-cosmosdb-emulator --no-progress
           & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
-          Start-Sleep -s 75
-          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
-          netstat -nt
-          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;TimeoutMs=30000'
+          while($true) {
+            try { 
+              Invoke-RestMethod -Method GET https://127.0.0.1:8081/_explorer/index.html
+              ps Microsoft.Azure.Cosmos.Emulator
+              break
+            } catch { 
+              echo "CosmosDB Emulator not ready, retry in 10 seconds..."
+              Start-Sleep -s 10
+            }
+          }
           cd module_test
           go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_driver_collection.txt" -run "TestStmt.*Collections?_(Exec|Query)" ./
           cd ..
       - name: Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -270,18 +289,22 @@ jobs:
           go-version: ${{ matrix.go }}
       - name: Run tests
         run: |
-          try { & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /ShutDown } catch {}
-          choco upgrade azure-cosmosdb-emulator --no-progress
           & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
-          Start-Sleep -s 75
-          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
-          netstat -nt
-          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;TimeoutMs=30000'
+          while($true) {
+            try { 
+              Invoke-RestMethod -Method GET https://127.0.0.1:8081/_explorer/index.html
+              ps Microsoft.Azure.Cosmos.Emulator
+              break
+            } catch { 
+              echo "CosmosDB Emulator not ready, retry in 10 seconds..."
+              Start-Sleep -s 10
+            }
+          }
           cd module_test
           go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_driver_document_non_query.txt" -run "TestStmt(Insert|Upsert|Update|Delete)_(Exec|Query)" ./
           cd ..
       - name: Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -303,18 +326,22 @@ jobs:
           go-version: ${{ matrix.go }}
       - name: Run tests
         run: |
-          try { & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /ShutDown } catch {}
-          choco upgrade azure-cosmosdb-emulator --no-progress
           & "C:\Program Files\Azure Cosmos DB Emulator\Microsoft.Azure.Cosmos.Emulator.exe" /DisableRateLimiting /NoUI /NoExplorer
-          Start-Sleep -s 75
-          try { Invoke-RestMethod -Method GET https://127.0.0.1:8081/ } catch {}
-          netstat -nt
-          $env:COSMOSDB_URL='AccountEndpoint=https://127.0.0.1:8081/;AccountKey=C2y6yDjf5/R+ob0N8A7Cgv30VRDJIWEHLM+4QDU5DE2nQ9nDuVTqobD4b8mGGyPMbIZnqyMsEcaGQy67XIw/Jw==;TimeoutMs=30000'
+          while($true) {
+            try { 
+              Invoke-RestMethod -Method GET https://127.0.0.1:8081/_explorer/index.html
+              ps Microsoft.Azure.Cosmos.Emulator
+              break
+            } catch { 
+              echo "CosmosDB Emulator not ready, retry in 10 seconds..."
+              Start-Sleep -s 10
+            }
+          }
           cd module_test
           go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_driver_document_query.txt" -run "TestStmtSelect_(Exec|Query)" ./
           cd ..
       - name: Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:

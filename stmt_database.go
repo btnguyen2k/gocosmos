@@ -1,6 +1,7 @@
 package gocosmos
 
 import (
+	"context"
 	"database/sql/driver"
 	"errors"
 	"fmt"
@@ -21,6 +22,14 @@ type StmtCreateDatabase struct {
 	dbName      string
 	ifNotExists bool
 	ru, maxru   int
+}
+
+// String implements fmt.Stringer/String.
+//
+// @Available since <<VERSION>>
+func (s *StmtCreateDatabase) String() string {
+	return fmt.Sprintf(`StmtCreateDatabase{Stmt: %s, db: %q,  if_not_exists: %t, ru: %d, maxru: %d}`,
+		s.Stmt, s.dbName, s.ifNotExists, s.ru, s.maxru)
 }
 
 func (s *StmtCreateDatabase) parse(withOptsStr string) error {
@@ -64,7 +73,19 @@ func (s *StmtCreateDatabase) Query(_ []driver.Value) (driver.Rows, error) {
 }
 
 // Exec implements driver.Stmt/Exec.
-func (s *StmtCreateDatabase) Exec(_ []driver.Value) (driver.Result, error) {
+func (s *StmtCreateDatabase) Exec(args []driver.Value) (driver.Result, error) {
+	return s.ExecContext(context.Background(), _valuesToNamedValues(args))
+}
+
+// ExecContext implements driver.StmtExecContext/ExecContext.
+//
+// @Available since <<VERSION>>
+func (s *StmtCreateDatabase) ExecContext(_ context.Context, args []driver.NamedValue) (driver.Result, error) {
+	if len(args) != 0 {
+		return nil, fmt.Errorf("expected 0 input value, got %d", len(args))
+	}
+
+	// TODO: pass ctx to REST API client
 	restResult := s.conn.restClient.CreateDatabase(DatabaseSpec{Id: s.dbName, Ru: s.ru, MaxRu: s.maxru})
 	ignoreErrorCode := 0
 	if s.ifNotExists {
@@ -89,6 +110,14 @@ type StmtAlterDatabase struct {
 	*Stmt
 	dbName    string
 	ru, maxru int
+}
+
+// String implements fmt.Stringer/String.
+//
+// @Available since <<VERSION>>
+func (s *StmtAlterDatabase) String() string {
+	return fmt.Sprintf(`StmtAlterDatabase{Stmt: %s, db: %q, ru: %d, maxru: %d}`,
+		s.Stmt, s.dbName, s.ru, s.maxru)
 }
 
 func (s *StmtAlterDatabase) parse(withOptsStr string) error {
@@ -132,7 +161,19 @@ func (s *StmtAlterDatabase) Query(_ []driver.Value) (driver.Rows, error) {
 }
 
 // Exec implements driver.Stmt/Exec.
-func (s *StmtAlterDatabase) Exec(_ []driver.Value) (driver.Result, error) {
+func (s *StmtAlterDatabase) Exec(args []driver.Value) (driver.Result, error) {
+	return s.ExecContext(context.Background(), _valuesToNamedValues(args))
+}
+
+// ExecContext implements driver.StmtExecContext/ExecContext.
+//
+// @Available since v1.1.1
+func (s *StmtAlterDatabase) ExecContext(_ context.Context, args []driver.NamedValue) (driver.Result, error) {
+	if len(args) != 0 {
+		return nil, fmt.Errorf("expected 0 input value, got %d", len(args))
+	}
+
+	// TODO: pass ctx to REST API client
 	getResult := s.conn.restClient.GetDatabase(s.dbName)
 	if err := getResult.Error(); err != nil {
 		switch getResult.StatusCode {
@@ -163,6 +204,14 @@ type StmtDropDatabase struct {
 	ifExists bool
 }
 
+// String implements fmt.Stringer/String.
+//
+// @Available since <<VERSION>>
+func (s *StmtDropDatabase) String() string {
+	return fmt.Sprintf(`StmtDropDatabase{Stmt: %s, db: %q, if_exists: %t}`,
+		s.Stmt, s.dbName, s.ifExists)
+}
+
 func (s *StmtDropDatabase) validate() error {
 	return nil
 }
@@ -174,7 +223,19 @@ func (s *StmtDropDatabase) Query(_ []driver.Value) (driver.Rows, error) {
 }
 
 // Exec implements driver.Stmt/Exec.
-func (s *StmtDropDatabase) Exec(_ []driver.Value) (driver.Result, error) {
+func (s *StmtDropDatabase) Exec(args []driver.Value) (driver.Result, error) {
+	return s.ExecContext(context.Background(), _valuesToNamedValues(args))
+}
+
+// ExecContext implements driver.StmtExecContext/ExecContext.
+//
+// @Available since <<VERSION>>
+func (s *StmtDropDatabase) ExecContext(_ context.Context, args []driver.NamedValue) (driver.Result, error) {
+	if len(args) != 0 {
+		return nil, fmt.Errorf("expected 0 input value, got %d", len(args))
+	}
+
+	// TODO: pass ctx to REST API client
 	restResult := s.conn.restClient.DeleteDatabase(s.dbName)
 	ignoreErrorCode := 0
 	if s.ifExists {
@@ -195,6 +256,13 @@ type StmtListDatabases struct {
 	*Stmt
 }
 
+// String implements fmt.Stringer/String.
+//
+// @Available since <<VERSION>>
+func (s *StmtListDatabases) String() string {
+	return fmt.Sprintf(`StmtListDatabases{Stmt: %s}`, s.Stmt)
+}
+
 func (s *StmtListDatabases) validate() error {
 	return nil
 }
@@ -206,7 +274,19 @@ func (s *StmtListDatabases) Exec(_ []driver.Value) (driver.Result, error) {
 }
 
 // Query implements driver.Stmt/Query.
-func (s *StmtListDatabases) Query(_ []driver.Value) (driver.Rows, error) {
+func (s *StmtListDatabases) Query(args []driver.Value) (driver.Rows, error) {
+	return s.QueryContext(context.Background(), _valuesToNamedValues(args))
+}
+
+// QueryContext implements driver.StmtQueryContext/QueryContext.
+//
+// @Available since <<VERSION>>
+func (s *StmtListDatabases) QueryContext(_ context.Context, args []driver.NamedValue) (driver.Rows, error) {
+	if len(args) != 0 {
+		return nil, fmt.Errorf("expected 0 input value, got %d", len(args))
+	}
+
+	// TODO: pass ctx to REST API client
 	restResult := s.conn.restClient.ListDatabases()
 	result := &ResultResultSet{
 		err:        restResult.Error(),

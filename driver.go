@@ -1,11 +1,14 @@
 package gocosmos
 
 import (
+	"context"
 	"database/sql"
 	"database/sql/driver"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"net"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,6 +43,15 @@ func _myMacAddr(ip string) (net.HardwareAddr, error) {
 		}
 	}
 	return nil, errors.New("cannot fetch interface info for IP " + ip)
+}
+
+// _valuesToNamedValues transforms a []driver.Value to []driver.NamedValue.
+func _valuesToNamedValues(values []driver.Value) []driver.NamedValue {
+	result := make([]driver.NamedValue, len(values))
+	for i, v := range values {
+		result[i] = driver.NamedValue{Name: "$" + strconv.Itoa(i+1), Ordinal: i, Value: v}
+	}
+	return result
 }
 
 func init() {
@@ -113,4 +125,45 @@ func (d *Driver) Open(connStr string) (driver.Conn, error) {
 		defaultDb = restClient.params["DB"]
 	}
 	return &Conn{restClient: restClient, defaultDb: defaultDb}, nil
+}
+
+// OpenConnector implements driver.DriverContext/OpenConnector.
+//
+// @Available since <<VERSION>>
+func (d *Driver) OpenConnector(connStr string) (driver.Connector, error) {
+	conn, err := d.Open(connStr)
+	if err != nil {
+		return nil, err
+	}
+	return &Connector{
+		driver:  d,
+		connStr: connStr,
+		conn:    conn,
+	}, nil
+}
+
+/*----------------------------------------------------------------------*/
+
+// Connector is Azure Cosmos DB implementation of driver.Connector.
+//
+// @Available since <<VERSION>>
+type Connector struct {
+	driver  *Driver
+	connStr string
+	conn    driver.Conn
+}
+
+// String implements fmt.Stringer/String.
+func (c *Connector) String() string {
+	return fmt.Sprintf(`Connector{dsn: %q}`, c.connStr)
+}
+
+// Connect implements driver.Connector/Connect.
+func (c *Connector) Connect(_ context.Context) (driver.Conn, error) {
+	return c.conn, nil
+}
+
+// Driver implements driver.Connector/Driver.
+func (c *Connector) Driver() driver.Driver {
+	return c.driver
 }

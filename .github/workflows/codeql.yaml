@@ -3,6 +3,7 @@ name: "CodeQL"
 on:
   push:
     branches: [ '*' ]
+    paths: [ '**.go' ]
   pull_request:
     branches: [ '*' ]
   schedule:

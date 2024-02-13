@@ -75,8 +75,8 @@ func _testSelectPkValueSubPartitions(t *testing.T, testName string, db *sql.DB, 
 					}
 					testCase.expectedNumItems = expectedNumItems
 				}
-				sql := fmt.Sprintf(testCase.query, collname)
-				dbRows, err := db.Query(sql, params...)
+				sqlStm := fmt.Sprintf(testCase.query, collname)
+				dbRows, err := db.Query(sqlStm, params...)
 				if err != nil {
 					t.Fatalf("%s failed: %s", testName+"/"+testCase.name, err)
 				}
@@ -173,8 +173,8 @@ func _testSelectPkValue(t *testing.T, testName string, db *sql.DB, collname stri
 					}
 					testCase.expectedNumItems = expectedNumItems
 				}
-				sql := fmt.Sprintf(testCase.query, collname)
-				dbRows, err := db.Query(sql, params...)
+				sqlStm := fmt.Sprintf(testCase.query, collname)
+				dbRows, err := db.Query(sqlStm, params...)
 				if err != nil {
 					t.Fatalf("%s failed: %s", testName+"/"+testCase.name, err)
 				}
@@ -262,8 +262,8 @@ func _testSelectCrossPartition(t *testing.T, testName string, db *sql.DB, collna
 			if testCase.expectedNumItems > 0 {
 				expectedNumItems = testCase.expectedNumItems
 			}
-			sql := fmt.Sprintf(testCase.query, collname)
-			dbRows, err := db.Query(sql, params...)
+			sqlStm := fmt.Sprintf(testCase.query, collname)
+			dbRows, err := db.Query(sqlStm, params...)
 			if err != nil {
 				t.Fatalf("%s failed: %s", testName+"/"+testCase.name, err)
 			}
@@ -333,12 +333,12 @@ func _testSelectPaging(t *testing.T, testName string, db *sql.DB, collname strin
 			if testCase.expectedNumItems > 0 {
 				expectedNumItems = testCase.expectedNumItems
 			}
-			sql := fmt.Sprintf(testCase.query, collname)
+			sqlStm := fmt.Sprintf(testCase.query, collname)
 			offset := 0
 			finalRows := make([]map[string]interface{}, 0)
 			for {
 				params := []interface{}{lowStr, highStr, offset}
-				dbRows, err := db.Query(sql, params...)
+				dbRows, err := db.Query(sqlStm, params...)
 				if err != nil {
 					t.Fatalf("%s failed: %s", testName+"/"+testCase.name, err)
 				}
@@ -408,8 +408,8 @@ func TestStmtSelect_Query_Paging_LargeRU(t *testing.T) {
 func _testSelectCustomDataset(t *testing.T, testName string, testCases []customQueryTestCase, db *sql.DB, collname string) {
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			sql := fmt.Sprintf(testCase.query, collname)
-			dbRows, err := db.Query(sql)
+			sqlStm := fmt.Sprintf(testCase.query, collname)
+			dbRows, err := db.Query(sqlStm)
 			if err != nil {
 				t.Fatalf("%s failed: %s", testName+"/"+testCase.name, err)
 			}
@@ -479,7 +479,7 @@ func TestStmtSelect_Query_DatasetFamilies_SmallRU(t *testing.T) {
 	client := _newRestClient(t, testName)
 	dbname := testDb
 	collname := testTable
-	_initDataFamliesSmallRU(t, testName, client, dbname, collname)
+	_initDataFamiliesSmallRU(t, testName, client, dbname, collname)
 	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
 		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
 	} else if result.Count != 1 {
@@ -494,7 +494,7 @@ func TestStmtSelect_Query_DatasetFamilies_LargeRU(t *testing.T) {
 	client := _newRestClient(t, testName)
 	dbname := testDb
 	collname := testTable
-	_initDataFamliesLargeRU(t, testName, client, dbname, collname)
+	_initDataFamiliesLargeRU(t, testName, client, dbname, collname)
 	if result := client.GetPkranges(dbname, collname); result.Error() != nil {
 		t.Fatalf("%s failed: %s", testName+"/GetPkranges", result.Error())
 	} else if result.Count < 2 {
@@ -567,7 +567,7 @@ func TestStmtSelect_Query(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		id := fmt.Sprintf("%02d", i)
 		username := "user" + strconv.Itoa(i%4)
-		_, _ = db.Exec(fmt.Sprintf("INSERT INTO %s.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4)", dbname), id, username, "user"+id+"@domain.com", i, username)
+		_, _ = db.Exec(fmt.Sprintf(`INSERT INTO %s.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4) WITH pk=/username`, dbname), id, username, "user"+id+"@domain.com", i)
 	}
 
 	if dbRows, err := db.Query(fmt.Sprintf(`SELECT * FROM c WHERE c.username="user0" AND c.id>"30" ORDER BY c.id WITH database=%s WITH collection=tbltemp`, dbname)); err != nil {
@@ -634,7 +634,7 @@ func TestStmtSelect_Query_SelectLongList(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		id := fmt.Sprintf("%03d", i)
 		username := "user" + strconv.Itoa(i%4)
-		_, _ = db.Exec(fmt.Sprintf("INSERT INTO %s.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4)", dbname), id, username, "user"+id+"@domain.com", i, username)
+		_, _ = db.Exec(fmt.Sprintf("INSERT INTO %s.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4) WITH pk=/username", dbname), id, username, "user"+id+"@domain.com", i)
 	}
 
 	if dbRows, err := db.Query(fmt.Sprintf(`SELECT * FROM c WHERE c.username="user0" AND c.id>"030" ORDER BY c.id WITH database=%s WITH collection=tbltemp`, dbname)); err != nil {
@@ -674,7 +674,7 @@ func TestStmtSelect_Query_SelectPlaceholder(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		id := fmt.Sprintf("%02d", i)
 		username := "user" + strconv.Itoa(i%4)
-		_, _ = db.Exec(fmt.Sprintf("INSERT INTO %s.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4)", dbname), id, username, "user"+id+"@domain.com", i, username)
+		_, _ = db.Exec(fmt.Sprintf(`INSERT INTO %s.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4) WITH pk=/username`, dbname), id, username, "user"+id+"@domain.com", i)
 	}
 
 	if dbRows, err := db.Query(fmt.Sprintf(`SELECT * FROM c WHERE c.username=$2 AND c.id>:1 ORDER BY c.id WITH database=%s WITH collection=tbltemp`, dbname), "30", "user0"); err != nil {
@@ -742,7 +742,7 @@ func TestStmtSelect_Query_SelectPkranges(t *testing.T) {
 			id := fmt.Sprintf("%04d", i)
 			username := "user" + fmt.Sprintf("%02x", i%d)
 			email := "user" + strconv.Itoa(i) + "@domain.com"
-			_, _ = db.Exec(fmt.Sprintf("INSERT INTO %s.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4)", dbname), id, username, email, i, username)
+			_, _ = db.Exec(fmt.Sprintf(`INSERT INTO %s.tbltemp (id,username,email,grade) VALUES (:1,@2,$3,:4) WITH PK=/username`, dbname), id, username, email, i)
 			wait.Done()
 		}(i)
 	}

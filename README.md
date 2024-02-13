@@ -123,7 +123,10 @@ This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md
 
 ## Support and Contribution
 
-Feel free to create [pull requests](https://github.com/btnguyen2k/gocosmos/pulls) or [issues](https://github.com/btnguyen2k/gocosmos/issues) to report bugs or suggest new features.
-Please search the existing issues before filing new issues to avoid duplicates. For new issues, file your bug or feature request as a new issue.
+> Disclaimer: I am also a core maintainer of [microsoft/gocosmos](https://github.com/microsoft/gocosmos/). Features and bug fixes are synchronized between the two projects.
+
+This project uses [GitHub Issues](https://github.com/btnguyen2k/gocosmos/issues) to track bugs and feature requests. Please search the existing issues before filing new issues to avoid duplicates. For new issues, file your bug or feature request as a new Issue.
+
+Please create [pull requests](https://github.com/microsoft/gocosmos/pulls) in the [microsoft/gocosmos](https://github.com/microsoft/gocosmos/) repository.
 
 If you find this project useful, please start it.

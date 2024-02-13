@@ -108,7 +108,7 @@ func TestStmtAlterDatabase_Exec(t *testing.T) {
 	testName := "TestStmtAlterDatabase_Exec"
 	db := _openDb(t, testName)
 	dbname := "dbtemp"
-	defer db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname))
+	defer func() { _, _ = db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname)) }()
 	testData := []struct {
 		name         string
 		initSqls     []string
@@ -276,7 +276,7 @@ func TestStmtListDatabases_Query(t *testing.T) {
 	}
 	defer func() {
 		for _, dbname := range dbnames {
-			db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname))
+			_, _ = db.Exec(fmt.Sprintf("DROP DATABASE IF EXISTS %s", dbname))
 		}
 	}()
 	dbRows, err := db.Query("LIST DATABASES")
