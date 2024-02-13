@@ -90,7 +90,7 @@ jobs:
           go version
           go test -v -timeout 9999s -count 1 -p 1 -cover -coverprofile coverage.txt ./
       - name: Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -116,7 +116,7 @@ jobs:
             go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="${COVER_PKG}" -coverprofile="../coverage_other.txt" -run "TestNew|TestDriver_" ./ && \
             cd ..
       - name: Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -148,7 +148,7 @@ jobs:
           go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_restclient_nonquery.txt" -run "TestRestClient_[^Q]" ./
           cd ..
       - name: Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -180,7 +180,7 @@ jobs:
           go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_restclient_query.txt" -run "TestRestClient_QueryDocuments" ./
           cd ..
       - name: Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -212,7 +212,7 @@ jobs:
           go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_driver_database.txt" -run "TestStmt.*Databases?_(Exec|Query)" ./
           cd ..
       - name: Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -244,7 +244,7 @@ jobs:
           go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_driver_collection.txt" -run "TestStmt.*Collections?_(Exec|Query)" ./
           cd ..
       - name: Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -276,7 +276,7 @@ jobs:
           go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_driver_document_non_query.txt" -run "TestStmt(Insert|Upsert|Update|Delete)_(Exec|Query)" ./
           cd ..
       - name: Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
@@ -308,7 +308,7 @@ jobs:
           go test -v -timeout 9999s -count 1 -p 1 -cover -coverpkg="$env:COVER_PKG" -coverprofile="../coverage_driver_document_query.txt" -run "TestStmtSelect_(Exec|Query)" ./
           cd ..
       - name: Codecov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
         with:
