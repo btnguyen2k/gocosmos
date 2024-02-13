@@ -3,7 +3,7 @@ package gocosmos_test
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/microsoft/gocosmos"
+	"github.com/btnguyen2k/gocosmos"
 	"io"
 	"math/rand"
 	"os"
