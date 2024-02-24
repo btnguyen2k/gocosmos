@@ -5,7 +5,7 @@ go 1.18
 replace github.com/btnguyen2k/gocosmos => ../
 
 require (
-	github.com/btnguyen2k/consu/reddo v0.1.8
+	github.com/btnguyen2k/consu/reddo v0.1.9
 	github.com/btnguyen2k/gocosmos v0.0.0-00010101000000-000000000000
 )
 
